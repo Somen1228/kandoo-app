@@ -1,17 +1,17 @@
-# Publishing Kandoo Desktop v0.1.0
+# Publishing Kandoo Desktop v1.0.0
 
-This repository already contains an older `v1.0.0` tag from the web application. Use `desktop-v0.1.0` for the first desktop release.
+This repository already contains an older `v1.0.0` tag from the web application. Use `desktop-v1.0.0` for the first desktop release.
 
 ## 1. Review the Release Metadata
 
 Confirm these values agree:
 
-- Release tag: `desktop-v0.1.0`
-- Release title: `Kandoo Desktop v0.1.0 (Preview)`
-- `package.json`: `0.1.0`
-- `src-tauri/Cargo.toml`: `0.1.0`
-- `src-tauri/tauri.conf.json`: `0.1.0`
-- Asset: `Kandoo_0.1.0_aarch64.dmg`
+- Release tag: `desktop-v1.0.0`
+- Release title: `Kandoo Desktop v1.0.0 (Preview)`
+- `package.json`: `1.0.0`
+- `src-tauri/Cargo.toml`: `1.0.0`
+- `src-tauri/tauri.conf.json`: `1.0.0`
+- Asset: `Kandoo_1.0.0_aarch64.dmg`
 
 ## 2. Run Release Checks
 
@@ -31,8 +31,8 @@ Launch the release build and test board creation, task editing, restart persiste
 
 ```bash
 cd src-tauri/target/release/bundle/dmg
-shasum -a 256 Kandoo_0.1.0_aarch64.dmg \
-  > Kandoo_0.1.0_aarch64.dmg.sha256
+shasum -a 256 Kandoo_1.0.0_aarch64.dmg \
+  > Kandoo_1.0.0_aarch64.dmg.sha256
 cd -
 ```
 
@@ -61,25 +61,25 @@ git push origin main
 Create an annotated tag on the commit that produced the tested DMG:
 
 ```bash
-git tag -a desktop-v0.1.0 -m "Kandoo Desktop v0.1.0"
-git push origin desktop-v0.1.0
+git tag -a desktop-v1.0.0 -m "Kandoo Desktop v1.0.0"
+git push origin desktop-v1.0.0
 ```
 
 Verify it points to the expected commit:
 
 ```bash
-git show --no-patch desktop-v0.1.0
+git show --no-patch desktop-v1.0.0
 ```
 
 ## 6. Draft the GitHub Release
 
 1. Open `https://github.com/Somen1228/Kanban-board/releases`.
 2. Select **Draft a new release**.
-3. Choose the existing `desktop-v0.1.0` tag.
-4. Set the title to `Kandoo Desktop v0.1.0 (Preview)`.
-5. Paste the contents of `docs/releases/desktop-v0.1.0.md` into the description.
-6. Attach `Kandoo_0.1.0_aarch64.dmg`.
-7. Attach `Kandoo_0.1.0_aarch64.dmg.sha256`.
+3. Choose the existing `desktop-v1.0.0` tag.
+4. Set the title to `Kandoo Desktop v1.0.0 (Preview)`.
+5. Paste the contents of `docs/releases/desktop-v1.0.0.md` into the description.
+6. Attach `Kandoo_1.0.0_aarch64.dmg`.
+7. Attach `Kandoo_1.0.0_aarch64.dmg.sha256`.
 8. Select **Set as a pre-release** because this build is not Developer ID signed or notarized.
 9. Save it as a draft and check every field and asset.
 10. Select **Publish release** when the draft is complete.
@@ -92,7 +92,7 @@ GitHub automatically adds source ZIP and tar archives. Those archives are source
 2. Verify the checksum:
 
 ```bash
-shasum -a 256 -c Kandoo_0.1.0_aarch64.dmg.sha256
+shasum -a 256 -c Kandoo_1.0.0_aarch64.dmg.sha256
 ```
 
 3. Install the downloaded copy on a test Mac or a clean macOS user account.

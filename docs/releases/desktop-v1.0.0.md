@@ -1,4 +1,4 @@
-# Kandoo Desktop v0.1.0
+# Kandoo Desktop v1.0.0
 
 Kandoo is now available as a private, local-first macOS desktop application. This release replaces the earlier account-based web architecture with an offline workspace backed by SQLite.
 
@@ -19,7 +19,7 @@ Kandoo is now available as a private, local-first macOS desktop application. Thi
 
 Download and open:
 
-`Kandoo_0.1.0_aarch64.dmg`
+`Kandoo_1.0.0_aarch64.dmg`
 
 This build supports Apple Silicon Macs running macOS 11.0 or later.
 
@@ -54,7 +54,7 @@ Because of this signing limitation, mark this GitHub release as a **pre-release*
 Generate a checksum before publishing:
 
 ```bash
-shasum -a 256 Kandoo_0.1.0_aarch64.dmg
+shasum -a 256 Kandoo_1.0.0_aarch64.dmg
 ```
 
 Publish the resulting SHA-256 value alongside the DMG.

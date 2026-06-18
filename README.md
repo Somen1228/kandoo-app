@@ -46,7 +46,7 @@ Intel Macs are not included in the current build.
 ## Install
 
 1. Open the [Kandoo releases page](https://github.com/Somen1228/Kanban-board/releases).
-2. Download `Kandoo_0.1.0_aarch64.dmg` from the latest desktop release.
+2. Download `Kandoo_1.0.0_aarch64.dmg` from the latest desktop release.
 3. Open the DMG and move Kandoo into the Applications folder.
 4. Launch Kandoo from Applications.
 
@@ -155,7 +155,7 @@ Artifacts are generated at:
 
 ```text
 src-tauri/target/release/bundle/macos/Kandoo.app
-src-tauri/target/release/bundle/dmg/Kandoo_0.1.0_aarch64.dmg
+src-tauri/target/release/bundle/dmg/Kandoo_1.0.0_aarch64.dmg
 ```
 
 The checked-in configuration uses ad-hoc signing for local builds. Public stable distribution requires Apple Developer ID signing and notarization.

@@ -1,6 +1,6 @@
 [package]
 name = "kandoo"
-version = "0.1.0"
+version = "1.0.0"
 description = "A private, local-first Kanban workspace"
 authors = ["Kandoo"]
 edition = "2021"
