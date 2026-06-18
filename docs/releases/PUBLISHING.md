@@ -1,12 +1,12 @@
 # Publishing Kandoo Desktop v1.0.0
 
-This repository already contains an older `v1.0.0` tag from the web application. Use `desktop-v1.0.0` for the first desktop release.
+This is the first release of the dedicated Kandoo desktop repository, which has a clean tag namespace. Use the `v1.0.0` tag for this release.
 
 ## 1. Review the Release Metadata
 
 Confirm these values agree:
 
-- Release tag: `desktop-v1.0.0`
+- Release tag: `v1.0.0`
 - Release title: `Kandoo Desktop v1.0.0 (Preview)`
 - `package.json`: `1.0.0`
 - `src-tauri/Cargo.toml`: `1.0.0`
@@ -61,23 +61,23 @@ git push origin main
 Create an annotated tag on the commit that produced the tested DMG:
 
 ```bash
-git tag -a desktop-v1.0.0 -m "Kandoo Desktop v1.0.0"
-git push origin desktop-v1.0.0
+git tag -a v1.0.0 -m "Kandoo Desktop v1.0.0"
+git push origin v1.0.0
 ```
 
 Verify it points to the expected commit:
 
 ```bash
-git show --no-patch desktop-v1.0.0
+git show --no-patch v1.0.0
 ```
 
 ## 6. Draft the GitHub Release
 
-1. Open `https://github.com/Somen1228/Kanban-board/releases`.
+1. Open `https://github.com/Somen1228/kandoo-app/releases`.
 2. Select **Draft a new release**.
-3. Choose the existing `desktop-v1.0.0` tag.
+3. Choose the existing `v1.0.0` tag.
 4. Set the title to `Kandoo Desktop v1.0.0 (Preview)`.
-5. Paste the contents of `docs/releases/desktop-v1.0.0.md` into the description.
+5. Paste the contents of `docs/releases/v1.0.0.md` into the description.
 6. Attach `Kandoo_1.0.0_aarch64.dmg`.
 7. Attach `Kandoo_1.0.0_aarch64.dmg.sha256`.
 8. Select **Set as a pre-release** because this build is not Developer ID signed or notarized.

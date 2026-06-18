@@ -45,7 +45,7 @@ Intel Macs are not included in the current build.
 
 ## Install
 
-1. Open the [Kandoo releases page](https://github.com/Somen1228/Kanban-board/releases).
+1. Open the [Kandoo releases page](https://github.com/Somen1228/kandoo-app/releases).
 2. Download `Kandoo_1.0.0_aarch64.dmg` from the latest desktop release.
 3. Open the DMG and move Kandoo into the Applications folder.
 4. Launch Kandoo from Applications.
@@ -201,4 +201,4 @@ See [Optional Cloud Sync Roadmap](docs/cloud-sync-roadmap.md) for the proposed a
 
 ## Feedback and Issues
 
-Report bugs and feature requests through [GitHub Issues](https://github.com/Somen1228/Kanban-board/issues).
+Report bugs and feature requests through [GitHub Issues](https://github.com/Somen1228/kandoo-app/issues).
