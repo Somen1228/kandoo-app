@@ -206,12 +206,24 @@ const SECTIONS = [
         <Steps items={[
           <>Heading selector (Normal / H1–H6)</>,
           <>Bold, italic, underline, strikethrough, superscript, subscript, inline code, clear formatting</>,
-          <>Text colour &amp; highlight colour (native pickers)</>,
-          <>Bullet &amp; numbered lists</>,
+          <>Text colour &amp; highlight palettes, including custom colours</>,
+          <>Bullet, numbered, and aligned checklist items</>,
           <>Alignment (left / center / right / justify), indent / outdent</>,
           <>Quote, code block with auto language detection, horizontal rule, hyperlink</>,
-          <>Image upload — auto-compressed, click thumbnails for the fullscreen viewer</>,
+          <>Configurable tables with row, column, header, and delete controls</>,
+          <>Image upload — auto-compressed, then resizable with crop-ratio and focal-position controls</>,
         ]} />
+        <P>
+          The toolbar stays on one compact row. On narrower windows, scroll it horizontally with
+          a trackpad or <Kbd>Shift + wheel</Kbd> instead of losing writing space to wrapped rows.
+        </P>
+
+        <SubH>Right-click menus</SubH>
+        <P>
+          Right-click selected text, links, checklist items, images, tables, or the empty writing
+          canvas for actions specific to that content. Pages in the Notes sidebar also have their
+          own context menu.
+        </P>
 
         <SubH>Markdown auto-paste</SubH>
         <P>
@@ -223,7 +235,7 @@ const SECTIONS = [
         <SubH>Paper vs Wide layout</SubH>
         <P>
           Use the <Kbd>⛶ Wide</Kbd> / <Kbd>⧉ Paper</Kbd> toggle in the meta row (next to
-          &quot;Edited X ago&quot;) to switch between a centered white-paper page (default) and a
+          &quot;Edited X ago&quot;) to switch between a centered themed-paper page (default) and a
           full-width canvas. Preference is saved per device.
         </P>
 
@@ -234,10 +246,9 @@ const SECTIONS = [
         </P>
 
         <Tip>
-          <strong>What&apos;s coming next:</strong> tables, font / line-spacing controls,
-          checklists inside notes, slash commands (<Kbd>/heading</Kbd> etc.), and drag-to-reorder
-          blocks. These need a deeper editor rewrite — call out anything you&apos;d prioritise in
-          the feedback form.
+          Select an image to reveal resize and crop controls. Place the cursor inside a table
+          and click the highlighted table icon to add or remove rows and columns. Type <Kbd>/</Kbd>
+          for block commands.
         </Tip>
       </>
     ),

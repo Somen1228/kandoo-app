@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { VscAdd, VscTrash, VscChevronRight, VscFile, VscChromeMaximize, VscChromeRestore } from 'react-icons/vsc';
 import { markdownToHtml, isHtml, htmlToText } from '../../utils/htmlEditor';
 import { useSettings } from '../../contexts/SettingsContext';
+import ContextMenu from '../ContextMenu';
 
 // TipTap pulls in ProseMirror + lowlight — load it only when Notes is opened.
 const NoteEditor = lazy(() => import('./NoteEditor'));
@@ -17,7 +18,7 @@ function relativeTime(ts) {
 }
 
 // ── Recursive page tree ─────────────────────────────────────────────────────
-function NoteTree({ notes, parentUid, depth, activeUid, collapsed, onToggle, onSelect, onCreate, onDelete }) {
+function NoteTree({ notes, parentUid, depth, activeUid, collapsed, onToggle, onSelect, onCreate, onDelete, onOpenMenu }) {
   const items = notes.filter((n) => (n.parentUid || null) === parentUid);
   return items.map((n) => {
     const hasKids = notes.some((c) => (c.parentUid || null) === n.uid);
@@ -28,6 +29,7 @@ function NoteTree({ notes, parentUid, depth, activeUid, collapsed, onToggle, onS
           className={`notes-tree__row${n.uid === activeUid ? ' is-active' : ''}`}
           style={{ paddingLeft: 6 + depth * 14 }}
           onClick={() => onSelect(n.uid)}
+          onContextMenu={(event) => onOpenMenu(event, n, hasKids, isCollapsed)}
         >
           <button
             type="button"
@@ -50,6 +52,7 @@ function NoteTree({ notes, parentUid, depth, activeUid, collapsed, onToggle, onS
           <NoteTree
             notes={notes} parentUid={n.uid} depth={depth + 1} activeUid={activeUid}
             collapsed={collapsed} onToggle={onToggle} onSelect={onSelect} onCreate={onCreate} onDelete={onDelete}
+            onOpenMenu={onOpenMenu}
           />
         )}
       </div>
@@ -166,6 +169,7 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
   const activeCard = notes.find((n) => n.uid === activeUid) || null;
   const activeIndex = activeCard ? allCards.findIndex((c) => c.uid === activeCard.uid) : -1;
   const [collapsed, setCollapsed] = useState(() => new Set());
+  const [pageContextMenu, setPageContextMenu] = useState(null);
 
   // Notion-style: a workspace always has a page — land straight in a new one.
   const autoCreatedRef = useRef(false);
@@ -186,6 +190,21 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
     return next;
   });
 
+  const openPageContextMenu = (event, note, hasKids, isCollapsed) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const items = [
+      { label: 'Open page', onClick: () => onSelectNote(note.uid) },
+      { label: 'New sub-page', onClick: () => { onToggle(note.uid, true); onCreateNote(note.uid, true); } },
+    ];
+    if (hasKids) {
+      items.push({ label: isCollapsed ? 'Expand sub-pages' : 'Collapse sub-pages', onClick: () => onToggle(note.uid) });
+    }
+    items.push({ divider: true });
+    items.push({ label: 'Delete page', danger: true, onClick: () => onDeleteNote(note.uid) });
+    setPageContextMenu({ x: event.clientX, y: event.clientY, items });
+  };
+
   return (
     <div className="notes-layout">
       <aside className="notes-tree-panel">
@@ -201,6 +220,7 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
               notes={notes} parentUid={null} depth={0} activeUid={activeUid}
               collapsed={collapsed} onToggle={onToggle} onSelect={onSelectNote}
               onCreate={onCreateNote} onDelete={onDeleteNote}
+              onOpenMenu={openPageContextMenu}
             />
           )}
         </div>
@@ -221,6 +241,10 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
           <div className="notes-canvas-empty">Creating a new page…</div>
         )}
       </div>
+      {pageContextMenu && (
+        <ContextMenu x={pageContextMenu.x} y={pageContextMenu.y}
+          items={pageContextMenu.items} onClose={() => setPageContextMenu(null)} />
+      )}
     </div>
   );
 }

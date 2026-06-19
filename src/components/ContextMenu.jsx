@@ -6,7 +6,7 @@ import ReactDOM from 'react-dom';
  *
  * Props:
  *   x, y       — viewport coordinates (from event.clientX/clientY)
- *   items      — Array<{ label, onClick, icon?, danger?, divider? }>
+ *   items      — Array<{ label, onClick, icon?, shortcut?, danger?, divider? }>
  *                divider: true renders a horizontal rule instead of a button
  *   onClose    — called when the menu should close (outside click, Esc, item click)
  */
@@ -92,6 +92,11 @@ function ContextMenu({ x, y, items, onClose }) {
           >
             {item.icon && <span className="text-base opacity-80">{item.icon}</span>}
             <span>{item.label}</span>
+            {item.shortcut && (
+              <span style={{ marginLeft: 'auto', paddingLeft: 18, color: 'var(--theme-text-muted)', fontSize: '0.72rem' }}>
+                {item.shortcut}
+              </span>
+            )}
           </button>
         );
       })}

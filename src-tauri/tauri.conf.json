@@ -57,7 +57,7 @@
       "signingIdentity": "-",
       "hardenedRuntime": false
     },
-    "icon": ["icons/icon.icns"]
+    "icon": ["icons/icon-v2.icns"]
   },
   "plugins": {
     "sql": {

@@ -355,36 +355,6 @@ function Board() {
           <div className="mac-sidebar__brand" data-tauri-drag-region={isDesktopApp || undefined} />
 
           <div className="mac-sidebar__scroll">
-            {/* Smart sections */}
-            <div className="mac-sidebar__section">
-              <div className="mac-sidebar__label">Tasks</div>
-              <button
-                className={`mac-nav-item${section === "todos" && !scheduleView ? " is-active" : ""}`}
-                onClick={() => { setSection("todos"); setScheduleView(null); }}
-              >
-                <span className="mac-nav-item__icon"><VscInbox /></span>
-                <span className="mac-nav-item__label">All Tasks</span>
-                {scheduleCounts.total > 0 && (
-                  <span className="mac-nav-item__count">{scheduleCounts.total}</span>
-                )}
-              </button>
-              {SCHEDULE_SECTIONS.map((s) => (
-                <button
-                  key={s.id}
-                  className={`mac-nav-item${section === "todos" && scheduleView === s.id ? " is-active" : ""}`}
-                  onClick={() => { setSection("todos"); setScheduleView((v) => (v === s.id ? null : s.id)); }}
-                >
-                  <span className="mac-nav-item__icon">
-                    <span className="mac-nav-item__dot" style={{ background: s.dot }} />
-                  </span>
-                  <span className="mac-nav-item__label">{s.label}</span>
-                  {scheduleCounts[s.id] > 0 && (
-                    <span className="mac-nav-item__count">{scheduleCounts[s.id]}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-
             {/* Projects */}
             <div className="mac-sidebar__section">
               <div className="mac-sidebar__label">
@@ -427,13 +397,42 @@ function Board() {
                     onDoubleClick={() => handleTitleClick(board.id, board.title)}
                     onContextMenu={(e) => openBoardContextMenu(e, board)}
                   >
-                    <span className="mac-nav-item__icon" style={{ fontSize: "0.9rem" }}>#</span>
                     <span className="mac-nav-item__label">{board.title}</span>
                     {boardTaskCount(board) > 0 && (
                       <span className="mac-nav-item__count">{boardTaskCount(board)}</span>
                     )}
                   </button>
                 )
+              ))}
+            </div>
+
+            {/* Smart sections */}
+            <div className="mac-sidebar__section">
+              <div className="mac-sidebar__label">Tasks</div>
+              <button
+                className={`mac-nav-item${section === "todos" && !scheduleView ? " is-active" : ""}`}
+                onClick={() => { setSection("todos"); setScheduleView(null); }}
+              >
+                <span className="mac-nav-item__icon"><VscInbox /></span>
+                <span className="mac-nav-item__label">All Tasks</span>
+                {scheduleCounts.total > 0 && (
+                  <span className="mac-nav-item__count">{scheduleCounts.total}</span>
+                )}
+              </button>
+              {SCHEDULE_SECTIONS.map((s) => (
+                <button
+                  key={s.id}
+                  className={`mac-nav-item${section === "todos" && scheduleView === s.id ? " is-active" : ""}`}
+                  onClick={() => { setSection("todos"); setScheduleView((v) => (v === s.id ? null : s.id)); }}
+                >
+                  <span className="mac-nav-item__icon">
+                    <span className="mac-nav-item__dot" style={{ background: s.dot }} />
+                  </span>
+                  <span className="mac-nav-item__label">{s.label}</span>
+                  {scheduleCounts[s.id] > 0 && (
+                    <span className="mac-nav-item__count">{scheduleCounts[s.id]}</span>
+                  )}
+                </button>
               ))}
             </div>
 
@@ -506,6 +505,7 @@ function Board() {
           ) : (
             <h1
               className="mac-toolbar__title"
+              data-tauri-drag-region={isDesktopApp || undefined}
               style={{ cursor: activeBoardObj ? "text" : "default" }}
               onDoubleClick={() => {
                 if (activeBoardObj) { setHeaderTitleValue(activeBoardObj.title); setHeaderTitleEditing(true); }

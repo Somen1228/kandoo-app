@@ -39,8 +39,12 @@ const COMMANDS = [
     run: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run() },
   { title: 'Divider', desc: 'Visually divide blocks', kw: ['divider', 'hr', 'rule', 'line'], icon: <VscHorizontalRule />,
     run: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
-  { title: 'Table', desc: 'Insert a 3×3 table', kw: ['table', 'grid'], icon: <VscTable />,
-    run: (e, r) => e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+  { title: 'Table', desc: 'Choose rows and columns', kw: ['table', 'grid'], icon: <VscTable />,
+    run: (e, r, ctx) => {
+      e.chain().focus().deleteRange(r).run();
+      if (ctx?.onInsertTable) ctx.onInsertTable();
+      else e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+    } },
   { title: 'Image', desc: 'Upload an image', kw: ['image', 'img', 'photo', 'picture'], icon: <IoImageOutline />,
     run: (e, r, ctx) => { e.chain().focus().deleteRange(r).run(); ctx?.onImage?.(); } },
 ];
@@ -172,10 +176,14 @@ function makeRenderer() {
 export const SlashCommand = Extension.create({
   name: 'slashCommand',
   addOptions() {
-    return { onImage: null, onCreatePage: null };
+    return { onImage: null, onCreatePage: null, onInsertTable: null };
   },
   addProseMirrorPlugins() {
-    const ctx = { onImage: this.options.onImage, onCreatePage: this.options.onCreatePage };
+    const ctx = {
+      onImage: this.options.onImage,
+      onCreatePage: this.options.onCreatePage,
+      onInsertTable: this.options.onInsertTable,
+    };
     return [
       Suggestion({
         editor: this.editor,
