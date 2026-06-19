@@ -177,22 +177,23 @@ const SECTIONS = [
           }}>Beta</span>
         </H2>
         <P>
-          Each board has a <strong>Notes</strong> tab next to <strong>Todos</strong>. Notes are
-          free-form rich-text pages — think Google Keep or a tiny Notion — with their own toolbar,
-          image attachments, code blocks, and markdown auto-conversion on paste.
+          The <strong>Notes</strong> workspace contains free-form rich-text pages — think Google
+          Keep or a tiny Notion — with their own toolbar, nested page tree, image attachments,
+          code blocks, and markdown auto-conversion on paste.
         </P>
 
         <SubH>Switch to notes</SubH>
         <P>
-          Click the <strong>Notes</strong> tab at the top of any board. You&apos;ll see a row of
-          note tabs and the active note&apos;s canvas below.
+          Click <strong>Notes</strong> in the workspace sidebar. The Pages sidebar shows your page
+          tree, with the active page&apos;s canvas beside it. Drag the divider between them to resize
+          the Pages sidebar; Kandoo remembers the width on this device.
         </P>
 
         <SubH>Create / delete</SubH>
         <Steps items={[
-          <>Click <strong>+ New</strong> at the end of the tabs row. A small dialog asks for a title — no colour required.</>,
-          <>The newly created note becomes active automatically.</>,
-          <>Click the <strong>×</strong> on any tab to delete that note. <Kbd>⌘/Ctrl + Z</Kbd> restores it.</>,
+          <>Click the <strong>+</strong> beside Pages to create a top-level page.</>,
+          <>Hover over a page and click its <strong>+</strong> to create a nested sub-page.</>,
+          <>Use the page&apos;s trash button or right-click menu to delete it. <Kbd>⌘/Ctrl + Z</Kbd> restores it.</>,
         ]} />
 
         <SubH>Rename</SubH>

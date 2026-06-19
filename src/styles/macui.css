@@ -1553,11 +1553,35 @@ html.is-panel-window #root {
 }
 .notes-tree-panel {
   width: 232px;
-  flex-shrink: 0;
+  min-width: 0;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--border-subtle);
   background: color-mix(in srgb, var(--bg-sidebar) 55%, var(--bg-app));
+}
+.notes-tree-resizer {
+  position: relative;
+  width: 8px;
+  flex: 0 0 8px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+  background: transparent;
+}
+.notes-tree-resizer::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 3px;
+  width: 1px;
+  background: var(--border-subtle);
+  transition: width var(--motion-fast), background var(--motion-fast), box-shadow var(--motion-fast);
+}
+.notes-tree-resizer:hover::before,
+.notes-tree-resizer:focus-visible::before,
+.notes-tree-resizer.is-resizing::before {
+  width: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 .notes-tree__head {
   display: flex;

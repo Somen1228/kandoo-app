@@ -7,6 +7,24 @@ import ContextMenu from '../ContextMenu';
 // TipTap pulls in ProseMirror + lowlight — load it only when Notes is opened.
 const NoteEditor = lazy(() => import('./NoteEditor'));
 
+const NOTES_TREE_WIDTH_KEY = 'kandoo-notes-tree-width';
+const NOTES_TREE_MIN = 180;
+const NOTES_TREE_MAX = 420;
+const NOTES_CANVAS_MIN = 420;
+
+const clampNotesTreeWidth = (value, max = NOTES_TREE_MAX) =>
+  Math.min(max, Math.max(NOTES_TREE_MIN, value));
+
+function initialNotesTreeWidth() {
+  try {
+    const stored = localStorage.getItem(NOTES_TREE_WIDTH_KEY);
+    const width = Number(stored);
+    return stored !== null && Number.isFinite(width) ? clampNotesTreeWidth(width) : 232;
+  } catch {
+    return 232;
+  }
+}
+
 function relativeTime(ts) {
   if (!ts) return '';
   const diff = (Date.now() - ts) / 1000;
@@ -170,6 +188,77 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
   const activeIndex = activeCard ? allCards.findIndex((c) => c.uid === activeCard.uid) : -1;
   const [collapsed, setCollapsed] = useState(() => new Set());
   const [pageContextMenu, setPageContextMenu] = useState(null);
+  const [treeWidth, setTreeWidth] = useState(initialNotesTreeWidth);
+  const [isTreeResizing, setIsTreeResizing] = useState(false);
+  const layoutRef = useRef(null);
+  const resizeCleanupRef = useRef(null);
+
+  const maxTreeWidth = () => {
+    const layoutWidth = layoutRef.current?.getBoundingClientRect().width || NOTES_TREE_MAX + NOTES_CANVAS_MIN;
+    return Math.max(NOTES_TREE_MIN, Math.min(NOTES_TREE_MAX, layoutWidth - NOTES_CANVAS_MIN));
+  };
+
+  useEffect(() => {
+    try { localStorage.setItem(NOTES_TREE_WIDTH_KEY, String(Math.round(treeWidth))); } catch { /* storage unavailable */ }
+  }, [treeWidth]);
+
+  useEffect(() => {
+    const layout = layoutRef.current;
+    if (!layout || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(() => {
+      setTreeWidth((width) => clampNotesTreeWidth(width, maxTreeWidth()));
+    });
+    observer.observe(layout);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => () => resizeCleanupRef.current?.(), []);
+
+  const startTreeResize = (event) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    event.preventDefault();
+    resizeCleanupRef.current?.();
+    setIsTreeResizing(true);
+
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMove = (moveEvent) => {
+      const rect = layoutRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      setTreeWidth(clampNotesTreeWidth(moveEvent.clientX - rect.left, maxTreeWidth()));
+    };
+    const cleanup = () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onEnd);
+      document.removeEventListener('pointercancel', onEnd);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      resizeCleanupRef.current = null;
+    };
+    const onEnd = () => {
+      cleanup();
+      setIsTreeResizing(false);
+    };
+
+    resizeCleanupRef.current = cleanup;
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onEnd);
+    document.addEventListener('pointercancel', onEnd);
+  };
+
+  const resizeTreeWithKeyboard = (event) => {
+    let nextWidth;
+    if (event.key === 'ArrowLeft') nextWidth = treeWidth - 16;
+    if (event.key === 'ArrowRight') nextWidth = treeWidth + 16;
+    if (event.key === 'Home') nextWidth = NOTES_TREE_MIN;
+    if (event.key === 'End') nextWidth = maxTreeWidth();
+    if (nextWidth === undefined) return;
+    event.preventDefault();
+    setTreeWidth(clampNotesTreeWidth(nextWidth, maxTreeWidth()));
+  };
 
   // Notion-style: a workspace always has a page — land straight in a new one.
   const autoCreatedRef = useRef(false);
@@ -206,8 +295,8 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
   };
 
   return (
-    <div className="notes-layout">
-      <aside className="notes-tree-panel">
+    <div ref={layoutRef} className="notes-layout">
+      <aside className="notes-tree-panel" style={{ width: treeWidth }}>
         <div className="notes-tree__head">
           <span>Pages</span>
           <button type="button" onClick={() => onCreateNote(null, true)} title="New page" aria-label="New page"><VscAdd /></button>
@@ -226,7 +315,22 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
         </div>
       </aside>
 
-      <div className="notes-canvas-wrap">
+      <div
+        className={`notes-tree-resizer${isTreeResizing ? ' is-resizing' : ''}`}
+        role="separator"
+        aria-label="Resize notes sidebar"
+        aria-orientation="vertical"
+        aria-valuemin={NOTES_TREE_MIN}
+        aria-valuemax={NOTES_TREE_MAX}
+        aria-valuenow={Math.round(treeWidth)}
+        aria-controls="notes-canvas-pane"
+        tabIndex={0}
+        title="Drag to resize the notes sidebar"
+        onPointerDown={startTreeResize}
+        onKeyDown={resizeTreeWithKeyboard}
+      />
+
+      <div id="notes-canvas-pane" className="notes-canvas-wrap">
         {activeCard && activeIndex >= 0 ? (
           <NoteCanvas
             index={activeIndex}

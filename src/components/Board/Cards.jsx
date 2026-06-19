@@ -27,6 +27,7 @@ import { CSS } from "@dnd-kit/utilities";
 import Card from "./Card";
 import NotesView from "./NotesView";
 import { matchesTask, matchesCardTitle, matchesNote } from "../../utils/search";
+import { renderTaskValue } from "../../utils/richText";
 import Modal from "./Modal";
 import { CardsContext } from "../../contexts/CardsContext";
 import { VscHistory, VscClose } from "react-icons/vsc";
@@ -540,9 +541,11 @@ function Cards({
             );
           })()}
           {activeId && activeType === "task" && (() => {
-            let task = null;
-            for (const card of board.cards) {
-              if (card.tasks[activeId]) { task = card.tasks[activeId]; break; }
+            let task = activeDragDataRef.current?.task || null;
+            if (!task) {
+              for (const card of board.cards) {
+                if (card.tasks[activeId]) { task = card.tasks[activeId]; break; }
+              }
             }
             if (!task) return null;
             return (
@@ -558,9 +561,9 @@ function Cards({
                   transform: "rotate(1.5deg)",
                 }}
               >
-                <p style={{ color: "var(--theme-text-primary)", fontSize: "0.875rem", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                  {task.value}
-                </p>
+                <div className="mac-task__text">
+                  {renderTaskValue(task.value)}
+                </div>
               </div>
             );
           })()}
