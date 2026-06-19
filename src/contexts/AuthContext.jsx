@@ -14,7 +14,6 @@ import {
   updateProfile,
 } from 'firebase/auth';
 import { auth, firebaseConfigured } from '../config/firebase';
-import { API_URL } from '../services/api';
 
 const AuthContext = createContext(null);
 const GUEST_KEY = 'kandoo-offline-mode';
@@ -45,7 +44,6 @@ export function AuthProvider({ children }) {
   const [isGuest, setIsGuest] = useState(() => localStorage.getItem(GUEST_KEY) === '1');
   const [loading, setLoading] = useState(firebaseConfigured);
   const [error, setError] = useState(null);
-  const [backendStatus, setBackendStatus] = useState('idle');
   const supportsGoogle = !mobileNativeApp;
   const googleConfigured = !desktopNativeApp || Boolean(DESKTOP_GOOGLE_CLIENT_ID);
 
@@ -58,7 +56,6 @@ export function AuthProvider({ children }) {
     return onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
         setUser(null);
-        setBackendStatus('idle');
         setLoading(false);
         return;
       }
@@ -67,29 +64,7 @@ export function AuthProvider({ children }) {
       setIsGuest(false);
       const fallback = firebaseProfile(firebaseUser);
       setUser(fallback);
-      setBackendStatus('connecting');
       setLoading(false);
-
-      let sessionTimeout;
-      try {
-        const token = await firebaseUser.getIdToken();
-        const controller = new AbortController();
-        sessionTimeout = setTimeout(() => controller.abort(), 8000);
-        const response = await fetch(`${API_URL}/api/auth/session`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          signal: controller.signal,
-        });
-        if (!response.ok) throw new Error(`Backend unavailable (${response.status})`);
-        const data = await response.json();
-        setUser({ ...fallback, ...data.user, uid: firebaseUser.uid, firebaseUser });
-        setBackendStatus('online');
-      } catch (syncError) {
-        console.warn('Signed in locally; backend session unavailable:', syncError);
-        setBackendStatus('offline');
-      } finally {
-        clearTimeout(sessionTimeout);
-      }
     });
   }, []);
 
@@ -177,7 +152,6 @@ export function AuthProvider({ children }) {
     isGuest,
     loading,
     error,
-    backendStatus,
     firebaseConfigured,
     supportsGoogle,
     googleConfigured,

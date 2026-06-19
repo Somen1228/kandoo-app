@@ -44,8 +44,13 @@ fn random_urlsafe(byte_count: usize) -> String {
 
 fn browser_response(title: &str, message: &str, success: bool) -> String {
     let color = if success { "#22c55e" } else { "#ef4444" };
+    let icon = if success {
+        "<svg viewBox='0 0 24 24' fill='none' stroke='#fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>"
+    } else {
+        "<svg viewBox='0 0 24 24' fill='none' stroke='#fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>"
+    };
     let body = format!(
-        "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{title}</title><style>body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#111827;color:#f8fafc;font:16px system-ui,-apple-system,sans-serif}}main{{max-width:440px;padding:40px;text-align:center}}i{{display:inline-block;width:46px;height:46px;border-radius:50%;background:{color};margin-bottom:18px}}h1{{font-size:24px;margin:0 0 10px}}p{{color:#cbd5e1;line-height:1.55}}</style></head><body><main><i></i><h1>{title}</h1><p>{message}</p></main></body></html>"
+        "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{title}</title><style>body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#111827;color:#f8fafc;font:16px system-ui,-apple-system,sans-serif}}main{{max-width:440px;padding:40px;text-align:center}}i{{display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:50%;background:{color};margin-bottom:20px}}i svg{{width:28px;height:28px}}h1{{font-size:24px;margin:0 0 10px}}p{{color:#cbd5e1;line-height:1.55}}</style></head><body><main><i>{icon}</i><h1>{title}</h1><p>{message}</p></main></body></html>"
     );
     format!(
         "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",

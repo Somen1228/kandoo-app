@@ -105,7 +105,7 @@ export default function SettingsModal({ onClose, initialTab = 'appearance', onOp
 }
 
 function AccountPanel() {
-  const { user, isGuest, backendStatus, logout, exitOfflineMode } = useAuth();
+  const { user, isGuest, logout, exitOfflineMode } = useAuth();
   const { syncState, cloudConflict, resolveSyncConflict } = useContext(CardsContext);
 
   const resolve = async (strategy) => {
@@ -122,11 +122,16 @@ function AccountPanel() {
             <Row title={user.displayName || 'Kandoo user'} desc={user.email || user.phone || 'Signed in'}>
               <button className="settings-btn" onClick={logout}>Sign out</button>
             </Row>
-            <Row title="Cloud connection" desc={backendStatus === 'online' ? 'Authenticated with the Kandoo API.' : 'Signed in, but the API is currently unavailable.'}>
-              <span className="mac-chip">{backendStatus === 'online' ? 'Online' : 'Offline'}</span>
-            </Row>
-            <Row title="Workspace sync" desc={syncState === 'conflict' ? 'Another device saved a newer revision.' : 'Local changes are saved first, then uploaded.'}>
-              <span className="mac-chip">{syncState}</span>
+            <Row title="Cloud sync" desc={
+                syncState === 'synced'     ? 'Workspace is up to date across all devices.' :
+                syncState === 'syncing'    ? 'Saving changes to the cloud…' :
+                syncState === 'conflict'   ? 'Another device saved a newer version.' :
+                syncState === 'offline'    ? 'Firestore unreachable. Changes are saved locally.' :
+                'Connecting to Firestore…'
+              }>
+              <span className="mac-chip" data-tone={syncState === 'conflict' || syncState === 'offline' ? 'overdue' : syncState === 'synced' ? 'today' : undefined}>
+                {syncState}
+              </span>
             </Row>
           </>
         ) : (

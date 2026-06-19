@@ -45,7 +45,7 @@ function Board() {
     boards, setBoards, defaultCards, isLoaded, undo, redo,
     saveState, lastSavedAt, storageKind, syncState,
   } = useContext(CardsContext);
-  const { user, backendStatus, logout, exitOfflineMode } = useAuth();
+  const { user, logout, exitOfflineMode } = useAuth();
   const { currentThemeId, allThemes, setTheme } = useTheme();
   const isDesktopApp = isTauri();
   const [activeBoard, setActiveBoard] = useState(boards[0]?.id || null);
@@ -690,7 +690,7 @@ function Board() {
               aria-label="Open account menu"
             >
               {user.photoUrl ? <img src={user.photoUrl} alt="" referrerPolicy="no-referrer" /> : <VscAccount />}
-              <span className={`mac-accountbtn__status${backendStatus === "online" ? " is-online" : ""}`} />
+              <span className={`mac-accountbtn__status${syncState === "synced" || syncState === "syncing" ? " is-online" : ""}`} />
             </button>
           ) : (
             <button

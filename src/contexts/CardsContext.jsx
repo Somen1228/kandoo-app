@@ -5,7 +5,12 @@ import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { emit, listen } from '@tauri-apps/api/event';
 import { useAuth } from './AuthContext';
-import { ApiError, workspaceApi } from '../services/api';
+import {
+  getWorkspace,
+  saveWorkspace,
+  subscribeWorkspace,
+  SyncConflictError,
+} from '../services/firestoreSync';
 import {
   loadBoards as loadStoredBoards,
   saveBoards,
@@ -15,18 +20,16 @@ import {
 
 export const CardsContext = createContext();
 
-// Cross-window sync — the main window and the menu-bar panel both run this
-// provider against the same SQLite. After one saves, it broadcasts so the
-// other reloads the fresh workspace.
+// Cross-window sync — main window and menu-bar panel share the same SQLite.
 const WORKSPACE_EVENT = 'kandoo://workspace-updated';
 const WINDOW_LABEL = (() => {
   try { return isTauri() ? getCurrentWindow().label : 'web'; } catch { return 'web'; }
 })();
 
 const defaultCards = [
-  { uid: 'col-todo', title: "To-do", color: "bg-gray-200", isVisible: true, tasks: {} },
-  { uid: 'col-inprogress', title: "In-Progress", color: "bg-blue-100", isVisible: true, tasks: {} },
-  { uid: 'col-done', title: "Done", color: "bg-green-100", isVisible: true, tasks: {} },
+  { uid: 'col-todo',       title: 'To-do',       color: 'bg-gray-200',  isVisible: true, tasks: {} },
+  { uid: 'col-inprogress', title: 'In-Progress',  color: 'bg-blue-100',  isVisible: true, tasks: {} },
+  { uid: 'col-done',       title: 'Done',         color: 'bg-green-100', isVisible: true, tasks: {} },
 ];
 
 const ensureCardUids = (boards) =>
@@ -35,36 +38,40 @@ const ensureCardUids = (boards) =>
     cards: b.cards.map(c => c.uid ? c : { ...c, uid: uuidv4() }),
   }));
 
-const SAVE_DEBOUNCE_MS = 500;
-const HISTORY_LIMIT = 50;
+const SAVE_DEBOUNCE_MS    = 500;
+const HISTORY_LIMIT       = 50;
 const HISTORY_DEBOUNCE_MS = 400;
 
 export const CardsProvider = ({ children }) => {
   const { user, loading: authLoading } = useAuth();
-  const userUid = user?.uid || null;
+  const userUid      = user?.uid || null;
   const storageScope = userUid || 'guest';
-  const [boards, setBoardsRaw] = useState([]);
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [saveState, setSaveState] = useState('loading');
-  const [lastSavedAt, setLastSavedAt] = useState(null);
-  const [syncState, setSyncState] = useState('local');
+
+  const [boards,        setBoardsRaw]    = useState([]);
+  const [isLoaded,      setIsLoaded]     = useState(false);
+  const [saveState,     setSaveState]    = useState('loading');
+  const [lastSavedAt,   setLastSavedAt]  = useState(null);
+  const [syncState,     setSyncState]    = useState('local');
   const [cloudConflict, setCloudConflict] = useState(null);
-  const [history, setHistory] = useState({ past: [], future: [] });
-  const saveTimeoutRef = useRef(null);
-  const cloudRevisionRef = useRef(0);
-  const cloudSyncingRef = useRef(false);
-  const pendingCloudBoardsRef = useRef(null);
-  const cloudConflictRef = useRef(null);
-  // When true, the next save effect run is a sync-reload from another window —
-  // skip persisting/broadcasting it to avoid a save↔reload feedback loop.
-  const skipNextSaveRef = useRef(false);
+  const [history,       setHistory]      = useState({ past: [], future: [] });
+
+  const saveTimeoutRef      = useRef(null);
+  const cloudRevisionRef    = useRef(0);
+  const cloudSyncingRef     = useRef(false);
+  const pendingCloudRef     = useRef(null);
+  const cloudConflictRef    = useRef(null);
+  // Prevents save → reload → save feedback loops between windows / Firestore listener.
+  const skipNextSaveRef     = useRef(false);
+  // Tracks whether we are the source of the most recent Firestore write so we
+  // can ignore the echo from onSnapshot.
+  const localRevisionRef    = useRef(0);
 
   // ── History internals ────────────────────────────────────────────────────
-  const skipHistoryRef     = useRef(false); // bypass capture for system updates
-  const pendingSnapshotRef = useRef(null);  // first prev in a rapid-change burst
-  const snapshotTimerRef   = useRef(null);
-  const boardsRef          = useRef(boards);
-  const historyRef         = useRef(history);
+  const skipHistoryRef      = useRef(false);
+  const pendingSnapshotRef  = useRef(null);
+  const snapshotTimerRef    = useRef(null);
+  const boardsRef           = useRef(boards);
+  const historyRef          = useRef(history);
   useEffect(() => { boardsRef.current  = boards;  }, [boards]);
   useEffect(() => { historyRef.current = history; }, [history]);
 
@@ -76,14 +83,10 @@ export const CardsProvider = ({ children }) => {
     const snap = pendingSnapshotRef.current;
     pendingSnapshotRef.current = null;
     if (snap !== null) {
-      setHistory(h => ({
-        past: [...h.past, snap].slice(-HISTORY_LIMIT),
-        future: [],
-      }));
+      setHistory(h => ({ past: [...h.past, snap].slice(-HISTORY_LIMIT), future: [] }));
     }
   }, []);
 
-  // Wrapped setter — debounced history capture, records the FIRST prev in a burst
   const setBoards = useCallback((updater) => {
     setBoardsRaw(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
@@ -93,12 +96,9 @@ export const CardsProvider = ({ children }) => {
         snapshotTimerRef.current = setTimeout(() => {
           const snap = pendingSnapshotRef.current;
           pendingSnapshotRef.current = null;
-          snapshotTimerRef.current = null;
+          snapshotTimerRef.current   = null;
           if (snap !== null) {
-            setHistory(h => ({
-              past: [...h.past, snap].slice(-HISTORY_LIMIT),
-              future: [],
-            }));
+            setHistory(h => ({ past: [...h.past, snap].slice(-HISTORY_LIMIT), future: [] }));
           }
         }, HISTORY_DEBOUNCE_MS);
       }
@@ -113,10 +113,7 @@ export const CardsProvider = ({ children }) => {
     const prev = h.past[h.past.length - 1];
     skipHistoryRef.current = true;
     setBoardsRaw(prev);
-    setHistory({
-      past: h.past.slice(0, -1),
-      future: [boardsRef.current, ...h.future].slice(0, HISTORY_LIMIT),
-    });
+    setHistory({ past: h.past.slice(0, -1), future: [boardsRef.current, ...h.future].slice(0, HISTORY_LIMIT) });
     queueMicrotask(() => { skipHistoryRef.current = false; });
   }, [flushPendingSnapshot]);
 
@@ -127,13 +124,11 @@ export const CardsProvider = ({ children }) => {
     const next = h.future[0];
     skipHistoryRef.current = true;
     setBoardsRaw(next);
-    setHistory({
-      past: [...h.past, boardsRef.current].slice(-HISTORY_LIMIT),
-      future: h.future.slice(1),
-    });
+    setHistory({ past: [...h.past, boardsRef.current].slice(-HISTORY_LIMIT), future: h.future.slice(1) });
     queueMicrotask(() => { skipHistoryRef.current = false; });
   }, [flushPendingSnapshot]);
 
+  // ── Initial load ─────────────────────────────────────────────────────────
   useEffect(() => {
     if (authLoading) return undefined;
     let cancelled = false;
@@ -143,65 +138,73 @@ export const CardsProvider = ({ children }) => {
       setSaveState('loading');
       setSyncState(userUid ? 'connecting' : 'local');
       setCloudConflict(null);
-      cloudConflictRef.current = null;
-      cloudRevisionRef.current = 0;
-      try {
-        let localBoards = await loadStoredBoards(storageScope);
-        const hasAccountLocal = userUid && localBoards.length > 0;
-        if (cancelled) return;
+      cloudConflictRef.current  = null;
+      cloudRevisionRef.current  = 0;
+      localRevisionRef.current  = 0;
 
+      try {
+        // 1. Read local cache first (instant, no network).
+        let localBoards = await loadStoredBoards(storageScope);
+
+        // 2. If account has no local data yet, check guest workspace to adopt.
         if (userUid && localBoards.length === 0) {
-          // A newly signed-in account may adopt the existing offline workspace
-          // when its cloud workspace is still empty.
           localBoards = await loadStoredBoards('guest');
         }
+        if (cancelled) return;
 
         let hydrated = localBoards;
+
         if (userUid) {
           try {
-            const response = await workspaceApi.get();
-            const remote = response.workspace;
+            const { workspace: remote } = await getWorkspace(userUid);
             cloudRevisionRef.current = remote.revision;
-            let hydrationConflict = false;
 
             if (remote.boards?.length > 0) {
-              const localDiffers = hasAccountLocal
-                && JSON.stringify(localBoards) !== JSON.stringify(remote.boards);
+              const hasLocalData = localBoards.length > 0;
+              const localDiffers = hasLocalData &&
+                JSON.stringify(localBoards) !== JSON.stringify(remote.boards);
+
               if (localDiffers) {
+                // Both sides have data that diverged — present conflict UI.
                 hydrated = localBoards;
-                hydrationConflict = true;
                 cloudConflictRef.current = remote;
                 setCloudConflict(remote);
                 setSyncState('conflict');
               } else {
+                // Remote is authoritative.
                 hydrated = remote.boards;
+                setSyncState('synced');
               }
             } else {
+              // New account — push local (or a blank board) up to Firestore.
               hydrated = localBoards.length > 0
                 ? localBoards
-                : [{ id: uuidv4(), title: 'Untitled', cards: defaultCards }];
+                : [{ id: uuidv4(), title: 'My workspace', cards: defaultCards }];
               try {
-                const saved = await workspaceApi.save(hydrated, remote.revision);
-                cloudRevisionRef.current = saved.workspace.revision;
-              } catch (saveError) {
-                if (saveError instanceof ApiError && saveError.status === 409 && saveError.data?.workspace) {
-                  hydrated = saveError.data.workspace.boards;
-                  cloudRevisionRef.current = saveError.data.workspace.revision;
-                } else {
-                  throw saveError;
-                }
+                const { workspace: saved } = await saveWorkspace(userUid, hydrated, 0);
+                cloudRevisionRef.current = saved.revision;
+                localRevisionRef.current = saved.revision;
+              } catch (saveErr) {
+                if (saveErr instanceof SyncConflictError) {
+                  hydrated = saveErr.data.workspace.boards;
+                  cloudRevisionRef.current = saveErr.data.workspace.revision;
+                } else throw saveErr;
+              }
+              setSyncState('synced');
+            }
+          } catch (cloudErr) {
+            if (!(cloudErr instanceof SyncConflictError)) {
+              console.warn('[Kandoo] Firestore unavailable on load:', cloudErr);
+              setSyncState('offline');
+              if (localBoards.length === 0) {
+                toast.warning('Cloud is unavailable. Started with a local workspace.');
               }
             }
-            if (!hydrationConflict) setSyncState('synced');
-          } catch (cloudError) {
-            console.warn('Cloud workspace unavailable; using local copy:', cloudError);
-            setSyncState('offline');
-            if (localBoards.length === 0) toast.warning('Cloud is unavailable. Started with a local workspace.');
           }
         }
 
         if (hydrated.length === 0) {
-          hydrated = [{ id: uuidv4(), title: 'Untitled', cards: defaultCards }];
+          hydrated = [{ id: uuidv4(), title: 'My workspace', cards: defaultCards }];
         }
         hydrated = ensureCardUids(hydrated);
         await saveBoards(hydrated, storageScope);
@@ -212,10 +215,9 @@ export const CardsProvider = ({ children }) => {
         setLastSavedAt(new Date());
         setSaveState('saved');
       } catch (err) {
-        console.error('Failed to load local workspace:', err);
+        console.error('[Kandoo] Failed to load workspace:', err);
         if (cancelled) return;
-
-        setBoardsRaw([{ id: uuidv4(), title: 'Untitled', cards: defaultCards }]);
+        setBoardsRaw([{ id: uuidv4(), title: 'My workspace', cards: defaultCards }]);
         setSaveState('error');
         toast.error('Could not open local storage. Export a backup before closing the app.');
       } finally {
@@ -227,41 +229,64 @@ export const CardsProvider = ({ children }) => {
     return () => { cancelled = true; };
   }, [authLoading, storageScope, userUid]);
 
+  // ── Firestore real-time listener ─────────────────────────────────────────
+  // Listens for changes made on another device and merges them in.
+  useEffect(() => {
+    if (!userUid || !isLoaded) return undefined;
+
+    const unsubscribe = subscribeWorkspace(userUid, ({ boards: remoteBoards, revision }) => {
+      // Ignore echoes of our own saves.
+      if (revision <= localRevisionRef.current) return;
+      // Ignore while a conflict is pending — user needs to resolve first.
+      if (cloudConflictRef.current) return;
+
+      cloudRevisionRef.current = revision;
+      setSyncState('synced');
+      skipNextSaveRef.current  = true;
+      skipHistoryRef.current   = true;
+      setBoardsRaw(ensureCardUids(remoteBoards));
+      queueMicrotask(() => { skipHistoryRef.current = false; });
+    });
+
+    return unsubscribe;
+  }, [userUid, isLoaded]);
+
+  // ── Firestore cloud sync (debounced, queued) ─────────────────────────────
   const syncCloud = useCallback(async (snapshot) => {
     if (!userUid || cloudConflictRef.current) return;
-    pendingCloudBoardsRef.current = snapshot;
+    pendingCloudRef.current = snapshot;
     if (cloudSyncingRef.current) return;
 
     cloudSyncingRef.current = true;
-    while (pendingCloudBoardsRef.current && !cloudConflictRef.current) {
-      const nextBoards = pendingCloudBoardsRef.current;
-      pendingCloudBoardsRef.current = null;
+    while (pendingCloudRef.current && !cloudConflictRef.current) {
+      const next = pendingCloudRef.current;
+      pendingCloudRef.current = null;
       setSyncState('syncing');
       try {
-        const response = await workspaceApi.save(nextBoards, cloudRevisionRef.current);
-        cloudRevisionRef.current = response.workspace.revision;
+        const { workspace: saved } = await saveWorkspace(userUid, next, cloudRevisionRef.current);
+        cloudRevisionRef.current = saved.revision;
+        localRevisionRef.current = saved.revision;
         setSyncState('synced');
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 409 && error.data?.workspace) {
-          cloudConflictRef.current = error.data.workspace;
-          setCloudConflict(error.data.workspace);
+      } catch (err) {
+        if (err instanceof SyncConflictError) {
+          cloudConflictRef.current = err.data.workspace;
+          setCloudConflict(err.data.workspace);
           setSyncState('conflict');
-          pendingCloudBoardsRef.current = null;
+          pendingCloudRef.current = null;
           toast.error('Cloud sync paused: this workspace changed on another device.');
         } else {
-          console.warn('Cloud sync unavailable:', error);
+          console.warn('[Kandoo] Cloud sync failed:', err);
           setSyncState('offline');
-          pendingCloudBoardsRef.current = null;
+          pendingCloudRef.current = null;
         }
       }
     }
     cloudSyncingRef.current = false;
   }, [userUid]);
 
+  // ── Persist on every boards change ───────────────────────────────────────
   useEffect(() => {
     if (!isLoaded) return;
-    // Boards were just reloaded from another window's change — don't re-persist
-    // or re-broadcast (that would loop the two windows forever).
     if (skipNextSaveRef.current) { skipNextSaveRef.current = false; return; }
 
     stageBoards(boards, storageScope);
@@ -275,18 +300,16 @@ export const CardsProvider = ({ children }) => {
         if (isTauri()) emit(WORKSPACE_EVENT, { source: WINDOW_LABEL, scope: storageScope }).catch(() => {});
         if (userUid) syncCloud(boards);
       } catch (err) {
-        console.error('Failed to save local workspace:', err);
+        console.error('[Kandoo] Failed to save workspace:', err);
         setSaveState('error');
         toast.error('Changes could not be saved locally');
       }
     }, SAVE_DEBOUNCE_MS);
 
-    return () => {
-      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    };
+    return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
   }, [boards, isLoaded, storageScope, syncCloud, userUid]);
 
-  // Reload the workspace when another Kandoo window (main ↔ panel) saves.
+  // ── Cross-window sync (desktop only: main ↔ panel via SQLite) ───────────
   useEffect(() => {
     if (!isTauri()) return;
     let unlisten;
@@ -300,12 +323,13 @@ export const CardsProvider = ({ children }) => {
         skipNextSaveRef.current = true;
         setBoardsRaw(ensureCardUids(fresh));
       } catch (err) {
-        console.error('Failed to sync workspace from another window:', err);
+        console.error('[Kandoo] Failed to sync from another window:', err);
       }
     }).then((fn) => { cancelled ? fn() : (unlisten = fn); });
     return () => { cancelled = true; if (unlisten) unlisten(); };
   }, [storageScope]);
 
+  // ── Conflict resolution ───────────────────────────────────────────────────
   const resolveSyncConflict = useCallback(async (strategy) => {
     const conflict = cloudConflictRef.current;
     if (!conflict || !userUid) return;
@@ -313,9 +337,10 @@ export const CardsProvider = ({ children }) => {
     if (strategy === 'cloud') {
       const cloudBoards = ensureCardUids(conflict.boards || []);
       cloudRevisionRef.current = conflict.revision;
+      localRevisionRef.current = conflict.revision;
       cloudConflictRef.current = null;
       setCloudConflict(null);
-      skipNextSaveRef.current = true;
+      skipNextSaveRef.current  = true;
       setBoardsRaw(cloudBoards);
       await saveBoards(cloudBoards, storageScope);
       setSyncState('synced');
@@ -325,12 +350,19 @@ export const CardsProvider = ({ children }) => {
 
     if (strategy === 'local') {
       setSyncState('syncing');
-      const response = await workspaceApi.save(boardsRef.current, conflict.revision, true);
-      cloudRevisionRef.current = response.workspace.revision;
-      cloudConflictRef.current = null;
-      setCloudConflict(null);
-      setSyncState('synced');
-      toast.success('Uploaded this device’s workspace');
+      try {
+        const { workspace: saved } = await saveWorkspace(userUid, boardsRef.current, conflict.revision, true);
+        cloudRevisionRef.current = saved.revision;
+        localRevisionRef.current = saved.revision;
+        cloudConflictRef.current = null;
+        setCloudConflict(null);
+        setSyncState('synced');
+        toast.success('Uploaded this device\'s workspace');
+      } catch (err) {
+        console.error('[Kandoo] Conflict resolution failed:', err);
+        setSyncState('offline');
+        toast.error('Could not upload local workspace. Try again.');
+      }
     }
   }, [storageScope, userUid]);
 
