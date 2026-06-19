@@ -25,7 +25,9 @@ export their data, and use the full application without an account.
 ## Current migration slice
 
 - Email/password authentication on web and Tauri.
-- Google authentication on the web.
+- Google authentication on the web and desktop. Desktop uses the system
+  browser with PKCE and a loopback callback before creating a Firebase
+  credential.
 - Account-scoped browser and SQLite workspace keys.
 - Automatic adoption of an offline workspace when a new cloud account is empty.
 - Migration of legacy web-server `boards` rows into the revisioned workspace.
@@ -39,8 +41,8 @@ export their data, and use the full application without an account.
 3. Add a mobile shell: bottom navigation, collapsible project/page drawers, and
    touch-sized task/card controls while keeping the same React feature modules.
 4. Verify SQLite migrations and offline recovery on Android.
-5. Add native Google OAuth. Embedded-webview OAuth must use a native/manual
-   credential flow; the browser popup implementation is intentionally web-only.
+5. Add Android Google authentication through Credential Manager. The desktop
+   loopback flow is intentionally not reused on mobile.
 6. Test background/resume sync, poor connectivity, conflict handling, imports,
    images, and Android back navigation.
 7. Configure signing, Play Console application ID, privacy policy, and staged

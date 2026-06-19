@@ -34,7 +34,7 @@ The interface is built with React and Vite. Tauri packages the native builds, SQ
 - JSON backup and restore with safe ID regeneration.
 - XLSX export for Excel and Google Sheets.
 - Local autosave with a recovery snapshot for abrupt app closure.
-- Firebase email/password login and web Google login.
+- Firebase email/password login and Google login on web and desktop.
 - Optional authenticated cloud backup with conflict detection.
 - Native macOS window controls integrated into the themed toolbar.
 
@@ -136,6 +136,26 @@ npm run dev
 The browser preview uses `localStorage`; Tauri uses SQLite. Without Firebase
 variables, choose **Continue offline** on the login page.
 
+### Enable Google Login in Desktop Builds
+
+Desktop Google login uses the system browser, PKCE, and a temporary loopback
+callback. It does not embed Google&apos;s login page inside the app and does not
+require a client secret.
+
+1. Open Google Cloud Console for the same project used by Firebase.
+2. Configure the OAuth consent screen and add test users while the app is in
+   testing mode.
+3. Under **APIs & Services > Credentials**, create an OAuth client with the
+   application type **Desktop app**.
+4. Add its client ID to `.env`:
+
+```env
+VITE_GOOGLE_DESKTOP_CLIENT_ID=your_client_id.apps.googleusercontent.com
+```
+
+Vite includes this client ID at build time, so rebuild the desktop app after
+changing it. Do not add or bundle an OAuth client secret.
+
 ### Run the API
 
 Configure `server/.env`, PostgreSQL, and the Firebase Admin service account, then:
@@ -197,6 +217,7 @@ src/                     React application
   themes/                Built-in theme definitions
   utils/                 Search, import/export, editor, and task helpers
 src-tauri/               Native macOS shell and SQLite migration
+  src/lib.rs             Desktop Google OAuth loopback and native window shell
 server/                  Express, Firebase Admin and PostgreSQL API
 docs/                    Product and cloud-sync planning
 public/                  Browser-facing static assets
@@ -210,7 +231,7 @@ Export all boards as JSON from an earlier Kandoo web installation, then select *
 
 - Developer ID signing and notarization.
 - Intel macOS build or universal binary.
-- Android mobile shell and native Google OAuth adapter.
+- Android mobile shell and Credential Manager Google authentication adapter.
 - Durable background sync queue and cloud image storage.
 
 See [Cloud Sync and Platform Roadmap](docs/cloud-sync-roadmap.md) for the architecture and delivery sequence.

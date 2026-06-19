@@ -4,7 +4,219 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, PhysicalPosition, WindowEvent,
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use rand::{rngs::OsRng, RngCore};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::{
+    io::{Read, Write},
+    net::TcpListener,
+    time::{Duration, Instant},
+};
+use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_sql::{Migration, MigrationKind};
+use url::Url;
+
+const GOOGLE_AUTHORIZE_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
+const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
+const OAUTH_TIMEOUT: Duration = Duration::from_secs(180);
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GoogleOauthTokens {
+    access_token: String,
+    id_token: String,
+}
+
+#[derive(Deserialize)]
+struct GoogleTokenResponse {
+    access_token: Option<String>,
+    id_token: Option<String>,
+    error: Option<String>,
+    error_description: Option<String>,
+}
+
+fn random_urlsafe(byte_count: usize) -> String {
+    let mut bytes = vec![0_u8; byte_count];
+    OsRng.fill_bytes(&mut bytes);
+    URL_SAFE_NO_PAD.encode(bytes)
+}
+
+fn browser_response(title: &str, message: &str, success: bool) -> String {
+    let color = if success { "#22c55e" } else { "#ef4444" };
+    let body = format!(
+        "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{title}</title><style>body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#111827;color:#f8fafc;font:16px system-ui,-apple-system,sans-serif}}main{{max-width:440px;padding:40px;text-align:center}}i{{display:inline-block;width:46px;height:46px;border-radius:50%;background:{color};margin-bottom:18px}}h1{{font-size:24px;margin:0 0 10px}}p{{color:#cbd5e1;line-height:1.55}}</style></head><body><main><i></i><h1>{title}</h1><p>{message}</p></main></body></html>"
+    );
+    format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    )
+}
+
+fn wait_for_google_callback(listener: TcpListener, expected_state: String) -> Result<String, String> {
+    listener
+        .set_nonblocking(true)
+        .map_err(|error| format!("Could not configure the Google sign-in callback: {error}"))?;
+    let deadline = Instant::now() + OAUTH_TIMEOUT;
+
+    while Instant::now() < deadline {
+        match listener.accept() {
+            Ok((mut stream, _)) => {
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+                let mut buffer = [0_u8; 8192];
+                let read = stream
+                    .read(&mut buffer)
+                    .map_err(|error| format!("Could not read the Google sign-in callback: {error}"))?;
+                let request = String::from_utf8_lossy(&buffer[..read]);
+                let target = request
+                    .lines()
+                    .next()
+                    .and_then(|line| line.split_whitespace().nth(1))
+                    .ok_or_else(|| "Google returned an invalid sign-in callback".to_string())?;
+                let callback = Url::parse(&format!("http://127.0.0.1{target}"))
+                    .map_err(|_| "Google returned an invalid sign-in callback URL".to_string())?;
+                let params = callback.query_pairs().collect::<std::collections::HashMap<_, _>>();
+
+                if params.get("state").map(|value| value.as_ref()) != Some(expected_state.as_str()) {
+                    let response = browser_response(
+                        "Sign-in request rejected",
+                        "The callback could not be verified. Return to Kandoo and try again.",
+                        false,
+                    );
+                    let _ = stream.write_all(response.as_bytes());
+                    continue;
+                }
+
+                if let Some(error) = params.get("error") {
+                    let response = browser_response(
+                        "Google sign-in cancelled",
+                        "No changes were made. You can close this tab and return to Kandoo.",
+                        false,
+                    );
+                    let _ = stream.write_all(response.as_bytes());
+                    return Err(if error == "access_denied" {
+                        "Google sign-in was cancelled".to_string()
+                    } else {
+                        format!("Google sign-in failed: {error}")
+                    });
+                }
+
+                let code = params
+                    .get("code")
+                    .map(|value| value.to_string())
+                    .ok_or_else(|| "Google did not return an authorization code".to_string())?;
+                let response = browser_response(
+                    "Signed in to Kandoo",
+                    "Authentication is complete. You can close this tab and return to the app.",
+                    true,
+                );
+                let _ = stream.write_all(response.as_bytes());
+                return Ok(code);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(error) => return Err(format!("Google sign-in callback failed: {error}")),
+        }
+    }
+
+    Err("Google sign-in timed out. Return to Kandoo and try again.".to_string())
+}
+
+#[tauri::command]
+async fn google_oauth_sign_in(
+    app: tauri::AppHandle,
+    client_id: String,
+    client_secret: Option<String>,
+) -> Result<GoogleOauthTokens, String> {
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        let _ = (app, client_id, client_secret);
+        return Err("Desktop Google sign-in is not available on this platform yet".to_string());
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    {
+        if client_id.trim().is_empty() {
+            return Err("Desktop Google OAuth is not configured".to_string());
+        }
+        let client_secret = client_secret.unwrap_or_default();
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .map_err(|error| format!("Could not start the Google sign-in callback: {error}"))?;
+        let port = listener
+            .local_addr()
+            .map_err(|error| format!("Could not read the Google sign-in callback address: {error}"))?
+            .port();
+        let redirect_uri = format!("http://127.0.0.1:{port}");
+        let state = random_urlsafe(32);
+        let code_verifier = random_urlsafe(64);
+        let code_challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(code_verifier.as_bytes()));
+
+        let mut authorize_url = Url::parse(GOOGLE_AUTHORIZE_URL)
+            .map_err(|error| format!("Could not prepare Google sign-in: {error}"))?;
+        authorize_url
+            .query_pairs_mut()
+            .append_pair("client_id", client_id.trim())
+            .append_pair("redirect_uri", &redirect_uri)
+            .append_pair("response_type", "code")
+            .append_pair("scope", "openid email profile")
+            .append_pair("state", &state)
+            .append_pair("code_challenge", &code_challenge)
+            .append_pair("code_challenge_method", "S256")
+            .append_pair("prompt", "select_account");
+
+        app.opener()
+            .open_url(authorize_url.as_str(), None::<&str>)
+            .map_err(|error| format!("Could not open the system browser: {error}"))?;
+
+        let callback_state = state.clone();
+        let code = tauri::async_runtime::spawn_blocking(move || {
+            wait_for_google_callback(listener, callback_state)
+        })
+        .await
+        .map_err(|error| format!("Google sign-in callback stopped unexpectedly: {error}"))??;
+
+        let mut form_fields = vec![
+            ("client_id", client_id.trim().to_string()),
+            ("code", code.clone()),
+            ("code_verifier", code_verifier.clone()),
+            ("grant_type", "authorization_code".to_string()),
+            ("redirect_uri", redirect_uri.clone()),
+        ];
+        if !client_secret.trim().is_empty() {
+            form_fields.push(("client_secret", client_secret.trim().to_string()));
+        }
+
+        let response = reqwest::Client::new()
+            .post(GOOGLE_TOKEN_URL)
+            .form(&form_fields)
+            .send()
+            .await
+            .map_err(|error| format!("Could not exchange the Google authorization code: {error}"))?;
+        let status = response.status();
+        let payload: GoogleTokenResponse = response
+            .json()
+            .await
+            .map_err(|error| format!("Google returned an invalid token response: {error}"))?;
+
+        if !status.is_success() {
+            return Err(payload
+                .error_description
+                .or(payload.error)
+                .unwrap_or_else(|| format!("Google token exchange failed ({status})")));
+        }
+
+        let access_token = payload
+            .access_token
+            .ok_or_else(|| "Google did not return an access token".to_string())?;
+        let id_token = payload
+            .id_token
+            .ok_or_else(|| "Google did not return an ID token".to_string())?;
+        Ok(GoogleOauthTokens { access_token, id_token })
+    }
+}
 
 /// Show/hide the quick-access panel, positioning it just under the menu-bar icon.
 #[cfg(target_os = "macos")]
@@ -42,6 +254,7 @@ pub fn run() {
     }];
 
     let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:kandoo.db", migrations)
@@ -103,6 +316,7 @@ pub fn run() {
         });
 
     builder
+        .invoke_handler(tauri::generate_handler![google_oauth_sign_in])
         .build(tauri::generate_context!())
         .expect("error while building Kandoo")
         .run(|app, event| {

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { isTauri } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import {
   GoogleAuthProvider,
   browserLocalPersistence,
@@ -7,6 +7,7 @@ import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   setPersistence,
+  signInWithCredential,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -17,6 +18,11 @@ import { API_URL } from '../services/api';
 
 const AuthContext = createContext(null);
 const GUEST_KEY = 'kandoo-offline-mode';
+const DESKTOP_GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_DESKTOP_CLIENT_ID?.trim() || '';
+const DESKTOP_GOOGLE_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_DESKTOP_CLIENT_SECRET?.trim() || '';
+const nativeApp = isTauri();
+const mobileNativeApp = nativeApp && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const desktopNativeApp = nativeApp && !mobileNativeApp;
 
 const firebaseProfile = (firebaseUser) => ({
   uid: firebaseUser.uid,
@@ -40,7 +46,8 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(firebaseConfigured);
   const [error, setError] = useState(null);
   const [backendStatus, setBackendStatus] = useState('idle');
-  const supportsGoogle = !isTauri();
+  const supportsGoogle = !mobileNativeApp;
+  const googleConfigured = !desktopNativeApp || Boolean(DESKTOP_GOOGLE_CLIENT_ID);
 
   useEffect(() => {
     if (!auth) {
@@ -122,12 +129,23 @@ export function AuthProvider({ children }) {
   const signInWithGoogle = async (rememberMe = true) => {
     setError(null);
     if (!supportsGoogle) {
-      const nativeError = new Error('Google sign-in needs the native OAuth adapter on desktop and Android. Use email sign-in for now.');
+      const nativeError = new Error('Google sign-in is not available on this platform yet. Use email sign-in for now.');
       setError(nativeError.message);
       throw nativeError;
     }
     try {
       await applyPersistence(rememberMe);
+      if (desktopNativeApp) {
+        if (!DESKTOP_GOOGLE_CLIENT_ID) {
+          throw new Error('Desktop Google OAuth is not configured. Add VITE_GOOGLE_DESKTOP_CLIENT_ID and rebuild Kandoo.');
+        }
+        const tokens = await invoke('google_oauth_sign_in', {
+          clientId: DESKTOP_GOOGLE_CLIENT_ID,
+          clientSecret: DESKTOP_GOOGLE_CLIENT_SECRET || null,
+        });
+        const credential = GoogleAuthProvider.credential(tokens.idToken, tokens.accessToken);
+        return (await signInWithCredential(auth, credential)).user;
+      }
       return (await signInWithPopup(auth, new GoogleAuthProvider())).user;
     } catch (authError) {
       setError(authError.message);
@@ -162,6 +180,7 @@ export function AuthProvider({ children }) {
     backendStatus,
     firebaseConfigured,
     supportsGoogle,
+    googleConfigured,
     signInWithEmail,
     signUpWithEmail,
     signInWithGoogle,

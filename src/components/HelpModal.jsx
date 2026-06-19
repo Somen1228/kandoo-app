@@ -428,10 +428,10 @@ const SECTIONS = [
         <Steps items={[
           <>The macOS app stores the workspace in a SQLite database inside Kandoo&apos;s application data folder.</>,
           <>Changes autosave shortly after you edit a board, card, task, or note.</>,
-          <>The save indicator in the header shows whether changes are saved or still being written.</>,
+          <>The save indicator in the sidebar footer shows local save and cloud-sync status.</>,
           <>JSON exports are complete, re-importable backups. Keep one somewhere separate from this Mac.</>,
         ]} />
-        <Tip>Cloud backup and multi-device sync can be added later as an optional service without changing local ownership of the workspace.</Tip>
+        <Tip>Sign in with email or Google to add cloud backup and multi-device sync without giving up the local copy.</Tip>
       </>
     ),
   },

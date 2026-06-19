@@ -67,6 +67,9 @@ export default function Login() {
         {!authState.firebaseConfigured && (
           <div className="login-alert">Cloud login is not configured yet. Add the Firebase variables from <code>.env.example</code>.</div>
         )}
+        {authState.supportsGoogle && !authState.googleConfigured && (
+          <div className="login-alert">Desktop Google login needs <code>VITE_GOOGLE_DESKTOP_CLIENT_ID</code>. Email login remains available.</div>
+        )}
         {authState.error && <div className="login-alert">{friendlyError(authState.error)}</div>}
 
         {authState.supportsGoogle && (
@@ -77,7 +80,7 @@ export default function Login() {
         )}
 
         {tab === 'google' && authState.supportsGoogle ? (
-          <button className="login-google" disabled={submitting || !authState.firebaseConfigured}
+          <button className="login-google" disabled={submitting || !authState.firebaseConfigured || !authState.googleConfigured}
             onClick={() => run(() => authState.signInWithGoogle(rememberMe))}>
             <GoogleIcon /> Continue with Google
           </button>

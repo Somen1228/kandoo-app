@@ -209,9 +209,11 @@ select {
   height: var(--toolbar-height);
   padding: 0 14px 0 16px;
   flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle);
 }
 .is-desktop-window .mac-sidebar__brand {
   padding-left: 92px;
+  border-bottom-color: transparent;
 }
 /* Fullscreen — macOS hides the traffic lights, so reclaim their reserved space
    (otherwise the logo looks like it's floating mid-bar). */
@@ -222,9 +224,18 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   padding-left: 14px;
 }
 .mac-sidebar__brand img {
-  width: 26px;
-  height: 26px;
+  width: 52px;
+  height: 52px;
   object-fit: contain;
+}
+.mac-sidebar__brand-logo {
+  transform: scale(1);
+  transform-origin: center;
+  transition: transform var(--motion-base) var(--ease-out), filter var(--motion-base);
+}
+.mac-sidebar__brand-logo:hover {
+  transform: scale(1.08) rotate(-3deg);
+  filter: drop-shadow(0 3px 7px color-mix(in srgb, var(--accent) 24%, transparent));
 }
 .mac-sidebar__wordmark {
   font-size: 1.05rem;
@@ -356,6 +367,44 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   flex-shrink: 0;
   transition: transform var(--motion-fast) var(--ease-out);
 }
+.mac-sidebar__save-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mac-sidebar__sync-status {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border-subtle));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background var(--motion-fast), color var(--motion-fast), transform var(--motion-fast);
+}
+.mac-sidebar__sync-status:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  transform: translateY(-1px);
+}
+.mac-sidebar__sync-status.is-offline,
+.mac-sidebar__sync-status.is-conflict {
+  color: var(--theme-warning);
+  border-color: color-mix(in srgb, var(--theme-warning) 28%, var(--border-subtle));
+  background: color-mix(in srgb, var(--theme-warning) 10%, transparent);
+}
+.mac-sidebar__sync-status.is-syncing svg,
+.mac-sidebar__sync-status.is-connecting svg {
+  animation: mac-sync-spin 900ms linear infinite;
+}
+@keyframes mac-sync-spin { to { transform: rotate(360deg); } }
 .mac-sidebar__footer .mac-sidebar__logo:hover {
   transform: scale(1.08);
 }
@@ -457,24 +506,34 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
 .mac-accountbtn {
   position: relative;
   flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+}
+.mac-accountbtn.is-signed-in {
+  background: var(--bg-surface);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+.mac-accountbtn.is-signed-in:hover {
+  background: var(--bg-hover);
 }
 .mac-accountbtn.is-offline {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .mac-accountbtn img {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   object-fit: cover;
 }
 .mac-accountbtn__status {
   position: absolute;
-  right: 3px;
-  bottom: 3px;
-  width: 7px;
-  height: 7px;
-  border: 1.5px solid var(--bg-app);
+  right: 2px;
+  bottom: 2px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--bg-app);
   border-radius: 50%;
   background: var(--theme-warning);
 }

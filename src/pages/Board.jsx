@@ -5,7 +5,7 @@ import {
   VscFilter, VscFilterFilled, VscChevronDown,
   VscArchive, VscQuestion,
   VscAccount, VscInbox, VscNotebook, VscLayoutSidebarLeft, VscClose,
-  VscSettingsGear, VscSignIn, VscSignOut,
+  VscSettingsGear, VscSignIn, VscSignOut, VscCloud, VscSync, VscWarning,
 } from "react-icons/vsc";
 import { toast } from "sonner";
 import { CgRename } from "react-icons/cg";
@@ -340,12 +340,19 @@ function Board() {
   const openAccountMenu = (event) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const identity = user?.displayName || user?.email || user?.phone || "Kandoo account";
+    const syncMenuLabel = syncState === "synced"
+      ? "Cloud sync · Up to date"
+      : syncState === "syncing" || syncState === "connecting"
+        ? "Cloud sync · Syncing"
+        : syncState === "conflict"
+          ? "Cloud sync · Needs attention"
+          : "Cloud sync · Offline";
     setCtxMenu({
       x: rect.right - 210,
       y: rect.bottom + 6,
       items: [
         { label: identity, icon: <VscAccount />, onClick: () => openSettings("account") },
-        { label: backendStatus === "online" ? "Account & sync · Online" : "Account & sync · Offline", onClick: () => openSettings("account") },
+        { label: syncMenuLabel, icon: <VscCloud />, onClick: () => openSettings("account") },
         { divider: true },
         { label: "Sign out", icon: <VscSignOut />, onClick: signOut },
       ],
@@ -361,22 +368,29 @@ function Board() {
     toast.success("Workspace reset");
   };
 
-  const cloudLabel = syncState === "synced"
-    ? " · Cloud synced"
-    : syncState === "syncing" || syncState === "connecting"
-      ? " · Syncing"
-      : syncState === "offline"
-        ? " · Cloud offline"
-        : syncState === "conflict"
-          ? " · Sync conflict"
-          : "";
+  const savedAtLabel = lastSavedAt
+    ? ` · ${lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+    : "";
+  const localStorageLabel = storageKind === "sqlite" ? "Saved on this Mac" : "Saved locally";
   const storageLabel = saveState === "saving"
-    ? "Saving…"
+    ? (user ? "Saving & syncing…" : "Saving…")
     : saveState === "error"
       ? "Save failed"
-      : `${storageKind === "sqlite" ? "Saved on this Mac" : "Saved locally"}${
-          lastSavedAt ? ` · ${lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""
-        }${cloudLabel}`;
+      : user
+        ? syncState === "synced"
+          ? `Synced to cloud${savedAtLabel}`
+          : syncState === "syncing" || syncState === "connecting"
+            ? "Syncing to cloud…"
+            : syncState === "conflict"
+              ? "Sync needs attention"
+              : `${localStorageLabel}${savedAtLabel} · Cloud offline`
+        : `${localStorageLabel}${savedAtLabel}`;
+
+  const SyncStatusIcon = syncState === "syncing" || syncState === "connecting"
+    ? VscSync
+    : syncState === "offline" || syncState === "conflict"
+      ? VscWarning
+      : VscCloud;
 
   return (
     <div className={`mac-shell${isDesktopApp ? " is-desktop-window" : ""}`}>
@@ -384,7 +398,20 @@ function Board() {
       <aside className={`mac-sidebar${isSidebarCollapsed ? " is-collapsed" : ""}`}
         style={{ "--sidebar-width": `${sidebarWidth}px` }}>
         <div className="mac-sidebar__inner" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
-          <div className="mac-sidebar__brand" data-tauri-drag-region={isDesktopApp || undefined} />
+          <div className="mac-sidebar__brand" data-tauri-drag-region={isDesktopApp || undefined}>
+            {!isDesktopApp && (
+              <>
+                <img
+                  className="mac-sidebar__brand-logo"
+                  src={isLogoHovered ? kandooLogoSmiling : kandooLogo}
+                  alt="Kandoo"
+                  onMouseEnter={() => setIsLogoHovered(true)}
+                  onMouseLeave={() => setIsLogoHovered(false)}
+                />
+                <span className="mac-sidebar__wordmark">Kandoo</span>
+              </>
+            )}
+          </div>
 
           <div className="mac-sidebar__scroll">
             {/* Projects */}
@@ -484,14 +511,25 @@ function Board() {
 
           <div className="mac-sidebar__footer" data-state={saveState === "error" ? "error" : undefined}
             title={saveState === "error" ? "Kandoo could not save the latest changes" : storageLabel}>
-            <img
-              className="mac-sidebar__logo"
-              src={isLogoHovered ? kandooLogoSmiling : kandooLogo}
-              alt="Kandoo"
-              onMouseEnter={() => setIsLogoHovered(true)}
-              onMouseLeave={() => setIsLogoHovered(false)}
-            />
-            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{storageLabel}</span>
+            {user ? (
+              <button
+                className={`mac-sidebar__sync-status is-${syncState}`}
+                onClick={() => openSettings("account")}
+                title="Open Account & Sync"
+                aria-label={`Account and sync: ${storageLabel}`}
+              >
+                <SyncStatusIcon />
+              </button>
+            ) : (
+              <img
+                className="mac-sidebar__logo"
+                src={isLogoHovered ? kandooLogoSmiling : kandooLogo}
+                alt="Kandoo"
+                onMouseEnter={() => setIsLogoHovered(true)}
+                onMouseLeave={() => setIsLogoHovered(false)}
+              />
+            )}
+            <span className="mac-sidebar__save-label">{storageLabel}</span>
             <button className="mac-sidebar__settings" onClick={() => openSettings("appearance")} title="Settings" aria-label="Open settings">
               <VscSettingsGear />
             </button>

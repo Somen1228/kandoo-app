@@ -17,7 +17,13 @@ tauri-build = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["macos-private-api"] }
+tauri-plugin-opener = "2"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+base64 = "0.22"
+rand = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+sha2 = "0.10"
+url = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
