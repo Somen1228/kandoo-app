@@ -35,7 +35,7 @@ const defaultCards = [
 const ensureCardUids = (boards) =>
   boards.map(b => ({
     ...b,
-    cards: b.cards.map(c => c.uid ? c : { ...c, uid: uuidv4() }),
+    cards: (b.cards || []).map(c => c.uid ? c : { ...c, uid: uuidv4() }),
   }));
 
 const SAVE_DEBOUNCE_MS    = 500;

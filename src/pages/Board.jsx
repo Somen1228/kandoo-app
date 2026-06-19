@@ -142,7 +142,7 @@ function Board() {
     const counts = { total: 0, overdue: 0, today: 0, upcoming: 0, done: 0, none: 0 };
     const board = boards.find((b) => b.id === activeBoard);
     if (!board) return counts;
-    for (const card of board.cards) {
+    for (const card of board.cards || []) {
       if ((card.type || "todo") !== "todo") continue;
       for (const t of Object.values(card.tasks || {})) {
         counts.total += 1;
