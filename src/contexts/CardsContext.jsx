@@ -1,6 +1,9 @@
 import { createContext, useState, useEffect, useRef, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
+import { isTauri } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { emit, listen } from '@tauri-apps/api/event';
 import {
   loadBoards as loadStoredBoards,
   saveBoards,
@@ -9,6 +12,14 @@ import {
 } from '../services/boardStorage';
 
 export const CardsContext = createContext();
+
+// Cross-window sync — the main window and the menu-bar panel both run this
+// provider against the same SQLite. After one saves, it broadcasts so the
+// other reloads the fresh workspace.
+const WORKSPACE_EVENT = 'kandoo://workspace-updated';
+const WINDOW_LABEL = (() => {
+  try { return isTauri() ? getCurrentWindow().label : 'web'; } catch { return 'web'; }
+})();
 
 const defaultCards = [
   { uid: 'col-todo', title: "To-do", color: "bg-gray-200", isVisible: true, tasks: {} },
@@ -33,6 +44,9 @@ export const CardsProvider = ({ children }) => {
   const [lastSavedAt, setLastSavedAt] = useState(null);
   const [history, setHistory] = useState({ past: [], future: [] });
   const saveTimeoutRef = useRef(null);
+  // When true, the next save effect run is a sync-reload from another window —
+  // skip persisting/broadcasting it to avoid a save↔reload feedback loop.
+  const skipNextSaveRef = useRef(false);
 
   // ── History internals ────────────────────────────────────────────────────
   const skipHistoryRef     = useRef(false); // bypass capture for system updates
@@ -139,6 +153,9 @@ export const CardsProvider = ({ children }) => {
 
   useEffect(() => {
     if (!isLoaded) return;
+    // Boards were just reloaded from another window's change — don't re-persist
+    // or re-broadcast (that would loop the two windows forever).
+    if (skipNextSaveRef.current) { skipNextSaveRef.current = false; return; }
 
     stageBoards(boards);
     setSaveState('saving');
@@ -148,6 +165,7 @@ export const CardsProvider = ({ children }) => {
         await saveBoards(boards);
         setLastSavedAt(new Date());
         setSaveState('saved');
+        if (isTauri()) emit(WORKSPACE_EVENT, { source: WINDOW_LABEL }).catch(() => {});
       } catch (err) {
         console.error('Failed to save local workspace:', err);
         setSaveState('error');
@@ -159,6 +177,25 @@ export const CardsProvider = ({ children }) => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
   }, [boards, isLoaded]);
+
+  // Reload the workspace when another Kandoo window (main ↔ panel) saves.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten;
+    let cancelled = false;
+    listen(WORKSPACE_EVENT, async (event) => {
+      if (event.payload?.source === WINDOW_LABEL) return;
+      try {
+        const fresh = await loadStoredBoards();
+        if (cancelled) return;
+        skipNextSaveRef.current = true;
+        setBoardsRaw(ensureCardUids(fresh));
+      } catch (err) {
+        console.error('Failed to sync workspace from another window:', err);
+      }
+    }).then((fn) => { cancelled ? fn() : (unlisten = fn); });
+    return () => { cancelled = true; if (unlisten) unlisten(); };
+  }, []);
 
   return (
     <CardsContext.Provider value={{

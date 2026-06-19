@@ -177,22 +177,23 @@ const SECTIONS = [
           }}>Beta</span>
         </H2>
         <P>
-          Each board has a <strong>Notes</strong> tab next to <strong>Todos</strong>. Notes are
-          free-form rich-text pages — think Google Keep or a tiny Notion — with their own toolbar,
-          image attachments, code blocks, and markdown auto-conversion on paste.
+          The <strong>Notes</strong> workspace contains free-form rich-text pages — think Google
+          Keep or a tiny Notion — with their own toolbar, nested page tree, image attachments,
+          code blocks, and markdown auto-conversion on paste.
         </P>
 
         <SubH>Switch to notes</SubH>
         <P>
-          Click the <strong>Notes</strong> tab at the top of any board. You&apos;ll see a row of
-          note tabs and the active note&apos;s canvas below.
+          Click <strong>Notes</strong> in the workspace sidebar. The Pages sidebar shows your page
+          tree, with the active page&apos;s canvas beside it. Drag the divider between them to resize
+          the Pages sidebar; Kandoo remembers the width on this device.
         </P>
 
         <SubH>Create / delete</SubH>
         <Steps items={[
-          <>Click <strong>+ New</strong> at the end of the tabs row. A small dialog asks for a title — no colour required.</>,
-          <>The newly created note becomes active automatically.</>,
-          <>Click the <strong>×</strong> on any tab to delete that note. <Kbd>⌘/Ctrl + Z</Kbd> restores it.</>,
+          <>Click the <strong>+</strong> beside Pages to create a top-level page.</>,
+          <>Hover over a page and click its <strong>+</strong> to create a nested sub-page.</>,
+          <>Use the page&apos;s trash button or right-click menu to delete it. <Kbd>⌘/Ctrl + Z</Kbd> restores it.</>,
         ]} />
 
         <SubH>Rename</SubH>
@@ -206,12 +207,24 @@ const SECTIONS = [
         <Steps items={[
           <>Heading selector (Normal / H1–H6)</>,
           <>Bold, italic, underline, strikethrough, superscript, subscript, inline code, clear formatting</>,
-          <>Text colour &amp; highlight colour (native pickers)</>,
-          <>Bullet &amp; numbered lists</>,
+          <>Text colour &amp; highlight palettes, including custom colours</>,
+          <>Bullet, numbered, and aligned checklist items</>,
           <>Alignment (left / center / right / justify), indent / outdent</>,
           <>Quote, code block with auto language detection, horizontal rule, hyperlink</>,
-          <>Image upload — auto-compressed, click thumbnails for the fullscreen viewer</>,
+          <>Configurable tables with row, column, header, and delete controls</>,
+          <>Image upload — auto-compressed, then resizable with crop-ratio and focal-position controls</>,
         ]} />
+        <P>
+          The toolbar stays on one compact row. On narrower windows, scroll it horizontally with
+          a trackpad or <Kbd>Shift + wheel</Kbd> instead of losing writing space to wrapped rows.
+        </P>
+
+        <SubH>Right-click menus</SubH>
+        <P>
+          Right-click selected text, links, checklist items, images, tables, or the empty writing
+          canvas for actions specific to that content. Pages in the Notes sidebar also have their
+          own context menu.
+        </P>
 
         <SubH>Markdown auto-paste</SubH>
         <P>
@@ -223,7 +236,7 @@ const SECTIONS = [
         <SubH>Paper vs Wide layout</SubH>
         <P>
           Use the <Kbd>⛶ Wide</Kbd> / <Kbd>⧉ Paper</Kbd> toggle in the meta row (next to
-          &quot;Edited X ago&quot;) to switch between a centered white-paper page (default) and a
+          &quot;Edited X ago&quot;) to switch between a centered themed-paper page (default) and a
           full-width canvas. Preference is saved per device.
         </P>
 
@@ -234,10 +247,9 @@ const SECTIONS = [
         </P>
 
         <Tip>
-          <strong>What&apos;s coming next:</strong> tables, font / line-spacing controls,
-          checklists inside notes, slash commands (<Kbd>/heading</Kbd> etc.), and drag-to-reorder
-          blocks. These need a deeper editor rewrite — call out anything you&apos;d prioritise in
-          the feedback form.
+          Select an image to reveal resize and crop controls. Place the cursor inside a table
+          and click the highlighted table icon to add or remove rows and columns. Type <Kbd>/</Kbd>
+          for block commands.
         </Tip>
       </>
     ),

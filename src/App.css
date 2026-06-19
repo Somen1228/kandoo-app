@@ -362,32 +362,18 @@ body {
   word-break: break-all;
 }
 
-/* Note canvas — pure-white "paper" surface.
-   Redeclares theme CSS variables in scope so toolbar buttons, inputs, hover
-   states all flip to light-theme values even when the page is on a dark theme. */
+/* Note canvas — an elevated sheet that remains distinct while respecting the
+   active theme. Dark themes get a dark paper surface instead of a white island. */
 .note-paper {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--theme-bg-card);
+  border: 1px solid color-mix(in srgb, var(--theme-border) 82%, var(--theme-text-primary) 8%);
   border-radius: 0.75rem;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  box-shadow:
+    0 18px 46px color-mix(in srgb, var(--theme-shadow) 82%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--theme-text-primary) 7%, transparent);
+}
 
-  --theme-bg-primary:   #ffffff;
-  --theme-bg-secondary: #f8fafc;
-  --theme-bg-card:      #ffffff;
-  --theme-bg-input:     #f1f5f9;
-  --theme-bg-hover:     #e2e8f0;
-  --theme-bg-modal:     #ffffff;
-  --theme-text-primary:   #0f172a;
-  --theme-text-secondary: #475569;
-  --theme-text-muted:     #94a3b8;
-  --theme-border:         #e2e8f0;
-  --theme-accent:         #3b82f6;
-  --theme-accent-hover:   #2563eb;
-  --theme-accent-light:   rgba(59, 130, 246, 0.1);
-  --theme-danger:         #ef4444;
-  --theme-danger-light:   #fca5a5;
-  --theme-danger-bg:      #fee2e2;
-  --theme-success:        #10b981;
-  --theme-warning:        #f59e0b;
-  --theme-highlight-bg:   #fef3c7;
+.note-paper .note-tb-shell {
+  --note-toolbar-bg: color-mix(in srgb, var(--theme-bg-input) 82%, var(--theme-bg-card));
+  border: 1px solid var(--theme-border);
 }
