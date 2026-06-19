@@ -63,11 +63,15 @@ const SECTIONS = [
         <P>Kandoo is a calm, focused Kanban board for managing tasks. Pick a tab from the left to learn about each feature.</P>
         <SubH>The basics</SubH>
         <Steps items={[
-          <>A starter board is created the first time Kandoo opens.</>,
+          <>Sign in for cloud backup, or continue offline with a workspace stored only on this device.</>,
           <>Click a card to add tasks. Drag cards or tasks to reorder.</>,
-          <>Everything autosaves privately on this Mac. No account or internet connection is required.</>,
-          <>Use JSON export to keep a separate backup or move boards to another Mac.</>,
+          <>Everything saves locally first. Signed-in workspaces sync after the local save completes.</>,
+          <>Use JSON export to keep a separate backup or move boards between devices.</>,
         ]} />
+        <P>
+          In offline mode, use the sign-in icon at the top right to connect an account. When signed
+          in, the same position shows your account icon with Account &amp; Sync and Sign out options.
+        </P>
         <Tip>Press <Kbd>⌘ / Ctrl</Kbd> + <Kbd>Shift</Kbd> + <Kbd>1</Kbd> anywhere to reopen this guide.</Tip>
       </>
     ),

@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { CardsContext } from '../../contexts/CardsContext';
 import { THEME_TOKENS } from '../../themes/themes';
 import '../ThemeSettings.css';
 import {
-  VscColorMode, VscEdit, VscSettingsGear, VscDatabase, VscClose, VscCopy,
+  VscAccount, VscColorMode, VscEdit, VscSettingsGear, VscDatabase, VscClose, VscCopy,
 } from 'react-icons/vsc';
 
 const SQLITE_PATH = '~/Library/Application Support/com.kandoo.desktop/kandoo.db';
@@ -53,6 +55,7 @@ const SHORTCUTS = [
 ];
 
 const TABS = [
+  { id: 'account', label: 'Account & Sync', icon: <VscAccount /> },
   { id: 'appearance', label: 'Appearance', icon: <VscColorMode /> },
   { id: 'editor', label: 'Editor', icon: <VscEdit /> },
   { id: 'behavior', label: 'Behavior & Shortcuts', icon: <VscSettingsGear /> },
@@ -83,6 +86,7 @@ export default function SettingsModal({ onClose, initialTab = 'appearance', onOp
 
         <div className="settings-content">
           <button className="settings-close" onClick={onClose} aria-label="Close settings"><VscClose /></button>
+          {tab === 'account' && <AccountPanel />}
           {tab === 'appearance' && <AppearancePanel />}
           {tab === 'editor' && <EditorPanel />}
           {tab === 'behavior' && <BehaviorPanel />}
@@ -97,6 +101,52 @@ export default function SettingsModal({ onClose, initialTab = 'appearance', onOp
       </div>
     </div>,
     document.body
+  );
+}
+
+function AccountPanel() {
+  const { user, isGuest, backendStatus, logout, exitOfflineMode } = useAuth();
+  const { syncState, cloudConflict, resolveSyncConflict } = useContext(CardsContext);
+
+  const resolve = async (strategy) => {
+    try { await resolveSyncConflict(strategy); }
+    catch (error) { toast.error(error.message || 'Could not resolve sync conflict'); }
+  };
+
+  return (
+    <div>
+      <h2 className="settings-h2">Account &amp; Sync</h2>
+      <Section title="Account">
+        {user ? (
+          <>
+            <Row title={user.displayName || 'Kandoo user'} desc={user.email || user.phone || 'Signed in'}>
+              <button className="settings-btn" onClick={logout}>Sign out</button>
+            </Row>
+            <Row title="Cloud connection" desc={backendStatus === 'online' ? 'Authenticated with the Kandoo API.' : 'Signed in, but the API is currently unavailable.'}>
+              <span className="mac-chip">{backendStatus === 'online' ? 'Online' : 'Offline'}</span>
+            </Row>
+            <Row title="Workspace sync" desc={syncState === 'conflict' ? 'Another device saved a newer revision.' : 'Local changes are saved first, then uploaded.'}>
+              <span className="mac-chip">{syncState}</span>
+            </Row>
+          </>
+        ) : (
+          <Row title="Offline workspace" desc="This workspace is stored only on this device until you sign in.">
+            <button className="settings-btn settings-btn--primary" onClick={exitOfflineMode}>{isGuest ? 'Sign in' : 'Open login'}</button>
+          </Row>
+        )}
+      </Section>
+
+      {cloudConflict && (
+        <Section title="Sync conflict">
+          <Row title="Choose which workspace to keep" desc="Loading cloud replaces this device's current workspace. Uploading this device replaces the cloud revision.">
+            <span style={{ display: 'inline-flex', gap: 6 }}>
+              <button className="settings-btn" onClick={() => resolve('cloud')}>Load cloud</button>
+              <button className="settings-btn settings-btn--danger" onClick={() => resolve('local')}>Upload this device</button>
+            </span>
+          </Row>
+        </Section>
+      )}
+    </div>
   );
 }
 

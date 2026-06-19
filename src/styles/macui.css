@@ -454,6 +454,31 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   background: var(--accent);
   color: #fff;
 }
+.mac-accountbtn {
+  position: relative;
+  flex-shrink: 0;
+}
+.mac-accountbtn.is-offline {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.mac-accountbtn img {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.mac-accountbtn__status {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--bg-app);
+  border-radius: 50%;
+  background: var(--theme-warning);
+}
+.mac-accountbtn__status.is-online { background: var(--theme-success); }
 
 /* Search field */
 .mac-search {

@@ -1,3 +1,4 @@
+#[cfg(target_os = "macos")]
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -6,6 +7,7 @@ use tauri::{
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 /// Show/hide the quick-access panel, positioning it just under the menu-bar icon.
+#[cfg(target_os = "macos")]
 fn toggle_panel(app: &tauri::AppHandle, anchor: Option<PhysicalPosition<f64>>) {
     let Some(panel) = app.get_webview_window("panel") else {
         return;
@@ -39,12 +41,15 @@ pub fn run() {
         kind: MigrationKind::Up,
     }];
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:kandoo.db", migrations)
                 .build(),
-        )
+        );
+
+    #[cfg(target_os = "macos")]
+    let builder = builder
         .setup(|app| {
             // ── Menu-bar tray icon ─────────────────────────────────────────
             let open_item = MenuItem::with_id(app, "open", "Open Kandoo", true, None::<&str>)?;
@@ -95,10 +100,13 @@ pub fn run() {
                 let _ = window.hide();
             }
             _ => {}
-        })
+        });
+
+    builder
         .build(tauri::generate_context!())
         .expect("error while building Kandoo")
         .run(|app, event| {
+            #[cfg(target_os = "macos")]
             // macOS dock-icon click reopens the main window.
             if let tauri::RunEvent::Reopen { .. } = event {
                 if let Some(w) = app.get_webview_window("main") {
@@ -106,5 +114,8 @@ pub fn run() {
                     let _ = w.set_focus();
                 }
             }
+
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
         });
 }

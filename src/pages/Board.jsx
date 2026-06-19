@@ -4,7 +4,8 @@ import { classifyTask } from "../utils/dueDate";
 import {
   VscFilter, VscFilterFilled, VscChevronDown,
   VscArchive, VscQuestion,
-  VscInbox, VscNotebook, VscLayoutSidebarLeft, VscClose, VscSettingsGear,
+  VscAccount, VscInbox, VscNotebook, VscLayoutSidebarLeft, VscClose,
+  VscSettingsGear, VscSignIn, VscSignOut,
 } from "react-icons/vsc";
 import { toast } from "sonner";
 import { CgRename } from "react-icons/cg";
@@ -16,6 +17,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import Cards from "../components/Board/Cards";
 import { CardsContext } from "../contexts/CardsContext";
+import { useAuth } from "../contexts/AuthContext";
 import { useTheme } from "../contexts/ThemeContext";
 import kandooLogo from "../assets/kandoo-head.png";
 import kandooLogoSmiling from "../assets/kandoo-smiling.png";
@@ -41,8 +43,9 @@ const SCHEDULE_SECTIONS = [
 function Board() {
   const {
     boards, setBoards, defaultCards, isLoaded, undo, redo,
-    saveState, lastSavedAt, storageKind,
+    saveState, lastSavedAt, storageKind, syncState,
   } = useContext(CardsContext);
+  const { user, backendStatus, logout, exitOfflineMode } = useAuth();
   const { currentThemeId, allThemes, setTheme } = useTheme();
   const isDesktopApp = isTauri();
   const [activeBoard, setActiveBoard] = useState(boards[0]?.id || null);
@@ -329,6 +332,26 @@ function Board() {
 
   const openSettings = (tab = "appearance") => { setSettingsTab(tab); setShowSettings(true); };
 
+  const signOut = async () => {
+    try { await logout(); }
+    catch (error) { toast.error(error.message || "Could not sign out"); }
+  };
+
+  const openAccountMenu = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const identity = user?.displayName || user?.email || user?.phone || "Kandoo account";
+    setCtxMenu({
+      x: rect.right - 210,
+      y: rect.bottom + 6,
+      items: [
+        { label: identity, icon: <VscAccount />, onClick: () => openSettings("account") },
+        { label: backendStatus === "online" ? "Account & sync · Online" : "Account & sync · Offline", onClick: () => openSettings("account") },
+        { divider: true },
+        { label: "Sign out", icon: <VscSignOut />, onClick: signOut },
+      ],
+    });
+  };
+
   const resetWorkspace = () => {
     const id = uuidv4();
     setBoards([{ id, title: "Untitled", cards: defaultCards }]);
@@ -338,13 +361,22 @@ function Board() {
     toast.success("Workspace reset");
   };
 
+  const cloudLabel = syncState === "synced"
+    ? " · Cloud synced"
+    : syncState === "syncing" || syncState === "connecting"
+      ? " · Syncing"
+      : syncState === "offline"
+        ? " · Cloud offline"
+        : syncState === "conflict"
+          ? " · Sync conflict"
+          : "";
   const storageLabel = saveState === "saving"
     ? "Saving…"
     : saveState === "error"
       ? "Save failed"
       : `${storageKind === "sqlite" ? "Saved on this Mac" : "Saved locally"}${
           lastSavedAt ? ` · ${lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""
-        }`;
+        }${cloudLabel}`;
 
   return (
     <div className={`mac-shell${isDesktopApp ? " is-desktop-window" : ""}`}>
@@ -612,6 +644,26 @@ function Board() {
           <button className="mac-iconbtn" onClick={() => setShowHelpModal(true)} title="Help & features (⌘⇧1)" aria-label="Help and features">
             <VscQuestion />
           </button>
+          {user ? (
+            <button
+              className="mac-iconbtn mac-accountbtn is-signed-in"
+              onClick={openAccountMenu}
+              title={`Signed in as ${user.email || user.phone || user.displayName || "Kandoo user"}`}
+              aria-label="Open account menu"
+            >
+              {user.photoUrl ? <img src={user.photoUrl} alt="" referrerPolicy="no-referrer" /> : <VscAccount />}
+              <span className={`mac-accountbtn__status${backendStatus === "online" ? " is-online" : ""}`} />
+            </button>
+          ) : (
+            <button
+              className="mac-iconbtn mac-accountbtn is-offline"
+              onClick={exitOfflineMode}
+              title="Sign in to sync this offline workspace"
+              aria-label="Sign in to Kandoo"
+            >
+              <VscSignIn />
+            </button>
+          )}
         </header>
 
         {/* Board content */}

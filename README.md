@@ -5,18 +5,18 @@
 <h1 align="center">Kandoo</h1>
 
 <p align="center">
-  A private, local-first Kanban board and notes workspace for macOS.
+  A local-first Kanban board and notes workspace for macOS, web, and Android.
 </p>
 
 <p align="center">
-  <strong>No account. No server. No internet connection required.</strong>
+  <strong>Works offline. Sign in only when you want backup and multi-device access.</strong>
 </p>
 
 ## Overview
 
-Kandoo is a focused desktop workspace for organizing projects, tasks, and notes without sending your data to an online service. It combines flexible Kanban boards, rich-text notes, fast search, themes, and portable backups in a native macOS application.
+Kandoo is a focused workspace for organizing projects, tasks, and notes. It combines flexible Kanban boards, rich-text notes, fast search, themes, portable backups, and optional account-based cloud sync.
 
-The interface is built with React and Vite, packaged with Tauri, and persisted locally in SQLite. The current release supports Apple Silicon Macs.
+The interface is built with React and Vite. Tauri packages the native builds, SQLite stores native workspaces, and the web build uses browser storage. Signed-in users can also synchronize a revisioned copy through the Kandoo API.
 
 ## Features
 
@@ -34,6 +34,8 @@ The interface is built with React and Vite, packaged with Tauri, and persisted l
 - JSON backup and restore with safe ID regeneration.
 - XLSX export for Excel and Google Sheets.
 - Local autosave with a recovery snapshot for abrupt app closure.
+- Firebase email/password login and web Google login.
+- Optional authenticated cloud backup with conflict detection.
 - Native macOS window controls integrated into the themed toolbar.
 
 ## Requirements
@@ -58,7 +60,7 @@ Future public builds should be Developer ID signed and notarized before being pr
 
 ## Getting Started
 
-Kandoo creates an empty starter board on first launch.
+Kandoo can open an offline workspace or sign in to an existing account.
 
 1. Hover over the left edge or click the Kandoo logo to open the project sidebar.
 2. Create or rename a project.
@@ -66,7 +68,7 @@ Kandoo creates an empty starter board on first launch.
 4. Create tasks or switch to the Notes view for longer content.
 5. Use the Export action regularly to create a portable JSON backup.
 
-All changes are saved automatically on this Mac.
+All changes are saved locally first. Signed-in workspaces are uploaded after the local save completes.
 
 ## Search
 
@@ -96,13 +98,13 @@ Press `Enter` to move to the next result and `Shift + Enter` for the previous re
 
 ## Data and Privacy
 
-Kandoo does not require authentication and does not connect to a Kandoo backend. The desktop workspace is stored at:
+Kandoo does not require authentication. The desktop workspace is stored at:
 
 ```text
 ~/Library/Application Support/com.kandoo.desktop/kandoo.db
 ```
 
-Boards, cards, tasks, notes, and image attachments are stored as a workspace snapshot in SQLite. A short-lived local recovery snapshot protects edits made immediately before an unexpected close.
+Boards, cards, tasks, notes, and image attachments are stored as an account-scoped workspace snapshot in SQLite. A short-lived local recovery snapshot protects edits made immediately before an unexpected close. When signed in, a revisioned copy is also sent over HTTPS to the configured API and PostgreSQL database.
 
 ### Backups
 
@@ -114,7 +116,7 @@ Imported JSON boards are appended to the workspace. IDs are regenerated and dupl
 
 ### Prerequisites
 
-- Node.js 18 or newer
+- Node.js 20 or newer
 - Rust stable toolchain
 - Xcode Command Line Tools
 
@@ -122,6 +124,7 @@ Imported JSON boards are appended to the workspace. IDs are regenerated and dupl
 
 ```bash
 npm install
+cp .env.example .env
 ```
 
 ### Run the Browser Preview
@@ -130,7 +133,17 @@ npm install
 npm run dev
 ```
 
-The browser preview uses `localStorage`; the Tauri desktop runtime uses SQLite.
+The browser preview uses `localStorage`; Tauri uses SQLite. Without Firebase
+variables, choose **Continue offline** on the login page.
+
+### Run the API
+
+Configure `server/.env`, PostgreSQL, and the Firebase Admin service account, then:
+
+```bash
+npm install --prefix server
+npm run dev:api
+```
 
 ### Run the Native App
 
@@ -164,13 +177,15 @@ The checked-in configuration uses ad-hoc signing for local builds. Public stable
 
 ```text
 React UI
+  -> AuthContext (Firebase)
   -> CardsContext
-    -> boardStorage
-      -> SQLite in Tauri
-      -> localStorage in browser development
+    -> boardStorage (SQLite / localStorage)
+    -> sync coordinator
+      -> Express API
+        -> PostgreSQL
 ```
 
-The application deliberately keeps UI components independent of cloud services. Optional paid cloud backup and synchronization can be added later through a separate sync coordinator without replacing local ownership of the workspace.
+UI components remain independent of the API. `CardsContext` owns local persistence and coordinates cloud synchronization after successful local saves.
 
 ## Project Structure
 
@@ -182,6 +197,7 @@ src/                     React application
   themes/                Built-in theme definitions
   utils/                 Search, import/export, editor, and task helpers
 src-tauri/               Native macOS shell and SQLite migration
+server/                  Express, Firebase Admin and PostgreSQL API
 docs/                    Product and cloud-sync planning
 public/                  Browser-facing static assets
 ```
@@ -194,10 +210,10 @@ Export all boards as JSON from an earlier Kandoo web installation, then select *
 
 - Developer ID signing and notarization.
 - Intel macOS build or universal binary.
-- Optional paid cloud backup.
-- Multi-device synchronization with explicit conflict handling.
+- Android mobile shell and native Google OAuth adapter.
+- Durable background sync queue and cloud image storage.
 
-See [Optional Cloud Sync Roadmap](docs/cloud-sync-roadmap.md) for the proposed architecture.
+See [Cloud Sync and Platform Roadmap](docs/cloud-sync-roadmap.md) for the architecture and delivery sequence.
 
 ## Feedback and Issues
 
