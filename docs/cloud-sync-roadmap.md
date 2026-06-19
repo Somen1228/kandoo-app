@@ -1,36 +1,63 @@
-# Optional Cloud Sync Roadmap
+# Cloud Sync and Platform Roadmap
 
-Cloud support must remain optional. A user without a subscription should retain the complete local app and own a usable SQLite workspace.
+Kandoo remains local-first. Authentication adds account-scoped cloud backup and
+multi-device access; it does not make the API the only copy of a workspace.
 
-## Boundary
-
-The current local repository is the source of truth:
+## Shared architecture
 
 ```text
-CardsContext -> local repository -> SQLite
-                            |
-                            +-> optional sync coordinator
-                                  -> entitlement check
-                                  -> cloud API
+React UI
+  -> AuthContext (Firebase identity)
+  -> CardsContext
+       -> local repository
+       |    -> SQLite on Tauri macOS/Android
+       |    -> localStorage on web
+       |
+       -> sync coordinator
+            -> Express API
+                 -> Firebase Admin token verification
+                 -> PostgreSQL revisioned workspace
 ```
 
-The sync coordinator should observe successful local saves. UI components should not call the cloud API directly.
+Every local save completes before cloud upload. A user can continue offline,
+export their data, and use the full application without an account.
 
-## Required Before Sync
+## Current migration slice
 
-1. Add stable `updatedAt` metadata and a device identifier to boards or workspace revisions.
-2. Define conflict behavior for edits made on two offline devices.
-3. Add a durable outbound change queue and retry policy.
-4. Add account authentication only inside the cloud feature.
-5. Validate subscription entitlements server-side.
-6. Encrypt transport and protect stored cloud data.
-7. Provide download, account deletion, and subscription-expiry behavior.
+- Email/password authentication on web and Tauri.
+- Google authentication on the web.
+- Account-scoped browser and SQLite workspace keys.
+- Automatic adoption of an offline workspace when a new cloud account is empty.
+- Migration of legacy web-server `boards` rows into the revisioned workspace.
+- Optimistic revision checks and explicit conflict choices.
+- Netlify frontend and standalone Node/PostgreSQL backend configuration.
 
-## Delivery Order
+## Android delivery plan
 
-1. Paid cloud backup with manual restore.
-2. Automatic one-way backup after local saves.
-3. Multi-device sync with explicit conflict handling.
-4. App Store subscription integration or direct-download licensing, depending on the chosen distribution channel.
+1. Install Android Studio, JDK 17+, SDK Platform Tools, NDK, and Build Tools.
+2. Run `npm run android:init` once the toolchain variables are configured.
+3. Add a mobile shell: bottom navigation, collapsible project/page drawers, and
+   touch-sized task/card controls while keeping the same React feature modules.
+4. Verify SQLite migrations and offline recovery on Android.
+5. Add native Google OAuth. Embedded-webview OAuth must use a native/manual
+   credential flow; the browser popup implementation is intentionally web-only.
+6. Test background/resume sync, poor connectivity, conflict handling, imports,
+   images, and Android back navigation.
+7. Configure signing, Play Console application ID, privacy policy, and staged
+   internal testing before production.
 
-Do not begin with real-time collaboration. Backup and deterministic two-device sync are smaller, testable products and establish the storage contract first.
+## Web delivery plan
+
+1. Configure Firebase web credentials and authorize the production domain.
+2. Deploy the API with PostgreSQL and Firebase Admin secrets.
+3. Set `VITE_API_URL` and Firebase variables in Netlify before building.
+4. Deploy a preview, verify login and sync, then promote it to the existing
+   Kandoo domain.
+
+## Later sync hardening
+
+- Move base64 image payloads to object storage with signed URLs.
+- Add a durable outbound queue rather than only an in-memory retry.
+- Add workspace history and server-side backups.
+- Add account export and deletion endpoints.
+- Add automated two-device conflict and migration tests.
