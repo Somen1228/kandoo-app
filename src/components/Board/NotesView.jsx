@@ -1,18 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { toast } from 'sonner';
-import { VscAdd, VscClose, VscChromeMaximize, VscChromeRestore } from 'react-icons/vsc';
-import RichEditor from './RichEditor';
-import ImageModal from './ImageModal';
-import {
-  NoteToolbar,
-  ImageStrip,
-  compressImage,
-  applyHighlighting,
-} from './NoteCard';
-import { sanitizeHtml, markdownToHtml, isHtml, htmlToText } from '../../utils/htmlEditor';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { VscAdd, VscTrash, VscChevronRight, VscFile, VscChromeMaximize, VscChromeRestore } from 'react-icons/vsc';
+import { markdownToHtml, isHtml, htmlToText } from '../../utils/htmlEditor';
+import { useSettings } from '../../contexts/SettingsContext';
 
-// "edited X ago" formatter (local copy — NoteCard has the same)
+// TipTap pulls in ProseMirror + lowlight — load it only when Notes is opened.
+const NoteEditor = lazy(() => import('./NoteEditor'));
+
 function relativeTime(ts) {
   if (!ts) return '';
   const diff = (Date.now() - ts) / 1000;
@@ -23,91 +16,45 @@ function relativeTime(ts) {
   return new Date(ts).toLocaleDateString();
 }
 
-// ── Tabs strip ──────────────────────────────────────────────────────────────
-function NotesTabs({ notes, activeUid, onSelect, onAdd, onDelete }) {
-  return (
-    <div
-      role="tablist"
-      style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        gap: 4,
-        borderBottom: '1px solid var(--theme-border)',
-        marginBottom: '0.5rem',
-        paddingBottom: 2,
-      }}
-    >
-      {notes.map((n) => {
-        const isActive = n.uid === activeUid;
-        const label = n.title?.trim() || 'Untitled';
-        return (
-          <div
-            key={n.uid}
-            role="tab"
-            aria-selected={isActive}
-            onClick={() => onSelect(n.uid)}
-            title={label}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '4px 10px',
-              borderRadius: '0.375rem',
-              fontSize: '0.78rem',
-              fontWeight: isActive ? 600 : 500,
-              color: isActive ? 'var(--theme-text-primary)' : 'var(--theme-text-muted)',
-              background: isActive ? 'var(--theme-bg-hover)' : 'transparent',
-              border: '1px solid',
-              borderColor: isActive ? 'var(--theme-border)' : 'transparent',
-              cursor: 'pointer',
-              maxWidth: 200,
-              userSelect: 'none',
-            }}
-            onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--theme-bg-hover)'; }}
-            onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+// ── Recursive page tree ─────────────────────────────────────────────────────
+function NoteTree({ notes, parentUid, depth, activeUid, collapsed, onToggle, onSelect, onCreate, onDelete }) {
+  const items = notes.filter((n) => (n.parentUid || null) === parentUid);
+  return items.map((n) => {
+    const hasKids = notes.some((c) => (c.parentUid || null) === n.uid);
+    const isCollapsed = collapsed.has(n.uid);
+    return (
+      <div key={n.uid}>
+        <div
+          className={`notes-tree__row${n.uid === activeUid ? ' is-active' : ''}`}
+          style={{ paddingLeft: 6 + depth * 14 }}
+          onClick={() => onSelect(n.uid)}
+        >
+          <button
+            type="button"
+            className="notes-tree__caret"
+            style={{ visibility: hasKids ? 'visible' : 'hidden' }}
+            onClick={(e) => { e.stopPropagation(); onToggle(n.uid); }}
+            tabIndex={-1}
+            aria-label={isCollapsed ? 'Expand' : 'Collapse'}
           >
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {label}
-            </span>
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onDelete(n.uid); }}
-              title="Delete note"
-              style={{
-                background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                color: 'var(--theme-text-muted)', display: 'flex', alignItems: 'center',
-                fontSize: '0.85rem', opacity: 0.55,
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.opacity = 1; e.currentTarget.style.color = 'var(--theme-danger)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = 0.55; e.currentTarget.style.color = 'var(--theme-text-muted)'; }}
-            >
-              <VscClose />
-            </button>
-          </div>
-        );
-      })}
-      <button
-        type="button"
-        onClick={onAdd}
-        title="New note"
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 4,
-          padding: '4px 10px',
-          borderRadius: '0.375rem',
-          background: 'transparent',
-          color: 'var(--theme-text-muted)',
-          border: '1px dashed var(--theme-border)',
-          cursor: 'pointer',
-          fontSize: '0.78rem',
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--theme-accent)'; e.currentTarget.style.borderColor = 'var(--theme-accent)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--theme-text-muted)'; e.currentTarget.style.borderColor = 'var(--theme-border)'; }}
-      >
-        <VscAdd /> New
-      </button>
-    </div>
-  );
+            <VscChevronRight style={{ transform: isCollapsed ? 'none' : 'rotate(90deg)', transition: 'transform 0.12s' }} />
+          </button>
+          <VscFile className="notes-tree__icon" />
+          <span className="notes-tree__title">{n.title?.trim() || 'Untitled'}</span>
+          <span className="notes-tree__actions">
+            <button type="button" onClick={(e) => { e.stopPropagation(); onToggle(n.uid, true); onCreate(n.uid, true); }} title="Add sub-page"><VscAdd /></button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(n.uid); }} title="Delete page"><VscTrash /></button>
+          </span>
+        </div>
+        {hasKids && !isCollapsed && (
+          <NoteTree
+            notes={notes} parentUid={n.uid} depth={depth + 1} activeUid={activeUid}
+            collapsed={collapsed} onToggle={onToggle} onSelect={onSelect} onCreate={onCreate} onDelete={onDelete}
+          />
+        )}
+      </div>
+    );
+  });
 }
 
 // ── Editable page title ─────────────────────────────────────────────────────
@@ -120,6 +67,11 @@ function PageTitle({ value, onChange }) {
     const trimmed = draft.trim();
     if (trimmed && trimmed !== value) onChange(trimmed);
     setEditing(false);
+  };
+
+  const sharedStyle = {
+    fontSize: '1.9rem', fontWeight: 700, color: 'var(--theme-text-primary)',
+    margin: '0 0 0.5rem 0', lineHeight: 1.2,
   };
 
   if (editing) {
@@ -135,106 +87,48 @@ function PageTitle({ value, onChange }) {
         autoFocus
         onFocus={(e) => e.target.select()}
         placeholder="Untitled"
-        style={{
-          fontSize: '1.9rem',
-          fontWeight: 700,
-          background: 'transparent',
-          border: 'none',
-          color: 'var(--theme-text-primary)',
-          width: '100%',
-          padding: 0,
-          margin: '0 0 0.5rem 0',
-          outline: 'none',
-          fontFamily: 'inherit',
-        }}
+        style={{ ...sharedStyle, background: 'transparent', border: 'none', width: '100%', padding: 0, outline: 'none', fontFamily: 'inherit' }}
       />
     );
   }
-
   return (
-    <h1
-      onClick={() => setEditing(true)}
-      title="Click to rename"
-      style={{
-        fontSize: '1.9rem',
-        fontWeight: 700,
-        color: 'var(--theme-text-primary)',
-        margin: '0 0 0.5rem 0',
-        cursor: 'text',
-        lineHeight: 1.2,
-        userSelect: 'none',
-      }}
-    >
+    <h1 onClick={() => setEditing(true)} title="Click to rename" style={{ ...sharedStyle, cursor: 'text', userSelect: 'none' }}>
       {value?.trim() || <span style={{ color: 'var(--theme-text-muted)', fontStyle: 'italic', fontWeight: 500 }}>Untitled</span>}
     </h1>
   );
 }
 
-// ── Active-note canvas (Minimal page) ──────────────────────────
-function NoteCanvas({ index, card, updateCardNote, updateCards }) {
-  const editorRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const [viewing, setViewing] = useState(null);
-  // Layout preference — persisted in localStorage so it sticks across notes/sessions
-  const [paperless, setPaperless] = useState(() => {
-    try { return localStorage.getItem('note_paperless') === '1'; } catch { return false; }
-  });
-  const togglePaperless = () => {
-    setPaperless((p) => {
-      const next = !p;
-      try { localStorage.setItem('note_paperless', next ? '1' : '0'); } catch { /* quota */ }
-      return next;
-    });
-  };
-  const safeNote = card.note || { content: '', images: [], updatedAt: Date.now() };
+// ── Active-page canvas ──────────────────────────────────────────────────────
+function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateChild, onNavigate }) {
+  const { settings } = useSettings();
+  const [paperless, setPaperless] = useState(settings.noteDefaultView === 'wide');
+  const togglePaperless = () => setPaperless((p) => !p);
 
-  // Highlight code blocks on (re)mount and when switching active note
+  const safeNote = card.note || { content: '', images: [], updatedAt: Date.now() };
+  const baseHtml = isHtml(safeNote.content) ? safeNote.content : markdownToHtml(safeNote.content || '');
+  const legacyImages = safeNote.images || [];
+  const initialContent = legacyImages.length
+    ? baseHtml + legacyImages.map((src) => `<p><img src="${src}"></p>`).join('')
+    : baseHtml;
+
   useEffect(() => {
-    const id = setTimeout(() => applyHighlighting(editorRef.current?.getElement()), 50);
-    return () => clearTimeout(id);
+    if (legacyImages.length) updateCardNote(index, { ...safeNote, content: initialContent, images: [] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card.uid]);
 
-  const handleContent = (html) => {
-    updateCardNote(index, { ...safeNote, content: sanitizeHtml(html), images: safeNote.images || [] });
-  };
-  const handleImages = (images) => {
-    updateCardNote(index, { ...safeNote, images });
-  };
-  const handleTitle = (newTitle) => {
-    updateCards((cards) => cards.map((c) => (c.uid === card.uid ? { ...c, title: newTitle } : c)));
-  };
-
-  const handleUpload = async (e) => {
-    const files = Array.from(e.target.files || []);
-    e.target.value = '';
-    const out = [];
-    for (const f of files) {
-      try { out.push(await compressImage(f)); }
-      catch (err) { toast.error(`${f.name}: ${err.message}`); }
-    }
-    if (out.length) handleImages([...(safeNote.images || []), ...out]);
-    editorRef.current?.focus();
-  };
-
-  const initialHtml = isHtml(safeNote.content) ? safeNote.content : markdownToHtml(safeNote.content || '');
+  const handleContent = (html) => updateCardNote(index, { ...safeNote, content: html, images: [] });
+  const handleTitle = (newTitle) => updateCards((cards) => cards.map((c) => (c.uid === card.uid ? { ...c, title: newTitle } : c)));
   const charCount = htmlToText(safeNote.content || '').length;
 
   return (
     <div
       key={card.uid}
-      className={paperless ? '' : 'note-paper'}
-      style={{
-        maxWidth: paperless ? '100%' : 880,
-        margin: '0 auto',
-        padding: paperless ? '1.5rem 1.5rem 2.5rem' : '2rem 2.25rem 2.5rem',
-      }}
+      className={paperless ? 'note-canvas' : 'note-canvas note-paper'}
+      style={{ maxWidth: paperless ? '100%' : 860, margin: '0 auto', padding: paperless ? '1.25rem 1rem 2.5rem' : '2rem 2.25rem 2.5rem' }}
     >
       <PageTitle value={card.title} onChange={handleTitle} />
 
-      <div style={{
-        fontSize: '0.7rem', color: 'var(--theme-text-muted)', marginBottom: '0.75rem',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      }}>
+      <div style={{ fontSize: '0.7rem', color: 'var(--theme-text-muted)', marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>
           {safeNote.updatedAt && `Edited ${relativeTime(safeNote.updatedAt)}`}
           {charCount > 0 && <span> · {charCount} character{charCount === 1 ? '' : 's'}</span>}
@@ -242,17 +136,8 @@ function NoteCanvas({ index, card, updateCardNote, updateCards }) {
         <button
           type="button"
           onClick={togglePaperless}
-          title={paperless ? 'Switch to paper view' : 'Switch to wide / paperless view'}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            background: 'transparent',
-            border: '1px solid var(--theme-border)',
-            borderRadius: 999,
-            color: 'var(--theme-text-muted)',
-            cursor: 'pointer',
-            fontSize: '0.7rem',
-            padding: '2px 8px',
-          }}
+          title={paperless ? 'Switch to paper view' : 'Switch to wide view'}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'transparent', border: '1px solid var(--theme-border)', borderRadius: 999, color: 'var(--theme-text-muted)', cursor: 'pointer', fontSize: '0.7rem', padding: '2px 8px' }}
           onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--theme-text-primary)'; }}
           onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--theme-text-muted)'; }}
         >
@@ -260,85 +145,82 @@ function NoteCanvas({ index, card, updateCardNote, updateCards }) {
         </button>
       </div>
 
-      <NoteToolbar editorRef={editorRef} onUploadClick={() => fileInputRef.current?.click()} />
-
-      <RichEditor
-        ref={editorRef}
-        initialHtml={initialHtml}
-        onChange={handleContent}
-        onBlur={() => applyHighlighting(editorRef.current?.getElement())}
-        placeholder="Start writing — Enter for a new paragraph, ⌘B / ⌘I / ⌘U to format. Paste markdown and it'll convert automatically."
-        markdownPaste
-        style={{
-          minHeight: '50vh',
-          fontSize: '0.95rem',
-          lineHeight: 1.65,
-          color: 'var(--theme-text-primary)',
-          padding: '0.25rem 0',
-        }}
-      />
-
-      <ImageStrip
-        images={safeNote.images}
-        thumbSize={92}
-        onRemove={(i) => handleImages(safeNote.images.filter((_, idx) => idx !== i))}
-        onView={(i) => setViewing(i)}
-      />
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        style={{ display: 'none' }}
-        onChange={handleUpload}
-      />
-
-      {viewing !== null && createPortal(
-        <ImageModal images={safeNote.images} initialIndex={viewing} onClose={() => setViewing(null)} />,
-        document.body
-      )}
+      <Suspense fallback={<div style={{ padding: '2rem 0', color: 'var(--theme-text-muted)', fontSize: '0.85rem' }}>Loading editor…</div>}>
+        <NoteEditor
+          key={card.uid}
+          content={initialContent}
+          onChange={handleContent}
+          paperless={paperless}
+          notes={notes}
+          onCreatePage={() => ({ uid: onCreateChild(card.uid, false), title: 'New page' })}
+          onNavigatePage={onNavigate}
+          placeholder="Type ‘/’ for commands, or just start writing. Markdown shortcuts and drag-and-drop images work too."
+        />
+      </Suspense>
     </div>
   );
 }
 
-// ── Main view ───────────────────────────────────────────────────────────────
-function NotesView({
-  allCards, notes, activeUid, onSelectNote, onAddNote, onDeleteNote,
-  updateCardNote, updateCards,
-}) {
+// ── Main view (tree + canvas) ───────────────────────────────────────────────
+function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onDeleteNote, updateCardNote, updateCards }) {
   const activeCard = notes.find((n) => n.uid === activeUid) || null;
   const activeIndex = activeCard ? allCards.findIndex((c) => c.uid === activeCard.uid) : -1;
+  const [collapsed, setCollapsed] = useState(() => new Set());
+
+  // Notion-style: a workspace always has a page — land straight in a new one.
+  const autoCreatedRef = useRef(false);
+  useEffect(() => {
+    if (notes.length === 0 && !autoCreatedRef.current) {
+      autoCreatedRef.current = true;
+      onCreateNote(null);
+    } else if (notes.length > 0) {
+      autoCreatedRef.current = false;
+    }
+  }, [notes.length, onCreateNote]);
+
+  const onToggle = (uid, forceOpen) => setCollapsed((prev) => {
+    const next = new Set(prev);
+    if (forceOpen) next.delete(uid);
+    else if (next.has(uid)) next.delete(uid);
+    else next.add(uid);
+    return next;
+  });
 
   return (
-    <div className="pl-10 pr-4" style={{ minHeight: '60vh' }}>
-      <NotesTabs
-        notes={notes}
-        activeUid={activeUid}
-        onSelect={onSelectNote}
-        onAdd={onAddNote}
-        onDelete={onDeleteNote}
-      />
-
-      {!activeCard ? (
-        <div className="text-center py-12" style={{ color: 'var(--theme-text-muted)' }}>
-          <p style={{ fontSize: '0.9rem' }}>No notes yet.</p>
-          <button
-            onClick={onAddNote}
-            className="mt-3 px-4 py-1.5 rounded-md text-sm"
-            style={{ background: 'var(--theme-accent)', color: 'white', border: 'none', cursor: 'pointer' }}
-          >
-            + Create your first note
-          </button>
+    <div className="notes-layout">
+      <aside className="notes-tree-panel">
+        <div className="notes-tree__head">
+          <span>Pages</span>
+          <button type="button" onClick={() => onCreateNote(null, true)} title="New page" aria-label="New page"><VscAdd /></button>
         </div>
-      ) : activeIndex >= 0 ? (
-        <NoteCanvas
-          index={activeIndex}
-          card={activeCard}
-          updateCardNote={updateCardNote}
-          updateCards={updateCards}
-        />
-      ) : null}
+        <div className="notes-tree__scroll">
+          {notes.length === 0 ? (
+            <div className="notes-tree__empty">No pages yet</div>
+          ) : (
+            <NoteTree
+              notes={notes} parentUid={null} depth={0} activeUid={activeUid}
+              collapsed={collapsed} onToggle={onToggle} onSelect={onSelectNote}
+              onCreate={onCreateNote} onDelete={onDeleteNote}
+            />
+          )}
+        </div>
+      </aside>
+
+      <div className="notes-canvas-wrap">
+        {activeCard && activeIndex >= 0 ? (
+          <NoteCanvas
+            index={activeIndex}
+            card={activeCard}
+            notes={notes}
+            updateCardNote={updateCardNote}
+            updateCards={updateCards}
+            onCreateChild={onCreateNote}
+            onNavigate={onSelectNote}
+          />
+        ) : (
+          <div className="notes-canvas-empty">Creating a new page…</div>
+        )}
+      </div>
     </div>
   );
 }

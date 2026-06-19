@@ -3,22 +3,25 @@ import { parseQuery, searchBoards } from "../utils/search";
 import { classifyTask } from "../utils/dueDate";
 import {
   VscFilter, VscFilterFilled, VscChevronDown,
-  VscArchive, VscQuestion, VscSave,
-  VscInbox, VscNotebook, VscLayoutSidebarLeft, VscClose,
+  VscArchive, VscQuestion,
+  VscInbox, VscNotebook, VscLayoutSidebarLeft, VscClose, VscSettingsGear,
 } from "react-icons/vsc";
+import { toast } from "sonner";
 import { CgRename } from "react-icons/cg";
 import { AiOutlineDelete } from "react-icons/ai";
 import { IoColorFilterOutline } from "react-icons/io5";
 import { v4 as uuidv4 } from "uuid";
 import { useHotkeys } from "react-hotkeys-hook";
 import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import Cards from "../components/Board/Cards";
 import { CardsContext } from "../contexts/CardsContext";
 import { useTheme } from "../contexts/ThemeContext";
 import kandooLogo from "../assets/kandoo-head.png";
+import kandooLogoSmiling from "../assets/kandoo-smiling.png";
 import WarningModal from "../components/Board/WarningModal";
 import BoardSkeleton from "../components/Board/BoardSkeleton";
-import ThemeSettings from "../components/ThemeSettings";
+import SettingsModal from "../components/Settings/SettingsModal";
 import ShortcutsHelpModal from "../components/ShortcutsHelpModal";
 import ContextMenu from "../components/ContextMenu";
 import ExportImportModal from "../components/Board/ExportImportModal";
@@ -51,7 +54,9 @@ function Board() {
   const [searchTerm, setSearchTerm] = useState("");
   const [headerTitleEditing, setHeaderTitleEditing] = useState(false);
   const [headerTitleValue, setHeaderTitleValue]     = useState("");
-  const [showThemeSettings, setShowThemeSettings] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState("appearance");
+  const [isLogoHovered, setIsLogoHovered] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showExportImport, setShowExportImport]   = useState(false);
   const [showHelpModal, setShowHelpModal]         = useState(false);
@@ -75,6 +80,24 @@ function Board() {
   useEffect(() => {
     localStorage.setItem("kandoo-sidebar-width", String(sidebarWidth));
   }, [sidebarWidth]);
+
+  // Track macOS fullscreen — the traffic lights vanish, so drop the space we
+  // reserve for them (otherwise the logo looks like it's floating).
+  useEffect(() => {
+    if (!isDesktopApp) return;
+    let unlisten;
+    let cancelled = false;
+    const win = getCurrentWindow();
+    const sync = async () => {
+      try {
+        const fs = await win.isFullscreen();
+        if (!cancelled) document.documentElement.classList.toggle("is-fullscreen", fs);
+      } catch { /* permission/runtime */ }
+    };
+    sync();
+    win.onResized(sync).then((fn) => { cancelled ? fn() : (unlisten = fn); });
+    return () => { cancelled = true; if (unlisten) unlisten(); };
+  }, [isDesktopApp]);
 
   const resizingRef = useRef(false);
   const startResize = (e) => {
@@ -208,7 +231,7 @@ function Board() {
     if (showShortcutsHelp) { setShowShortcutsHelp(false); return; }
     if (showExportImport) { setShowExportImport(false); return; }
     if (showHelpModal) { setShowHelpModal(false); return; }
-    if (showThemeSettings) { setShowThemeSettings(false); return; }
+    if (showSettings) { setShowSettings(false); return; }
     if (showWarningModal) { setShowWarningModal(false); setBoardToDelete(null); return; }
     if (editingBoardId) { setEditingBoardId(null); return; }
     if (searchTerm) { setSearchTerm(""); return; }
@@ -304,6 +327,17 @@ function Board() {
     setScheduleView(null);
   };
 
+  const openSettings = (tab = "appearance") => { setSettingsTab(tab); setShowSettings(true); };
+
+  const resetWorkspace = () => {
+    const id = uuidv4();
+    setBoards([{ id, title: "Untitled", cards: defaultCards }]);
+    setActiveBoard(id);
+    setScheduleView(null);
+    setSection("todos");
+    toast.success("Workspace reset");
+  };
+
   const storageLabel = saveState === "saving"
     ? "Saving…"
     : saveState === "error"
@@ -318,10 +352,7 @@ function Board() {
       <aside className={`mac-sidebar${isSidebarCollapsed ? " is-collapsed" : ""}`}
         style={{ "--sidebar-width": `${sidebarWidth}px` }}>
         <div className="mac-sidebar__inner" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
-          <div className="mac-sidebar__brand" data-tauri-drag-region={isDesktopApp || undefined}>
-            <img src={kandooLogo} alt="Kandoo" data-tauri-drag-region={isDesktopApp || undefined} />
-            <span className="mac-sidebar__wordmark" data-tauri-drag-region={isDesktopApp || undefined}>Kandoo</span>
-          </div>
+          <div className="mac-sidebar__brand" data-tauri-drag-region={isDesktopApp || undefined} />
 
           <div className="mac-sidebar__scroll">
             {/* Smart sections */}
@@ -422,8 +453,17 @@ function Board() {
 
           <div className="mac-sidebar__footer" data-state={saveState === "error" ? "error" : undefined}
             title={saveState === "error" ? "Kandoo could not save the latest changes" : storageLabel}>
-            <VscSave />
-            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{storageLabel}</span>
+            <img
+              className="mac-sidebar__logo"
+              src={isLogoHovered ? kandooLogoSmiling : kandooLogo}
+              alt="Kandoo"
+              onMouseEnter={() => setIsLogoHovered(true)}
+              onMouseLeave={() => setIsLogoHovered(false)}
+            />
+            <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{storageLabel}</span>
+            <button className="mac-sidebar__settings" onClick={() => openSettings("appearance")} title="Settings" aria-label="Open settings">
+              <VscSettingsGear />
+            </button>
           </div>
         </div>
 
@@ -563,7 +603,7 @@ function Board() {
             </div>
           )}
 
-          <button className="mac-iconbtn" onClick={() => setShowThemeSettings(true)} title="Theme settings" aria-label="Theme settings">
+          <button className="mac-iconbtn" onClick={() => openSettings("appearance")} title="Appearance & settings" aria-label="Settings">
             <IoColorFilterOutline />
           </button>
           <button className="mac-iconbtn" onClick={() => setShowExportImport(true)} title="Export / Import" aria-label="Export or import boards">
@@ -621,7 +661,15 @@ function Board() {
           onCancel={handleCancel}
         />
       )}
-      {showThemeSettings && <ThemeSettings onClose={() => setShowThemeSettings(false)} />}
+      {showSettings && (
+        <SettingsModal
+          initialTab={settingsTab}
+          storageKind={storageKind}
+          onClose={() => setShowSettings(false)}
+          onOpenExportImport={() => { setShowSettings(false); setShowExportImport(true); }}
+          onResetWorkspace={resetWorkspace}
+        />
+      )}
       {showShortcutsHelp && <ShortcutsHelpModal onClose={() => setShowShortcutsHelp(false)} />}
       <ExportImportModal
         isOpen={showExportImport}

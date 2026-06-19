@@ -9,6 +9,7 @@ import { sanitizeHtml, markdownToHtml, isHtml, htmlToText } from "../../utils/ht
 import { matchesTask, matchesCardTitle } from "../../utils/search";
 import { classifyTask, formatDueShort, dueTone } from "../../utils/dueDate";
 import { useTheme } from "../../contexts/ThemeContext";
+import { useSettings } from "../../contexts/SettingsContext";
 import {
   VscEdit, VscCheck, VscTrash, VscSave, VscCopy, VscClose,
   VscBold, VscItalic, VscCalendar,
@@ -253,6 +254,7 @@ function Card({
 }) {
   const isNote = type === 'note';
   const { currentThemeId } = useTheme();
+  const { settings } = useSettings();
   const [isMounted, setIsMounted]             = useState(false);
   const [toggleAddTask, setToggleAddTask]     = useState(false);
   const [toggleMenu, setToggleMenu]           = useState(false);
@@ -450,10 +452,14 @@ function Card({
 
   const deleteTask = (taskId) => {
     const removed = tasks[taskId];
+    // "Confirm" mode asks first; "Undo" mode deletes immediately + offers a toast.
+    if (settings.taskDeleteMode === 'confirm' && removed) {
+      if (!window.confirm('Delete this task?')) return;
+    }
     const updated = { ...tasks };
     delete updated[taskId];
     updateCardTasks(index, updated);
-    if (removed) {
+    if (removed && settings.taskDeleteMode !== 'confirm') {
       // Undo restores the task in its original position (spread keeps key order).
       toast('Task deleted', {
         action: {

@@ -82,13 +82,40 @@ function Cards({
     }
   }, [notesCards, section, activeNoteUid]);
 
-  const deleteNoteByUid = (uid) => {
-    setBoards((prev) =>
-      prev.map((b) =>
-        b.id === boardId ? { ...b, cards: b.cards.filter((c) => c.uid !== uid) } : b
-      )
-    );
-  };
+  // Create a note/page, optionally nested under `parentUid`. Returns its uid so
+  // the /page block can reference the new child.
+  const addChildNote = useCallback((parentUid = null, select = true) => {
+    const uid = uuidv4();
+    const newCard = {
+      uid, type: 'note', title: 'New page', color: null, isVisible: true,
+      parentUid: parentUid || null, tasks: {},
+      note: { content: '', images: [], updatedAt: Date.now() },
+    };
+    setBoards((prev) => prev.map((b) =>
+      b.id === boardId ? { ...b, cards: [...b.cards, newCard] } : b
+    ));
+    if (select) setActiveNoteUid(uid);
+    return uid;
+  }, [boardId, setBoards]);
+
+  // Delete a page and every descendant page (cascade down the tree).
+  const deleteNoteSubtree = useCallback((uid) => {
+    setBoards((prev) => prev.map((b) => {
+      if (b.id !== boardId) return b;
+      const toDelete = new Set([uid]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const c of b.cards) {
+          if (c.type === 'note' && c.parentUid && toDelete.has(c.parentUid) && !toDelete.has(c.uid)) {
+            toDelete.add(c.uid);
+            changed = true;
+          }
+        }
+      }
+      return { ...b, cards: b.cards.filter((c) => !toDelete.has(c.uid)) };
+    }));
+  }, [boardId, setBoards]);
   const [toggleModal, setToggleModal] = useState(false);
   const modalRef = useRef(null);
   const [warningBoardReset, setWarningBoardReset] = useState(false);
@@ -382,36 +409,20 @@ function Cards({
         )}
       </div>
 
-      <div className="mac-board-scroll">
       {section === 'notes' ? (
-        <>
-          <NotesView
-            allCards={board.cards}
-            notes={notesCards}
-            activeUid={activeNoteUid}
-            onSelectNote={setActiveNoteUid}
-            onAddNote={() => setToggleModal(true)}
-            onDeleteNote={(uid) => {
-              deleteNoteByUid(uid);
-              if (uid === activeNoteUid) setActiveNoteUid(null);
-            }}
-            updateCardNote={updateCardNote}
-            updateCards={updateCards}
-          />
-
-          {toggleModal && (
-            <Modal
-              ref={modalRef}
-              addCard={(title, color, type) => {
-                addCard(title, color, type);
-              }}
-              cards={board.cards}
-              initialType="note"
-            />
-          )}
-        </>
+        <NotesView
+          allCards={board.cards}
+          notes={notesCards}
+          activeUid={activeNoteUid}
+          onSelectNote={setActiveNoteUid}
+          onCreateNote={addChildNote}
+          onDeleteNote={deleteNoteSubtree}
+          updateCardNote={updateCardNote}
+          updateCards={updateCards}
+        />
       ) : (
-      <DndContext
+        <div className="mac-board-scroll">
+        <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
@@ -555,8 +566,8 @@ function Cards({
           })()}
         </DragOverlay>
       </DndContext>
+        </div>
       )}
-      </div>
     </div>
   );
 }
