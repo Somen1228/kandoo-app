@@ -1,32 +1,39 @@
 import { useState, useContext, useRef, useEffect, useMemo } from "react";
 import { parseQuery, searchBoards } from "../utils/search";
-import { VscFilter, VscFilterFilled, VscChevronDown } from "react-icons/vsc";
-import { v4 as uuidv4 } from "uuid";
-import { useHotkeys } from "react-hotkeys-hook";
-import { isTauri } from "@tauri-apps/api/core";
+import { classifyTask } from "../utils/dueDate";
 import {
-  // VscGithubInverted,  // re-enable when un-commenting the GitHub link in the header
-  VscArchive,
-  VscQuestion,
-  VscSave,
+  VscFilter, VscFilterFilled, VscChevronDown,
+  VscArchive, VscQuestion, VscSave,
+  VscInbox, VscNotebook, VscLayoutSidebarLeft, VscClose,
 } from "react-icons/vsc";
 import { CgRename } from "react-icons/cg";
 import { AiOutlineDelete } from "react-icons/ai";
 import { IoColorFilterOutline } from "react-icons/io5";
+import { v4 as uuidv4 } from "uuid";
+import { useHotkeys } from "react-hotkeys-hook";
+import { isTauri } from "@tauri-apps/api/core";
 import Cards from "../components/Board/Cards";
 import { CardsContext } from "../contexts/CardsContext";
 import { useTheme } from "../contexts/ThemeContext";
-import optionLineLogo from "../assets/option-line.svg";
 import kandooLogo from "../assets/kandoo-head.png";
-import kandooLogoSmiling from "../assets/kandoo-smiling.png";
 import WarningModal from "../components/Board/WarningModal";
-import DropdownMenu from "../components/Board/DropdownMenu";
 import BoardSkeleton from "../components/Board/BoardSkeleton";
 import ThemeSettings from "../components/ThemeSettings";
 import ShortcutsHelpModal from "../components/ShortcutsHelpModal";
 import ContextMenu from "../components/ContextMenu";
 import ExportImportModal from "../components/Board/ExportImportModal";
 import HelpModal from "../components/HelpModal";
+
+const SIDEBAR_MIN = 210;
+const SIDEBAR_MAX = 360;
+
+// Smart sidebar sections — colour dots + labels, counts come from the board.
+const SCHEDULE_SECTIONS = [
+  { id: "overdue",  label: "Overdue",  dot: "var(--theme-danger)"  },
+  { id: "today",    label: "Today",    dot: "var(--theme-accent)"  },
+  { id: "upcoming", label: "Upcoming", dot: "var(--theme-warning)" },
+  { id: "done",     label: "Done",     dot: "var(--theme-success)" },
+];
 
 function Board() {
   const {
@@ -40,12 +47,8 @@ function Board() {
   const [newBoardTitle, setNewBoardTitle] = useState("");
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [boardToDelete, setBoardToDelete] = useState(null);
-  const [dropdownBoardId, setDropdownBoardId] = useState(null);
   const [isDuplicate, setIsDuplicate] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSidebarPinned, setIsSidebarPinned] = useState(false);
-  const [isLogoHovered, setIsLogoHovered] = useState(false);
   const [headerTitleEditing, setHeaderTitleEditing] = useState(false);
   const [headerTitleValue, setHeaderTitleValue]     = useState("");
   const [showThemeSettings, setShowThemeSettings] = useState(false);
@@ -55,6 +58,42 @@ function Board() {
   const [filterMode, setFilterMode]               = useState(false);
   const [currentMatchIdx, setCurrentMatchIdx]     = useState(0);
   const [showCrossBoardDropdown, setShowCrossBoardDropdown] = useState(false);
+
+  // ── Shell state ─────────────────────────────────────────────────────────
+  const [section, setSection] = useState("todos");          // 'todos' | 'notes'
+  const [scheduleView, setScheduleView] = useState(null);   // null | overdue | today | upcoming | done
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(
+    () => localStorage.getItem("kandoo-sidebar-collapsed") === "1"
+  );
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const v = parseInt(localStorage.getItem("kandoo-sidebar-width") || "", 10);
+    return Number.isFinite(v) ? Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, v)) : 248;
+  });
+  useEffect(() => {
+    localStorage.setItem("kandoo-sidebar-collapsed", isSidebarCollapsed ? "1" : "0");
+  }, [isSidebarCollapsed]);
+  useEffect(() => {
+    localStorage.setItem("kandoo-sidebar-width", String(sidebarWidth));
+  }, [sidebarWidth]);
+
+  const resizingRef = useRef(false);
+  const startResize = (e) => {
+    e.preventDefault();
+    resizingRef.current = true;
+    const onMove = (ev) => {
+      if (!resizingRef.current) return;
+      setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, ev.clientX)));
+    };
+    const onUp = () => {
+      resizingRef.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    document.body.style.cursor = "col-resize";
+  };
 
   // ── Search ────────────────────────────────────────────────────────────────
   const query = useMemo(() => parseQuery(searchTerm), [searchTerm]);
@@ -70,6 +109,33 @@ function Board() {
   const totalMatches = perBoardResults.reduce((s, r) => s + r.matchCount, 0);
   const currentMatchTaskId = activeMatches[currentMatchIdx] ?? null;
 
+  const activeBoardObj = boards.find((b) => b.id === activeBoard);
+
+  // ── Smart-section counts for the active board ───────────────────────────
+  const scheduleCounts = useMemo(() => {
+    const counts = { total: 0, overdue: 0, today: 0, upcoming: 0, done: 0, none: 0 };
+    const board = boards.find((b) => b.id === activeBoard);
+    if (!board) return counts;
+    for (const card of board.cards) {
+      if ((card.type || "todo") !== "todo") continue;
+      for (const t of Object.values(card.tasks || {})) {
+        counts.total += 1;
+        const k = classifyTask(t);
+        if (counts[k] !== undefined) counts[k] += 1;
+      }
+    }
+    return counts;
+  }, [boards, activeBoard]);
+
+  const boardTaskCount = (board) => {
+    let n = 0;
+    for (const card of board.cards || []) {
+      if ((card.type || "todo") !== "todo") continue;
+      n += Object.keys(card.tasks || {}).length;
+    }
+    return n;
+  };
+
   // Reset index when query changes or matches set shifts
   useEffect(() => { setCurrentMatchIdx(0); }, [query.raw, activeBoard]);
 
@@ -77,7 +143,7 @@ function Board() {
   useEffect(() => {
     if (!currentMatchTaskId) return;
     const el = document.querySelector(`[data-task-id="${CSS.escape(currentMatchTaskId)}"]`);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [currentMatchTaskId]);
 
   const jumpToMatch = (delta) => {
@@ -86,15 +152,9 @@ function Board() {
   };
   const [quickAddSignal, setQuickAddSignal] = useState(0);
   const [ctxMenu, setCtxMenu] = useState(null);
-  const ctxMenuRef = useRef(ctxMenu);
-  useEffect(() => { ctxMenuRef.current = ctxMenu; }, [ctxMenu]);
-  const dropdownRefs = useRef({});
-  const triggerRefs = useRef({});
-  const sidebarRef = useRef(null);
   const searchInputRef = useRef(null);
 
   // Auto-select the first board once boards load, or when the active one disappears
-  // (initial mount captures activeBoard from an empty boards[], so we sync here).
   useEffect(() => {
     if (boards.length > 0 && !boards.some((b) => b.id === activeBoard)) {
       setActiveBoard(boards[0].id);
@@ -104,46 +164,46 @@ function Board() {
   }, [boards, activeBoard]);
 
   // ===== Keyboard shortcuts =====
-  // Cmd/Ctrl+K and / focus the search bar
-  useHotkeys('mod+k, /', (e) => {
+  useHotkeys("mod+k, /", (e) => {
     e.preventDefault();
     searchInputRef.current?.focus();
     searchInputRef.current?.select();
-  }, { enableOnFormTags: ['input', 'textarea'], preventDefault: true });
+  }, { enableOnFormTags: ["input", "textarea"], preventDefault: true });
 
-  // T cycles to the next theme (only when no input is focused)
-  useHotkeys('t', () => {
+  useHotkeys("t", () => {
     if (!allThemes.length) return;
     const idx = allThemes.findIndex((t) => t.id === currentThemeId);
     const next = allThemes[(idx + 1) % allThemes.length];
     setTheme(next.id);
   });
 
-  // ? opens shortcuts help (kept as a bonus, but works inconsistently across
-  // keyboard layouts — the documented shortcut is mod+shift+1 below).
-  useHotkeys('?', () => setShowShortcutsHelp(true));
-  useHotkeys('shift+/', () => setShowShortcutsHelp(true));
+  useHotkeys("?", () => setShowShortcutsHelp(true));
+  useHotkeys("shift+/", () => setShowShortcutsHelp(true));
 
-  // Cmd/Ctrl+Shift+1 opens the full Help / Features guide modal
-  useHotkeys('mod+shift+1', (e) => {
+  useHotkeys("mod+shift+1", (e) => {
     e.preventDefault();
     setShowHelpModal(true);
   });
 
-  // Cmd/Ctrl+Z = undo, Cmd/Ctrl+Shift+Z (or Cmd/Ctrl+Y) = redo
-  // Hotkeys don't fire in inputs/textareas by default, so native browser undo still works while typing.
-  useHotkeys('mod+z',       (e) => { e.preventDefault(); undo(); });
-  useHotkeys('mod+shift+z', (e) => { e.preventDefault(); redo(); });
-  useHotkeys('mod+y',       (e) => { e.preventDefault(); redo(); });
+  useHotkeys("mod+z",       (e) => { e.preventDefault(); undo(); });
+  useHotkeys("mod+shift+z", (e) => { e.preventDefault(); redo(); });
+  useHotkeys("mod+y",       (e) => { e.preventDefault(); redo(); });
 
-  // N adds a quick task to the active board's first card
-  useHotkeys('n', (e) => {
+  // N (or Cmd/Ctrl+N) adds a quick task to the active board's first card
+  useHotkeys("n, mod+n", (e) => {
     e.preventDefault();
+    setSection("todos");
     setQuickAddSignal((s) => s + 1);
+  }, { preventDefault: true });
+
+  // Cmd/Ctrl+B toggles the sidebar
+  useHotkeys("mod+b", (e) => {
+    e.preventDefault();
+    setIsSidebarCollapsed((c) => !c);
   });
 
-  // Esc closes any open Board-level overlay
-  useHotkeys('esc', () => {
+  // Esc closes any open Board-level overlay / filter
+  useHotkeys("esc", () => {
     if (ctxMenu) { setCtxMenu(null); return; }
     if (showShortcutsHelp) { setShowShortcutsHelp(false); return; }
     if (showExportImport) { setShowExportImport(false); return; }
@@ -151,8 +211,9 @@ function Board() {
     if (showThemeSettings) { setShowThemeSettings(false); return; }
     if (showWarningModal) { setShowWarningModal(false); setBoardToDelete(null); return; }
     if (editingBoardId) { setEditingBoardId(null); return; }
-    if (dropdownBoardId) { setDropdownBoardId(null); return; }
-  }, { enableOnFormTags: ['input'] });
+    if (searchTerm) { setSearchTerm(""); return; }
+    if (scheduleView) { setScheduleView(null); return; }
+  }, { enableOnFormTags: ["input"] });
 
   const openBoardContextMenu = (e, board) => {
     e.preventDefault();
@@ -176,13 +237,14 @@ function Board() {
     };
     setBoards([...boards, newBoard]);
     setActiveBoard(newBoardId);
+    setScheduleView(null);
+    setSection("todos");
     handleTitleClick(newBoardId, `Untitled ${boards.length + 1}`);
   };
 
   const deleteBoard = (boardId) => {
     const updatedBoards = boards.filter((board) => board.id !== boardId);
     setBoards(updatedBoards);
-
     if (boardId === activeBoard && updatedBoards.length > 0) {
       setActiveBoard(updatedBoards[0].id);
     } else if (updatedBoards.length === 0) {
@@ -202,11 +264,7 @@ function Board() {
   };
 
   const handleTitleBlur = (boardId) => {
-    if (
-      boards.some(
-        (board) => board.title === newBoardTitle && board.id !== boardId
-      )
-    ) {
+    if (boards.some((board) => board.title === newBoardTitle && board.id !== boardId)) {
       setIsDuplicate(true);
     } else {
       const updatedBoards = boards.map((board) =>
@@ -219,9 +277,8 @@ function Board() {
   };
 
   const handleTitleKeyDown = (e, boardId) => {
-    if (e.key === "Enter") {
-      handleTitleBlur(boardId);
-    }
+    if (e.key === "Enter") handleTitleBlur(boardId);
+    if (e.key === "Escape") setEditingBoardId(null);
   };
 
   const handleDeleteClick = (board) => {
@@ -240,472 +297,323 @@ function Board() {
     setBoardToDelete(null);
   };
 
-  const handleDropdownClick = (boardId) => {
-    if (dropdownBoardId === boardId) {
-      setDropdownBoardId(null);
-    } else {
-      setDropdownBoardId(boardId);
-    }
+  const handleSearch = (e) => setSearchTerm(e.target.value);
+
+  const selectBoard = (id) => {
+    setActiveBoard(id);
+    setScheduleView(null);
   };
 
-  const handleClickOutside = (e) => {
-    if (sidebarRef.current && !sidebarRef.current.contains(e.target) && !ctxMenuRef.current) {
-      setIsSidebarOpen(false);
-    }
-
-    Object.keys(dropdownRefs.current).forEach((boardId) => {
-      if (
-        dropdownRefs.current[boardId] &&
-        !dropdownRefs.current[boardId].contains(e.target) &&
-        triggerRefs.current[boardId] &&
-        !triggerRefs.current[boardId].contains(e.target)
-      ) {
-        setDropdownBoardId(null);
-      }
-    });
-  };
-
-  useEffect(() => {
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
-
-  const handleSearch = (e) => {
-    setSearchTerm(e.target.value);
-  };
+  const storageLabel = saveState === "saving"
+    ? "Saving…"
+    : saveState === "error"
+      ? "Save failed"
+      : `${storageKind === "sqlite" ? "Saved on this Mac" : "Saved locally"}${
+          lastSavedAt ? ` · ${lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""
+        }`;
 
   return (
-    <div className={`kandoo-window flex flex-col h-screen${isDesktopApp ? ' is-desktop-window' : ''}`} style={{ background: 'var(--theme-bg-primary)', color: 'var(--theme-text-primary)' }}>
-      <div className="flex-grow flex overflow-hidden">
-        <div
-          ref={sidebarRef}
-          className={`sidebar shadow-xl overflow-y-auto z-10 transition-all duration-300 ease-in-out h-[80%] ${
-            isSidebarOpen
-              ? "w-64 rounded-md overflow-x-hidden"
-              : `w-9 drop-shadow-xl rounded-md overflow-x-hidden`
-          } absolute top-16 left-0`}
-          style={{ background: 'var(--theme-bg-sidebar)', borderRight: '1px solid var(--theme-border)' }}
-          onMouseEnter={() => setIsSidebarOpen(true)}
-          onMouseLeave={() => {
-            if (ctxMenuRef.current) return;
-            setDropdownBoardId(null);
-            if (!isSidebarPinned) setIsSidebarOpen(false);
-          }}
-        >
-          {isSidebarOpen && (
-            <div className="p-4">
-              <h1 className="pl-1 mb-4 text-xl font-bold" style={{ color: 'var(--theme-text-primary)' }}>Projects</h1>
-              <div className="board-tabs flex flex-col items-start gap-1">
-                {boards.map((board) => (
-                  <div
+    <div className={`mac-shell${isDesktopApp ? " is-desktop-window" : ""}`}>
+      {/* ── Sidebar ─────────────────────────────────────────────────────── */}
+      <aside className={`mac-sidebar${isSidebarCollapsed ? " is-collapsed" : ""}`}
+        style={{ "--sidebar-width": `${sidebarWidth}px` }}>
+        <div className="mac-sidebar__inner" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
+          <div className="mac-sidebar__brand" data-tauri-drag-region={isDesktopApp || undefined}>
+            <img src={kandooLogo} alt="Kandoo" data-tauri-drag-region={isDesktopApp || undefined} />
+            <span className="mac-sidebar__wordmark" data-tauri-drag-region={isDesktopApp || undefined}>Kandoo</span>
+          </div>
+
+          <div className="mac-sidebar__scroll">
+            {/* Smart sections */}
+            <div className="mac-sidebar__section">
+              <div className="mac-sidebar__label">Tasks</div>
+              <button
+                className={`mac-nav-item${section === "todos" && !scheduleView ? " is-active" : ""}`}
+                onClick={() => { setSection("todos"); setScheduleView(null); }}
+              >
+                <span className="mac-nav-item__icon"><VscInbox /></span>
+                <span className="mac-nav-item__label">All Tasks</span>
+                {scheduleCounts.total > 0 && (
+                  <span className="mac-nav-item__count">{scheduleCounts.total}</span>
+                )}
+              </button>
+              {SCHEDULE_SECTIONS.map((s) => (
+                <button
+                  key={s.id}
+                  className={`mac-nav-item${section === "todos" && scheduleView === s.id ? " is-active" : ""}`}
+                  onClick={() => { setSection("todos"); setScheduleView((v) => (v === s.id ? null : s.id)); }}
+                >
+                  <span className="mac-nav-item__icon">
+                    <span className="mac-nav-item__dot" style={{ background: s.dot }} />
+                  </span>
+                  <span className="mac-nav-item__label">{s.label}</span>
+                  {scheduleCounts[s.id] > 0 && (
+                    <span className="mac-nav-item__count">{scheduleCounts[s.id]}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Projects */}
+            <div className="mac-sidebar__section">
+              <div className="mac-sidebar__label">
+                <span>Projects</span>
+                <button className="mac-sidebar__add" onClick={addBoard} title="New project" aria-label="New project">+</button>
+              </div>
+              {boards.map((board) => (
+                editingBoardId === board.id ? (
+                  <div key={board.id} style={{ padding: "2px 10px", position: "relative" }}>
+                    <input
+                      type="text"
+                      value={newBoardTitle}
+                      onChange={handleTitleChange}
+                      onBlur={() => handleTitleBlur(board.id)}
+                      onKeyDown={(e) => handleTitleKeyDown(e, board.id)}
+                      className="w-full bg-transparent focus:outline-none"
+                      style={{
+                        borderBottom: `2px solid ${isDuplicate ? "var(--theme-danger)" : "var(--theme-accent)"}`,
+                        color: "var(--theme-text-primary)",
+                        fontSize: "0.86rem",
+                        padding: "3px 0",
+                      }}
+                      autoFocus
+                    />
+                    {isDuplicate && (
+                      <div style={{
+                        marginTop: 6, padding: "6px 8px", fontSize: "0.7rem",
+                        background: "var(--theme-danger-bg)", color: "var(--theme-danger)",
+                        border: "1px solid var(--theme-danger)", borderRadius: "var(--radius-sm)",
+                      }}>
+                        A board with this title already exists.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <button
                     key={board.id}
-                    className={`board-tab p-2 w-full cursor-pointer flex transition-colors duration-300 rounded-md`}
-                    style={
-                      board.id === activeBoard
-                        ? { background: 'var(--theme-bg-hover)', color: 'var(--theme-text-primary)', fontWeight: 500 }
-                        : { color: 'var(--theme-text-secondary)' }
-                    }
-                    onClick={() => setActiveBoard(board.id)}
+                    className={`mac-nav-item${board.id === activeBoard ? " is-active" : ""}`}
+                    onClick={() => selectBoard(board.id)}
+                    onDoubleClick={() => handleTitleClick(board.id, board.title)}
                     onContextMenu={(e) => openBoardContextMenu(e, board)}
                   >
-                    {editingBoardId === board.id ? (
-                      <div className="relative w-full">
-                        <input
-                          type="text"
-                          value={newBoardTitle}
-                          onChange={handleTitleChange}
-                          onBlur={() => handleTitleBlur(board.id)}
-                          onKeyDown={(e) => handleTitleKeyDown(e, board.id)}
-                          className={`w-full overflow-x-auto bg-transparent border-b-2 focus:outline-none`}
-                          style={{
-                            borderColor: isDuplicate ? 'var(--theme-danger)' : 'var(--theme-accent)',
-                            color: 'var(--theme-text-primary)',
-                          }}
-                          autoFocus
-                        />
-                        {isDuplicate && (
-                          <div className="absolute left-0 z-10 p-3 mt-1 text-xs rounded" style={{
-                            background: 'var(--theme-danger-bg)',
-                            color: 'var(--theme-danger)',
-                            border: '2px solid var(--theme-danger)',
-                          }}>
-                            A board with this title already exists. Please enter
-                            a different title.
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="w-full flex justify-between items-center relative cursor-pointer">
-                        <span
-                          onDoubleClick={() =>
-                            handleTitleClick(board.id, board.title)
-                          }
-                          className="pr-4"
-                        >
-                          {board.title}
-                        </span>
-                        <img
-                          src={optionLineLogo}
-                          alt="Options"
-                          className={`w-auto h-4 cursor-pointer opacity-0 hover:opacity-50 ${
-                            board.id === activeBoard && "opacity-50"
-                          }`}
-                          style={{ filter: currentThemeId !== 'light' ? 'invert(1)' : 'none' }}
-                          ref={(el) => (triggerRefs.current[board.id] = el)}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDropdownClick(board.id);
-                          }}
-                        />
-                      </div>
+                    <span className="mac-nav-item__icon" style={{ fontSize: "0.9rem" }}>#</span>
+                    <span className="mac-nav-item__label">{board.title}</span>
+                    {boardTaskCount(board) > 0 && (
+                      <span className="mac-nav-item__count">{boardTaskCount(board)}</span>
                     )}
-                    {dropdownBoardId === board.id && (
-                      <div ref={(el) => (dropdownRefs.current[board.id] = el)}>
-                        <DropdownMenu
-                          onEdit={() => handleTitleClick(board.id, board.title)}
-                          onDelete={() => handleDeleteClick(board)}
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <button
-                  className="add-board-btn opacity-80 mt-4"
-                  style={{ color: 'var(--theme-text-muted)' }}
-                  onClick={addBoard}
-                >
-                  + New Project
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="flex-grow overflow-auto">
-          <div className="p-4">
-            <div
-              className="app-toolbar flex justify-between items-center mb-4"
-              data-tauri-drag-region={isDesktopApp ? true : undefined}
-            >
-              <div className="kandoo-toolbar-identity flex items-center gap-3">
-                <button
-                  className="kandoo-toolbar-logo-button mr-2 focus:outline-none transition-transform duration-200 hover:scale-110"
-                  onMouseEnter={() => setIsLogoHovered(true)}
-                  onMouseLeave={() => setIsLogoHovered(false)}
-                  onClick={() => {
-                    setIsSidebarPinned((prev) => {
-                      const next = !prev;
-                      setIsSidebarOpen(next);
-                      return next;
-                    });
-                  }}
-                  title={isSidebarPinned ? 'Click to unpin sidebar' : 'Click to pin sidebar open'}
-                  aria-label="Toggle sidebar"
-                  aria-pressed={isSidebarPinned}
-                >
-                  <img
-                    src={isLogoHovered ? kandooLogoSmiling : kandooLogo}
-                    alt="Kandoo"
-                    className="kandoo-toolbar-logo w-12 h-12 object-contain"
-                  />
-                </button>
-                {headerTitleEditing ? (
-                  <input
-                    type="text"
-                    value={headerTitleValue}
-                    onChange={e => setHeaderTitleValue(e.target.value)}
-                    onBlur={() => {
-                      const trimmed = headerTitleValue.trim();
-                      if (trimmed && !boards.some(b => b.title === trimmed && b.id !== activeBoard)) {
-                        setBoards(prev => prev.map(b => b.id === activeBoard ? { ...b, title: trimmed } : b));
-                      }
-                      setHeaderTitleEditing(false);
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') e.target.blur();
-                      if (e.key === 'Escape') { setHeaderTitleEditing(false); }
-                    }}
-                    className="app-toolbar-title text-2xl sm:text-3xl font-bold bg-transparent border-b-2 focus:outline-none"
-                    style={{ borderColor: 'var(--theme-accent)', color: 'var(--theme-text-primary)', maxWidth: '280px' }}
-                    autoFocus
-                  />
-                ) : (
-                  <h1
-                    className="app-toolbar-title text-2xl sm:text-3xl font-bold truncate select-none"
-                    style={{ color: 'var(--theme-text-primary)', cursor: 'text' }}
-                    onDoubleClick={() => {
-                      const b = boards.find(b => b.id === activeBoard);
-                      if (b) { setHeaderTitleValue(b.title); setHeaderTitleEditing(true); }
-                    }}
-                    title="Double-click to rename"
-                  >
-                    {boards.find((board) => board.id === activeBoard)?.title}
-                  </h1>
-                )}
-              </div>
-              <div className="kandoo-toolbar-actions flex justify-center items-center">
-                {/* Search wrapper — pill + filter toggle + cross-board dropdown */}
-                <div className="kandoo-search-wrapper relative mr-5" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div className="kandoo-search-field flex items-center rounded-3xl px-2 py-1" style={{
-                    border: '1px solid var(--theme-border)',
-                    background: 'var(--theme-bg-input)',
-                  }}>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 pt-0.5"
-                      style={{ color: 'var(--theme-text-secondary)' }}
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5"
-                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                    <input
-                      ref={searchInputRef}
-                      className="ml-2 flex-1 text-sm outline-none bg-transparent"
-                      style={{ color: 'var(--theme-text-primary)', minWidth: 0 }}
-                      type="text"
-                      name="search"
-                      id="search"
-                      placeholder="Search anything"
-                      value={searchTerm}
-                      onChange={handleSearch}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          jumpToMatch(e.shiftKey ? -1 : 1);
-                        }
-                      }}
-                    />
-                    {!query.isEmpty && (
-                      <span
-                        title={activeMatches.length ? 'Press Enter to jump · Shift+Enter for previous' : 'No matches in this board'}
-                        style={{
-                          fontSize: '0.7rem',
-                          padding: '2px 8px',
-                          borderRadius: '999px',
-                          background: activeMatches.length ? 'var(--theme-bg-hover)' : 'transparent',
-                          color: activeMatches.length ? 'var(--theme-text-primary)' : 'var(--theme-text-muted)',
-                          whiteSpace: 'nowrap',
-                          marginLeft: 6,
-                        }}
-                      >
-                        {activeMatches.length
-                          ? `${currentMatchIdx + 1} / ${activeMatches.length}`
-                          : '0 results'}
-                      </span>
-                    )}
-                    {!query.isEmpty && searchTerm && (
-                      <button
-                        type="button"
-                        onClick={() => setSearchTerm('')}
-                        title="Clear search (Esc)"
-                        style={{ marginLeft: 4, color: 'var(--theme-text-muted)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Filter toggle */}
-                  <button
-                    type="button"
-                    onClick={() => setFilterMode((m) => !m)}
-                    title={filterMode ? 'Hide non-matching (on) — click to switch to highlight mode' : 'Highlight matches (on) — click to switch to filter mode'}
-                    style={{
-                      padding: '6px',
-                      borderRadius: '999px',
-                      border: '1px solid var(--theme-border)',
-                      background: filterMode ? 'var(--theme-accent)' : 'var(--theme-bg-input)',
-                      color: filterMode ? 'white' : 'var(--theme-text-secondary)',
-                      cursor: 'pointer',
-                      display: 'flex', alignItems: 'center',
-                      transition: 'background 0.15s, color 0.15s',
-                    }}
-                  >
-                    {filterMode ? <VscFilterFilled /> : <VscFilter />}
                   </button>
-
-                  {/* Cross-board dropdown trigger */}
-                  {otherBoardsWithMatches.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowCrossBoardDropdown((s) => !s)}
-                      title={`${totalMatches - activeMatches.length} matches in other boards`}
-                      style={{
-                        padding: '4px 8px',
-                        borderRadius: '999px',
-                        border: '1px solid var(--theme-border)',
-                        background: 'var(--theme-bg-input)',
-                        color: 'var(--theme-text-secondary)',
-                        cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', gap: 4,
-                        fontSize: '0.75rem',
-                      }}
-                    >
-                      +{otherBoardsWithMatches.length}
-                      <VscChevronDown style={{ transform: showCrossBoardDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
-                    </button>
-                  )}
-
-                  {showCrossBoardDropdown && otherBoardsWithMatches.length > 0 && (
-                    <div
-                      style={{
-                        position: 'absolute', top: 'calc(100% + 6px)', right: 0,
-                        minWidth: 220, maxHeight: 280, overflowY: 'auto',
-                        background: 'var(--theme-bg-modal)',
-                        border: '1px solid var(--theme-border)',
-                        borderRadius: '0.5rem',
-                        boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-                        zIndex: 50,
-                        padding: '4px',
-                      }}
-                    >
-                      <div style={{ padding: '6px 10px', fontSize: '0.65rem', color: 'var(--theme-text-muted)', letterSpacing: '0.06em', fontWeight: 600 }}>
-                        ALSO IN OTHER BOARDS
-                      </div>
-                      {otherBoardsWithMatches.map((r) => (
-                        <button
-                          key={r.boardId}
-                          type="button"
-                          onClick={() => {
-                            setActiveBoard(r.boardId);
-                            setShowCrossBoardDropdown(false);
-                          }}
-                          style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            width: '100%', padding: '6px 10px',
-                            background: 'transparent', border: 'none', cursor: 'pointer',
-                            color: 'var(--theme-text-primary)', fontSize: '0.85rem',
-                            borderRadius: '0.25rem', textAlign: 'left',
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = 'var(--theme-bg-hover)'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                        >
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</span>
-                          <span style={{ color: 'var(--theme-text-muted)', fontSize: '0.75rem', marginLeft: 8 }}>{r.matchCount}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {/* Theme Toggle Button */}
-                <button
-                  className="header-icon-btn"
-                  style={{ color: 'var(--theme-text-secondary)' }}
-                  onClick={() => setShowThemeSettings(true)}
-                  title="Theme Settings"
-                >
-                  <IoColorFilterOutline className="text-xl" />
-                  <span className="header-icon-label">Theme</span>
-                </button>
-                {/* Export / Import Button */}
-                <button
-                  className="header-icon-btn"
-                  style={{ color: 'var(--theme-text-secondary)' }}
-                  onClick={() => setShowExportImport(true)}
-                  title="Export / Import Boards"
-                >
-                  <VscArchive className="text-xl" />
-                  <span className="header-icon-label">Export</span>
-                </button>
-                {/* Help Button */}
-                <button
-                  className="header-icon-btn"
-                  style={{ color: 'var(--theme-text-secondary)' }}
-                  onClick={() => setShowHelpModal(true)}
-                  title="Help &amp; Features Guide"
-                >
-                  <VscQuestion className="text-xl" />
-                  <span className="header-icon-label">Help</span>
-                </button>
-                <div
-                  className="kandoo-local-status flex items-center gap-1.5 ml-2 text-xs font-medium"
-                  style={{ color: saveState === 'error' ? 'var(--theme-danger)' : 'var(--theme-text-muted)' }}
-                  title={saveState === 'error'
-                    ? 'Kandoo could not save the latest changes'
-                    : `${storageKind === 'sqlite' ? 'Stored in SQLite on this Mac' : 'Stored in this browser'}${lastSavedAt ? ` · Saved ${lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}`}
-                >
-                  <VscSave className="text-base" />
-                  <span className="kandoo-local-status-label">
-                    {saveState === 'saving'
-                      ? 'Saving'
-                      : saveState === 'error'
-                        ? 'Save failed'
-                        : storageKind === 'sqlite' ? 'On this Mac' : 'Local'}
-                  </span>
-                </div>
-                {/* GitHub link — hidden for now
-                <a
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  href="https://github.com/Somen1228/Kanban-board"
-                  className="header-icon-btn"
-                  style={{ color: 'var(--theme-text-secondary)' }}
-                  title="Github Repository"
-                >
-                  <VscGithubInverted className="text-xl" />
-                  <span className="header-icon-label">GitHub</span>
-                </a>
-                */}
-              </div>
-            </div>
-            <div className="mt-6">
-              {!isLoaded ? (
-                <BoardSkeleton message="Opening your local workspace..." />
-              ) : boards.length === 0 ? (
-                <div className="text-center px-6 py-16" style={{ color: 'var(--theme-text-secondary)' }}>
-                  <h2 className="text-xl font-semibold mb-2" style={{ color: 'var(--theme-text-primary)' }}>
-                    Welcome to Kandoo
-                  </h2>
-                  <p className="text-sm mb-6" style={{ color: 'var(--theme-text-muted)' }}>
-                    You don&apos;t have any boards yet. Create one to start organising your tasks.
-                  </p>
-                  <button
-                    onClick={addBoard}
-                    className="px-5 py-2 rounded-md font-medium transition-transform hover:scale-105"
-                    style={{ background: 'var(--theme-accent)', color: 'white' }}
-                  >
-                    + Create your first board
-                  </button>
-                </div>
-              ) : !activeBoard ? (
-                <div className="text-center px-6 py-16" style={{ color: 'var(--theme-text-secondary)' }}>
-                  <p className="text-sm mb-3" style={{ color: 'var(--theme-text-muted)' }}>
-                    Pick a board from the sidebar to get started, or create a new one.
-                  </p>
-                  <div className="flex items-center justify-center gap-2 text-xs" style={{ color: 'var(--theme-text-muted)' }}>
-                    <span>👈 Hover the left edge to open the sidebar</span>
-                  </div>
-                </div>
-              ) : (
-                boards.map(
-                  (board) =>
-                    board.id === activeBoard && (
-                      <div key={board.id}>
-                        <Cards
-                          boardId={board.id}
-                          searchTerm={searchTerm}
-                          query={query}
-                          filterMode={filterMode}
-                          currentMatchTaskId={currentMatchTaskId}
-                          quickAddSignal={quickAddSignal}
-                        />
-                        {filterMode && !query.isEmpty && activeMatches.length === 0 && (
-                          <div className="text-center text-sm mt-8" style={{ color: 'var(--theme-text-muted)' }}>
-                            No tasks match <span style={{ color: 'var(--theme-text-primary)' }}>{`"${query.raw}"`}</span> in this board.
-                            {otherBoardsWithMatches.length > 0 && (
-                              <div className="text-xs mt-2">
-                                Found {totalMatches} match{totalMatches > 1 ? 'es' : ''} in {otherBoardsWithMatches.length} other board{otherBoardsWithMatches.length > 1 ? 's' : ''}.
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )
                 )
-              )}
+              ))}
+            </div>
+
+            {/* Notes */}
+            <div className="mac-sidebar__section">
+              <div className="mac-sidebar__label">Workspace</div>
+              <button
+                className={`mac-nav-item${section === "notes" ? " is-active" : ""}`}
+                onClick={() => setSection("notes")}
+              >
+                <span className="mac-nav-item__icon"><VscNotebook /></span>
+                <span className="mac-nav-item__label">Notes</span>
+                <span className="mac-chip" style={{ height: 16, fontSize: "0.6rem", padding: "0 6px" }}>Beta</span>
+              </button>
             </div>
           </div>
+
+          <div className="mac-sidebar__footer" data-state={saveState === "error" ? "error" : undefined}
+            title={saveState === "error" ? "Kandoo could not save the latest changes" : storageLabel}>
+            <VscSave />
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{storageLabel}</span>
+          </div>
         </div>
+
+        <div className="mac-sidebar__resizer" onMouseDown={startResize} title="Drag to resize" />
+      </aside>
+
+      {/* ── Main column ─────────────────────────────────────────────────── */}
+      <div className="mac-main">
+        <header className="mac-toolbar" data-tauri-drag-region={isDesktopApp || undefined}>
+          <button
+            className="mac-iconbtn"
+            onClick={() => setIsSidebarCollapsed((c) => !c)}
+            title={isSidebarCollapsed ? "Show sidebar (⌘B)" : "Hide sidebar (⌘B)"}
+            aria-label="Toggle sidebar"
+            aria-pressed={!isSidebarCollapsed}
+          >
+            <VscLayoutSidebarLeft />
+          </button>
+
+          {headerTitleEditing ? (
+            <input
+              type="text"
+              value={headerTitleValue}
+              onChange={(e) => setHeaderTitleValue(e.target.value)}
+              onBlur={() => {
+                const trimmed = headerTitleValue.trim();
+                if (trimmed && !boards.some((b) => b.title === trimmed && b.id !== activeBoard)) {
+                  setBoards((prev) => prev.map((b) => b.id === activeBoard ? { ...b, title: trimmed } : b));
+                }
+                setHeaderTitleEditing(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.target.blur();
+                if (e.key === "Escape") setHeaderTitleEditing(false);
+              }}
+              className="mac-toolbar__title bg-transparent focus:outline-none"
+              style={{ borderBottom: "2px solid var(--theme-accent)" }}
+              autoFocus
+            />
+          ) : (
+            <h1
+              className="mac-toolbar__title"
+              style={{ cursor: activeBoardObj ? "text" : "default" }}
+              onDoubleClick={() => {
+                if (activeBoardObj) { setHeaderTitleValue(activeBoardObj.title); setHeaderTitleEditing(true); }
+              }}
+              title={activeBoardObj ? "Double-click to rename" : undefined}
+            >
+              {activeBoardObj?.title || "Kandoo"}
+            </h1>
+          )}
+
+          <div className="mac-toolbar__spacer" data-tauri-drag-region={isDesktopApp || undefined} />
+
+          {/* Search */}
+          <div className="mac-search">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="none"
+              viewBox="0 0 24 24" stroke="currentColor" style={{ flexShrink: 0 }}>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5"
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Search anything"
+              value={searchTerm}
+              onChange={handleSearch}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); jumpToMatch(e.shiftKey ? -1 : 1); }
+              }}
+            />
+            {!query.isEmpty && (
+              <span style={{ fontSize: "0.7rem", color: activeMatches.length ? "var(--theme-text-secondary)" : "var(--theme-text-muted)", whiteSpace: "nowrap" }}>
+                {activeMatches.length ? `${currentMatchIdx + 1}/${activeMatches.length}` : "0"}
+              </span>
+            )}
+            {searchTerm && (
+              <button type="button" onClick={() => setSearchTerm("")} title="Clear (Esc)"
+                style={{ color: "var(--theme-text-muted)", background: "none", border: "none", cursor: "pointer", display: "flex" }}>
+                <VscClose />
+              </button>
+            )}
+          </div>
+
+          {/* Filter toggle */}
+          <button
+            className={`mac-iconbtn${filterMode ? " is-on" : ""}`}
+            onClick={() => setFilterMode((m) => !m)}
+            title={filterMode ? "Filter mode: hiding non-matches" : "Highlight mode: click to filter"}
+            aria-label="Toggle filter mode"
+            aria-pressed={filterMode}
+          >
+            {filterMode ? <VscFilterFilled /> : <VscFilter />}
+          </button>
+
+          {/* Cross-board match dropdown */}
+          {otherBoardsWithMatches.length > 0 && (
+            <div style={{ position: "relative" }}>
+              <button
+                className="mac-iconbtn"
+                style={{ width: "auto", padding: "0 8px", fontSize: "0.75rem", gap: 4 }}
+                onClick={() => setShowCrossBoardDropdown((s) => !s)}
+                title={`${totalMatches - activeMatches.length} matches in other boards`}
+              >
+                +{otherBoardsWithMatches.length}
+                <VscChevronDown style={{ transform: showCrossBoardDropdown ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+              </button>
+              {showCrossBoardDropdown && (
+                <div style={{
+                  position: "absolute", top: "calc(100% + 6px)", right: 0,
+                  minWidth: 220, maxHeight: 280, overflowY: "auto",
+                  background: "var(--theme-bg-modal)", border: "1px solid var(--theme-border)",
+                  borderRadius: "var(--radius-md)", boxShadow: "var(--shadow-pop)",
+                  zIndex: "var(--z-popover)", padding: 4,
+                }}>
+                  <div style={{ padding: "6px 10px", fontSize: "0.62rem", color: "var(--theme-text-muted)", letterSpacing: "0.06em", fontWeight: 700 }}>
+                    ALSO IN OTHER BOARDS
+                  </div>
+                  {otherBoardsWithMatches.map((r) => (
+                    <button key={r.boardId} type="button"
+                      onClick={() => { selectBoard(r.boardId); setShowCrossBoardDropdown(false); }}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        width: "100%", padding: "6px 10px", background: "transparent", border: "none",
+                        cursor: "pointer", color: "var(--theme-text-primary)", fontSize: "0.85rem",
+                        borderRadius: "var(--radius-sm)", textAlign: "left",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--theme-bg-hover)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</span>
+                      <span style={{ color: "var(--theme-text-muted)", fontSize: "0.75rem", marginLeft: 8 }}>{r.matchCount}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <button className="mac-iconbtn" onClick={() => setShowThemeSettings(true)} title="Theme settings" aria-label="Theme settings">
+            <IoColorFilterOutline />
+          </button>
+          <button className="mac-iconbtn" onClick={() => setShowExportImport(true)} title="Export / Import" aria-label="Export or import boards">
+            <VscArchive />
+          </button>
+          <button className="mac-iconbtn" onClick={() => setShowHelpModal(true)} title="Help & features (⌘⇧1)" aria-label="Help and features">
+            <VscQuestion />
+          </button>
+        </header>
+
+        {/* Board content */}
+        {!isLoaded ? (
+          <div className="mac-board-scroll">
+            <BoardSkeleton message="Opening your local workspace..." />
+          </div>
+        ) : boards.length === 0 ? (
+          <div className="mac-empty">
+            <h2 className="mac-empty__title">Welcome to Kandoo</h2>
+            <p className="mac-empty__body">
+              You don&apos;t have any boards yet. Create one to start organising your tasks and notes.
+            </p>
+            <button className="mac-btn-primary" onClick={addBoard}>+ Create your first board</button>
+          </div>
+        ) : !activeBoard ? (
+          <div className="mac-empty">
+            <h2 className="mac-empty__title">Nothing selected</h2>
+            <p className="mac-empty__body">Pick a project from the sidebar to get started, or create a new one.</p>
+          </div>
+        ) : (
+          <Cards
+            key={activeBoard}
+            boardId={activeBoard}
+            searchTerm={searchTerm}
+            query={query}
+            filterMode={filterMode}
+            currentMatchTaskId={currentMatchTaskId}
+            quickAddSignal={quickAddSignal}
+            section={section}
+            setSection={setSection}
+            scheduleView={scheduleView}
+            onClearSchedule={() => setScheduleView(null)}
+            taskCount={boardTaskCount(activeBoardObj)}
+            storageLabel={storageKind === "sqlite" ? "saved on this Mac" : "saved locally"}
+            otherBoardsWithMatches={otherBoardsWithMatches}
+            totalMatches={totalMatches}
+            activeMatchCount={activeMatches.length}
+          />
+        )}
       </div>
+
       {showWarningModal && (
         <WarningModal
           boardName={boardToDelete?.title}
@@ -713,12 +621,8 @@ function Board() {
           onCancel={handleCancel}
         />
       )}
-      {showThemeSettings && (
-        <ThemeSettings onClose={() => setShowThemeSettings(false)} />
-      )}
-      {showShortcutsHelp && (
-        <ShortcutsHelpModal onClose={() => setShowShortcutsHelp(false)} />
-      )}
+      {showThemeSettings && <ThemeSettings onClose={() => setShowThemeSettings(false)} />}
+      {showShortcutsHelp && <ShortcutsHelpModal onClose={() => setShowShortcutsHelp(false)} />}
       <ExportImportModal
         isOpen={showExportImport}
         boards={boards}
@@ -726,17 +630,9 @@ function Board() {
         onClose={() => setShowExportImport(false)}
         onImport={(newBoards) => setBoards((prev) => [...prev, ...newBoards])}
       />
-      <HelpModal
-        isOpen={showHelpModal}
-        onClose={() => setShowHelpModal(false)}
-      />
+      <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} />
       {ctxMenu && (
-        <ContextMenu
-          x={ctxMenu.x}
-          y={ctxMenu.y}
-          items={ctxMenu.items}
-          onClose={() => setCtxMenu(null)}
-        />
+        <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />
       )}
     </div>
   );

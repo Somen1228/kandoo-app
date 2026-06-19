@@ -7,10 +7,11 @@ import { generateTaskID } from "../../utils/taskIdGenerator";
 import { renderTaskValue } from "../../utils/richText";
 import { sanitizeHtml, markdownToHtml, isHtml, htmlToText } from "../../utils/htmlEditor";
 import { matchesTask, matchesCardTitle } from "../../utils/search";
+import { classifyTask, formatDueShort, dueTone } from "../../utils/dueDate";
 import { useTheme } from "../../contexts/ThemeContext";
 import {
   VscEdit, VscCheck, VscTrash, VscSave, VscCopy, VscClose,
-  VscBold, VscItalic,
+  VscBold, VscItalic, VscCalendar,
 } from "react-icons/vsc";
 import { IoDuplicateOutline } from "react-icons/io5";
 import { IoImageOutline } from "react-icons/io5";
@@ -247,7 +248,7 @@ function SortableTask({ task, cardUid, isEditing, className, style, onContextMen
 function Card({
   index, uid, type = 'todo', title, color, isVisible, tasks, note,
   updateCardTasks, updateCardNote, updateCards, searchTerm,
-  query, filterMode = false, currentMatchTaskId = null,
+  query, filterMode = false, scheduleView = null, currentMatchTaskId = null,
   quickAddSignal = 0, dragHandleProps = {},
 }) {
   const isNote = type === 'note';
@@ -260,9 +261,11 @@ function Card({
   const [colorPickerPos, setColorPickerPos]   = useState(null);
   const [taskValue, setTaskValue]             = useState(""); // HTML string
   const [newTaskImages, setNewTaskImages]     = useState([]);
+  const [newTaskDue, setNewTaskDue]           = useState(""); // "YYYY-MM-DD" or ""
   const [editingTaskId, setEditingTaskId]     = useState(null);
   const [editingTaskValue, setEditingTaskValue]   = useState(""); // HTML string
   const [editingTaskImages, setEditingTaskImages] = useState([]);
+  const [editingTaskDue, setEditingTaskDue]       = useState(""); // "YYYY-MM-DD" or ""
   // (done state is now persisted as task.done — see toggleDoneTask)
   const [showDeleteWarning, setShowDeleteWarning] = useState(false);
   const [toDelete, setToDelete]               = useState("");
@@ -327,7 +330,7 @@ function Card({
   };
 
   const duplicateTask = (task) => {
-    const newTask = { id: generateTaskID(title), value: task.value, images: task.images || [] };
+    const newTask = { id: generateTaskID(title), value: task.value, images: task.images || [], due: task.due || null };
     updateCardTasks(index, { ...tasks, [newTask.id]: newTask });
   };
 
@@ -435,19 +438,30 @@ function Card({
     const clean = sanitizeHtml(taskValue);
     const hasText = htmlToText(clean).length > 0;
     if (!hasText && newTaskImages.length === 0) { setToggleAddTask(false); return; }
-    const newTask = { id: generateTaskID(title), value: clean, images: newTaskImages };
+    const newTask = { id: generateTaskID(title), value: clean, images: newTaskImages, due: newTaskDue || null };
     updateCardTasks(index, { ...tasks, [newTask.id]: newTask });
     setTaskValue("");
     setNewTaskImages([]);
+    setNewTaskDue("");
     newEditorRef.current?.setHtml('');
     newEditorRef.current?.focus();
     setToggleAddTask(true);
   };
 
   const deleteTask = (taskId) => {
+    const removed = tasks[taskId];
     const updated = { ...tasks };
     delete updated[taskId];
     updateCardTasks(index, updated);
+    if (removed) {
+      // Undo restores the task in its original position (spread keeps key order).
+      toast('Task deleted', {
+        action: {
+          label: 'Undo',
+          onClick: () => updateCardTasks(index, { ...tasks, [taskId]: removed }),
+        },
+      });
+    }
   };
 
   const startEditingTask = (taskId, taskVal, taskImages = []) => {
@@ -456,17 +470,26 @@ function Card({
     const initialHtml = isHtml(taskVal) ? (taskVal || '') : markdownToHtml(taskVal || '');
     setEditingTaskValue(initialHtml);
     setEditingTaskImages(taskImages || []);
+    setEditingTaskDue(tasks[taskId]?.due || "");
+  };
+
+  const cancelEditingTask = () => {
+    setEditingTaskId(null);
+    setEditingTaskValue("");
+    setEditingTaskImages([]);
+    setEditingTaskDue("");
   };
 
   const saveEditedTask = (taskId) => {
     const clean = sanitizeHtml(editingTaskValue);
     updateCardTasks(index, {
       ...tasks,
-      [taskId]: { ...tasks[taskId], value: clean, images: editingTaskImages },
+      [taskId]: { ...tasks[taskId], value: clean, images: editingTaskImages, due: editingTaskDue || null },
     });
     setEditingTaskId(null);
     setEditingTaskValue("");
     setEditingTaskImages([]);
+    setEditingTaskDue("");
   };
 
   const handleDeleteCard = () => { setToggleMenu(false); setToDelete("card");  setShowDeleteWarning(true); };
@@ -659,15 +682,18 @@ function Card({
             {(() => {
               const allTasks = Object.values(tasks);
               const cardTitleMatches = query && !query.isEmpty && matchesCardTitle({ title }, query);
-              const visibleTasks = (filterMode && query && !query.isEmpty && !cardTitleMatches)
+              let visibleTasks = (filterMode && query && !query.isEmpty && !cardTitleMatches)
                 ? allTasks.filter((t) => matchesTask(t, query))
                 : allTasks;
+              if (scheduleView) {
+                visibleTasks = visibleTasks.filter((t) => classifyTask(t) === scheduleView);
+              }
 
               if (allTasks.length === 0) {
                 return (
-                  <li className="h-8 task-item flex items-center p-2 mt-2 shadow-sm rounded-md opacity-15"
-                    style={{ background: 'var(--theme-task-bg)' }}>
-                    Drop tasks here
+                  <li className="mac-col-empty">
+                    <span>Nothing here yet</span>
+                    <span className="mac-col-empty__hint">Drag a task here or create one below</span>
                   </li>
                 );
               }
@@ -679,17 +705,9 @@ function Card({
                   task={task}
                   cardUid={uid}
                   isEditing={editingTaskId === task.id}
-                  className={`task-item flex flex-col p-2 mt-2 shadow-sm rounded-md ${
-                    task.done ? "opacity-60" : ""
-                  } ${task.id === currentMatchTaskId ? "task-current-match" : ""
-                  } ${editingTaskId === task.id ? "" : "cursor-grab active:cursor-grabbing"}`}
-                  style={{
-                    background: 'var(--theme-task-bg)',
-                    border: task.id === currentMatchTaskId
-                      ? '2px solid var(--theme-accent)'
-                      : '1px solid var(--theme-task-border)',
-                    textDecoration: task.done ? 'line-through' : 'none',
-                  }}
+                  className={`mac-task ${task.done ? "is-done" : ""} ${
+                    task.id === currentMatchTaskId ? "is-match" : ""
+                  } ${editingTaskId === task.id ? "is-editing" : "cursor-grab active:cursor-grabbing"}`}
                   onContextMenu={e => openTaskContextMenu(e, task)}
                 >
                   {editingTaskId === task.id ? (
@@ -705,7 +723,7 @@ function Card({
                           initialHtml={editingTaskValue}
                           onChange={setEditingTaskValue}
                           onSave={() => saveEditedTask(task.id)}
-                          onCancel={() => { setEditingTaskId(null); setEditingTaskValue(''); setEditingTaskImages([]); }}
+                          onCancel={cancelEditingTask}
                           autoFocus
                           placeholder="Edit task (Shift+Enter for newline)"
                           className="flex-1 p-2 border-2 rounded text-sm"
@@ -774,20 +792,30 @@ function Card({
                       >
                         <IoImageOutline /> Add image
                       </button>
+                      <label className="mac-due-row" onPointerDown={e => e.stopPropagation()} title="Set due date" style={{ alignSelf: 'flex-start', marginTop: '4px' }}>
+                        <VscCalendar />
+                        <input
+                          type="date"
+                          value={editingTaskDue}
+                          onChange={e => setEditingTaskDue(e.target.value)}
+                        />
+                        {editingTaskDue && (
+                          <button type="button" className="mac-due-row__clear" onClick={() => setEditingTaskDue("")} aria-label="Clear due date">
+                            <VscClose />
+                          </button>
+                        )}
+                      </label>
                     </form>
                   ) : (
                     /* ── Display mode ── */
                     <>
                       <div
-                        className="task-container flex justify-between items-start w-full"
+                        className="task-container"
                         onDoubleClick={() => startEditingTask(task.id, task.value, task.images)}
                         title="Drag to move · double-click to edit"
                         style={{ userSelect: 'none' }}
                       >
-                        <div
-                          className="text-sm font-medium flex-1"
-                          style={{ color: 'var(--theme-text-primary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-                        >
+                        <div className="mac-task__text">
                           {renderTaskValue(task.value, query?.terms ?? searchTerm)}
                         </div>
                       </div>
@@ -808,41 +836,45 @@ function Card({
                         </div>
                       )}
 
-                      <div className="flex justify-between items-center w-full mt-2">
-                        <h4 className="text-xs" style={{ color: 'var(--theme-text-muted)' }}>
-                          {renderTaskValue(task.id, query?.terms ?? searchTerm)}
-                        </h4>
-                        <div className="flex items-center space-x-2">
+                      <div className="mac-task__footer">
+                        <div className="mac-task__meta">
+                          <span className="mac-task__id">
+                            {renderTaskValue(task.id, query?.terms ?? searchTerm)}
+                          </span>
+                          {task.due && (
+                            <span className="mac-chip" data-tone={dueTone(task)}>
+                              <VscCalendar style={{ fontSize: '0.85em' }} />
+                              {formatDueShort(task.due)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mac-task__actions">
                           <button
+                            className="mac-task__btn is-edit"
                             onClick={() => startEditingTask(task.id, task.value, task.images)}
-                            style={{ color: 'var(--theme-text-muted)' }}
-                            onMouseEnter={e => e.currentTarget.style.color = 'var(--theme-accent)'}
-                            onMouseLeave={e => e.currentTarget.style.color = 'var(--theme-text-muted)'}
                             title="Edit task"
+                            aria-label="Edit task"
                             onPointerDown={e => e.stopPropagation()}
                           >
-                            <VscEdit className="text-base" />
+                            <VscEdit />
                           </button>
                           <button
+                            className="mac-task__btn is-done"
                             onClick={() => toggleDoneTask(task.id)}
-                            className="pr-1"
-                            style={{ color: 'var(--theme-text-muted)' }}
-                            onMouseEnter={e => e.currentTarget.style.color = 'var(--theme-success)'}
-                            onMouseLeave={e => e.currentTarget.style.color = 'var(--theme-text-muted)'}
-                            title="Mark as done"
+                            title={task.done ? "Mark as undone" : "Mark as done"}
+                            aria-label="Toggle done"
                             onPointerDown={e => e.stopPropagation()}
                           >
-                            <VscCheck className="text-base" />
+                            <VscCheck />
                           </button>
                           <button
+                            className="mac-task__btn is-del"
                             onClick={() => deleteTask(task.id)}
-                            style={{ color: 'var(--theme-text-muted)' }}
-                            onMouseEnter={e => e.currentTarget.style.color = 'var(--theme-danger)'}
-                            onMouseLeave={e => e.currentTarget.style.color = 'var(--theme-text-muted)'}
                             title="Delete task"
+                            aria-label="Delete task"
                             onPointerDown={e => e.stopPropagation()}
                           >
-                            <VscTrash className="text-base" />
+                            <VscTrash />
                           </button>
                         </div>
                       </div>
@@ -920,6 +952,19 @@ function Card({
             >
               <IoImageOutline /> Add image
             </button>
+            <label className="mac-due-row" onPointerDown={e => e.stopPropagation()} title="Set due date">
+              <VscCalendar />
+              <input
+                type="date"
+                value={newTaskDue}
+                onChange={e => setNewTaskDue(e.target.value)}
+              />
+              {newTaskDue && (
+                <button type="button" className="mac-due-row__clear" onClick={() => setNewTaskDue("")} aria-label="Clear due date">
+                  <VscClose />
+                </button>
+              )}
+            </label>
             <button
               type="submit"
               onPointerDown={e => e.stopPropagation()}

@@ -11,10 +11,14 @@ const ALLOWED_TAGS = new Set([
   'PRE', 'CODE',
 ]);
 
-// Style attribute allowlist — execCommand emits these via styleWithCSS
+// Style attribute allowlist — execCommand emits these via styleWithCSS.
+// font-weight / font-style are required so Bold and Italic survive sanitisation
+// (execCommand bold→`font-weight:bold`, italic→`font-style:italic`).
 const ALLOWED_STYLE_PROPS = new Set([
   'color',
   'background-color',
+  'font-weight',
+  'font-style',
   'text-align',
   'text-decoration',
   'margin-left',

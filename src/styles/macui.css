@@ -1,0 +1,747 @@
+/* ============================================================================
+   Kandoo — macOS design system foundation
+   ----------------------------------------------------------------------------
+   Layout / radius / shadow / spacing / motion / z-index tokens layered ON TOP
+   of the existing per-theme color tokens (--theme-*) defined in themes.js.
+
+   These variables are *consumed* by components; they never override the inline
+   color styles the components already set, so this file is safe to load against
+   all 13 themes and any custom theme.
+   ========================================================================== */
+
+:root {
+  /* ── Typography ──────────────────────────────────────────────────────── */
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Monaco, "Cascadia Code", Consolas, monospace;
+
+  /* ── Layout ──────────────────────────────────────────────────────────── */
+  --toolbar-height: 56px;
+  --sidebar-width: 248px;
+  --sidebar-width-collapsed: 0px;
+  --board-gap: 18px;
+  --column-width: 304px;
+  --column-max-width: 320px;
+  --content-max-width: 1600px;
+
+  /* ── Radius ──────────────────────────────────────────────────────────── */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* ── Spacing scale ───────────────────────────────────────────────────── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* ── Elevation — composed from each theme's own shadow colour ────────── */
+  --shadow-xs: 0 1px 2px color-mix(in srgb, var(--theme-shadow) 60%, transparent);
+  --shadow-sm: 0 1px 2px color-mix(in srgb, var(--theme-shadow) 55%, transparent),
+    0 2px 6px color-mix(in srgb, var(--theme-shadow) 45%, transparent);
+  --shadow-md: 0 4px 14px color-mix(in srgb, var(--theme-shadow) 65%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, var(--theme-shadow) 80%, transparent);
+  --shadow-pop: 0 10px 34px rgba(0, 0, 0, 0.22);
+
+  /* ── Motion ──────────────────────────────────────────────────────────── */
+  --motion-fast: 120ms;
+  --motion-base: 160ms;
+  --motion-slow: 220ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.45, 0, 0.2, 1);
+
+  /* ── z-index scale ───────────────────────────────────────────────────── */
+  --z-base: 1;
+  --z-sticky: 40;
+  --z-sidebar: 50;
+  --z-popover: 2000;
+  --z-modal: 3000;
+  --z-toast: 4000;
+
+  /* ── Semantic aliases → existing theme tokens ────────────────────────────
+     Lets new components reference --bg-surface / --accent / etc. (the names in
+     the design brief) while still resolving to the active theme's palette.   */
+  --bg-app: var(--theme-bg-primary);
+  --bg-surface: var(--theme-bg-card);
+  --bg-elevated: var(--theme-bg-modal);
+  --bg-sidebar: var(--theme-bg-sidebar);
+  --bg-hover: var(--theme-bg-hover);
+  --border-subtle: var(--theme-border);
+  --text-primary: var(--theme-text-primary);
+  --text-secondary: var(--theme-text-secondary);
+  --text-muted: var(--theme-text-muted);
+  --accent: var(--theme-accent);
+  --accent-hover: var(--theme-accent-hover);
+  --danger: var(--theme-danger);
+}
+
+/* ── Global typography — SF Pro-like stack across the whole app ─────────── */
+body,
+button,
+input,
+textarea,
+select {
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Thin, native-style overlay scrollbars ──────────────────────────────────
+   Replaces the previously hidden (width:0) scrollbars with a subtle macOS-like
+   thumb that only draws when content overflows.                              */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--theme-scroll-thumb) 70%, transparent);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  box-shadow: none;
+  transition: background var(--motion-base) var(--ease-out);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--theme-scroll-thumb) 100%, transparent);
+  background-clip: content-box;
+  border: 2px solid transparent;
+  box-shadow: none;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ── Shared focus ring — keyboard accessibility ─────────────────────────── */
+.mac-focusable:focus-visible,
+:where(button, a, input, [role="button"], [role="tab"]).mac-focus:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Reusable native primitives (consumed by the redesign components) ───── */
+
+/* Status / metadata chips */
+.mac-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  background: var(--theme-bg-hover);
+  color: var(--theme-text-secondary);
+  white-space: nowrap;
+}
+.mac-chip[data-tone="overdue"] {
+  background: var(--theme-danger-bg);
+  color: var(--theme-danger);
+}
+.mac-chip[data-tone="today"] {
+  background: color-mix(in srgb, var(--theme-accent) 16%, transparent);
+  color: var(--theme-accent);
+}
+.mac-chip[data-tone="upcoming"] {
+  background: var(--theme-bg-hover);
+  color: var(--theme-text-secondary);
+}
+
+/* Subtle divider */
+.mac-divider {
+  height: 1px;
+  background: var(--theme-border);
+  border: 0;
+  margin: var(--space-2) 0;
+}
+
+/* ============================================================================
+   App shell — sidebar + main column
+   ========================================================================== */
+.mac-shell {
+  display: flex;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  background: var(--bg-app);
+  color: var(--text-primary);
+}
+
+.mac-sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: var(--sidebar-width);
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border-subtle);
+  transition: width var(--motion-slow) var(--ease-in-out);
+  overflow: hidden;
+}
+.mac-sidebar.is-collapsed {
+  width: 0;
+  border-right-color: transparent;
+}
+.mac-sidebar__inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+}
+
+/* drag-to-move region over the traffic lights on desktop */
+.mac-sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--toolbar-height);
+  padding: 0 14px 0 16px;
+  flex-shrink: 0;
+}
+.is-desktop-window .mac-sidebar__brand {
+  padding-left: 92px;
+}
+.mac-sidebar__brand img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+.mac-sidebar__wordmark {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  user-select: none;
+}
+
+.mac-sidebar__scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--space-2) var(--space-2) var(--space-4);
+}
+
+.mac-sidebar__section {
+  margin-top: var(--space-3);
+}
+.mac-sidebar__label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  user-select: none;
+}
+.mac-sidebar__add {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  transition: color var(--motion-fast), background var(--motion-fast);
+}
+.mac-sidebar__add:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.mac-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out);
+}
+.mac-nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.mac-nav-item.is-active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.mac-nav-item__icon {
+  display: inline-flex;
+  width: 18px;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+.mac-nav-item__label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mac-nav-item__count {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border-radius: var(--radius-pill);
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.mac-nav-item.is-active .mac-nav-item__count {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+}
+.mac-nav-item__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.mac-sidebar__footer {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.mac-sidebar__footer[data-state="error"] {
+  color: var(--danger);
+}
+
+/* Resizer handle */
+.mac-sidebar__resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 2;
+}
+.mac-sidebar__resizer:hover,
+.mac-sidebar__resizer.is-dragging {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* ── Main column ─────────────────────────────────────────────────────────── */
+.mac-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mac-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--toolbar-height);
+  flex-shrink: 0;
+  padding: 0 14px;
+  background: color-mix(in srgb, var(--bg-app) 88%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 85%, transparent);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  user-select: none;
+}
+/* When the sidebar is collapsed on desktop, the toolbar must clear the native
+   traffic-light buttons that now sit over the main column. */
+.is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac-toolbar {
+  padding-left: 90px;
+}
+.mac-toolbar__title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+.mac-toolbar__spacer {
+  flex: 1;
+}
+
+.mac-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 1.05rem;
+  cursor: pointer;
+  transition: background var(--motion-fast), color var(--motion-fast);
+}
+.mac-iconbtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.mac-iconbtn.is-on {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Search field */
+.mac-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  min-width: 200px;
+  max-width: 320px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  background: var(--theme-bg-input);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
+}
+.mac-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.mac-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+/* ── Segmented control (Todos / Notes) ──────────────────────────────────── */
+.mac-board-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 24px 6px;
+  flex-shrink: 0;
+}
+.mac-board-head__meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.mac-segmented {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--theme-bg-secondary);
+  border: 1px solid var(--border-subtle);
+  gap: 2px;
+}
+.mac-segmented__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 5px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast);
+}
+.mac-segmented__btn:hover {
+  color: var(--text-primary);
+}
+.mac-segmented__btn.is-active {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-xs);
+}
+.mac-segmented__count {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0 6px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+/* ── Board wrapper fills the remaining height under the toolbar ─────────── */
+.mac-board {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Board scroll area ───────────────────────────────────────────────────── */
+.mac-board-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 24px 28px;
+}
+
+/* ── Empty states ────────────────────────────────────────────────────────── */
+.mac-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 64px 24px;
+  color: var(--text-secondary);
+}
+.mac-empty__title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.mac-empty__body {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  max-width: 360px;
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+.mac-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform var(--motion-fast) var(--ease-out),
+    background var(--motion-fast);
+}
+.mac-btn-primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+/* ============================================================================
+   Kanban columns + task cards
+   ========================================================================== */
+
+/* Column panel — softer, layered macOS surface (overrides App.css .card) */
+.card {
+  border: 1px solid var(--theme-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.card-title {
+  padding: 9px 12px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+}
+.card .task-list {
+  background: transparent;
+  padding: 2px 10px 6px;
+}
+.container {
+  gap: var(--board-gap);
+  padding: 12px 4px 4px;
+  align-items: start;
+}
+
+/* Empty column state */
+.mac-col-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  margin-top: 8px;
+  padding: 22px 12px;
+  border: 1px dashed var(--theme-border);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-align: center;
+}
+.mac-col-empty__hint {
+  font-size: 0.72rem;
+  opacity: 0.8;
+}
+
+/* Task card */
+.mac-task {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 9px 11px;
+  margin-top: 8px;
+  border-radius: var(--radius-md);
+  background: var(--theme-task-bg);
+  border: 1px solid var(--theme-task-border);
+  box-shadow: var(--shadow-xs);
+  transition: box-shadow var(--motion-base) var(--ease-out),
+    border-color var(--motion-base) var(--ease-out);
+}
+.mac-task:hover {
+  box-shadow: var(--shadow-sm);
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--theme-task-border));
+}
+.mac-task:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.mac-task.is-done {
+  opacity: 0.62;
+}
+.mac-task.is-done .mac-task__text {
+  text-decoration: line-through;
+}
+.mac-task.is-match {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.mac-task__text {
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.mac-task__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  min-height: 22px;
+}
+.mac-task__meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.mac-task__id {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.mac-task__actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+.mac-task:hover .mac-task__actions,
+.mac-task:focus-within .mac-task__actions {
+  opacity: 1;
+}
+.mac-task__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background var(--motion-fast), color var(--motion-fast);
+}
+.mac-task__btn:hover {
+  background: var(--bg-hover);
+}
+.mac-task__btn.is-edit:hover { color: var(--accent); }
+.mac-task__btn.is-done:hover { color: var(--theme-success); }
+.mac-task__btn.is-del:hover { color: var(--danger); }
+
+/* Due-date input row inside the add/edit task form */
+.mac-due-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  border: 1px dashed var(--theme-border);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+}
+.mac-due-row input[type="date"] {
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.72rem;
+  font-family: var(--font-ui);
+  outline: none;
+  cursor: pointer;
+}
+.mac-due-row__clear {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+}
+
+/* ── Motion: respect the user's reduced-motion preference ───────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

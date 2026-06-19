@@ -29,7 +29,7 @@ import NotesView from "./NotesView";
 import { matchesTask, matchesCardTitle, matchesNote } from "../../utils/search";
 import Modal from "./Modal";
 import { CardsContext } from "../../contexts/CardsContext";
-import { VscHistory } from "react-icons/vsc";
+import { VscHistory, VscClose } from "react-icons/vsc";
 import ResetWarningModal from "./ResetWarningModal";
 
 function SortableCardWrapper({ uid, children }) {
@@ -56,8 +56,12 @@ function SortableCardWrapper({ uid, children }) {
   );
 }
 
-function Cards({ boardId, searchTerm, query, filterMode = false, currentMatchTaskId = null, quickAddSignal }) {
-  const [section, setSection] = useState('todos'); // 'todos' | 'notes'
+function Cards({
+  boardId, searchTerm, query, filterMode = false, currentMatchTaskId = null,
+  quickAddSignal, section = "todos", setSection, scheduleView = null,
+  onClearSchedule, taskCount = 0, storageLabel = "saved locally",
+  otherBoardsWithMatches = [], totalMatches = 0, activeMatchCount = 0,
+}) {
   const [activeNoteUid, setActiveNoteUid] = useState(null);
   const { boards, setBoards, defaultCards } = useContext(CardsContext);
   const board = boards.find((b) => b.id === boardId);
@@ -84,8 +88,6 @@ function Cards({ boardId, searchTerm, query, filterMode = false, currentMatchTas
         b.id === boardId ? { ...b, cards: b.cards.filter((c) => c.uid !== uid) } : b
       )
     );
-    // toast hint with built-in undo affordance
-    // (the global Cmd+Z undo restores everything; the toast just makes it discoverable)
   };
   const [toggleModal, setToggleModal] = useState(false);
   const modalRef = useRef(null);
@@ -319,82 +321,68 @@ function Cards({ boardId, searchTerm, query, filterMode = false, currentMatchTas
 
   if (!board) return null;
 
-  return (
-    <div>
-      <div className="pl-10 option-container mb-4 w-auto">
-        <div className="flex items-end justify-between">
-          {/* Section tabs — browser-style */}
-          <div
-            role="tablist"
-            aria-label="Card section"
-            style={{
-              display: 'flex',
-              alignItems: 'flex-end',
-              gap: '2px',
-              borderBottom: '1px solid var(--theme-border)',
-              marginBottom: '-1px',
-            }}
-          >
-            {[
-              { id: 'todos', label: 'Todos' },
-              { id: 'notes', label: 'Notes (Beta)' },
-            ].map((s) => {
-              const isActive = section === s.id;
-              const count = (board?.cards || []).filter((c) =>
-                s.id === 'notes' ? c.type === 'note' : (c.type || 'todo') === 'todo'
-              ).length;
-              return (
-                <button
-                  key={s.id}
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => setSection(s.id)}
-                  style={{
-                    background: isActive ? 'var(--theme-bg-primary)' : 'transparent',
-                    color: isActive ? 'var(--theme-text-primary)' : 'var(--theme-text-muted)',
-                    border: '1px solid',
-                    borderColor: isActive ? 'var(--theme-border)' : 'transparent',
-                    borderBottomColor: isActive ? 'var(--theme-bg-primary)' : 'transparent',
-                    borderTopLeftRadius: '0.5rem',
-                    borderTopRightRadius: '0.5rem',
-                    padding: '6px 14px 7px',
-                    cursor: 'pointer',
-                    fontSize: '0.85rem',
-                    fontWeight: isActive ? 600 : 500,
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    transition: 'background 0.15s, color 0.15s',
-                    position: 'relative',
-                    top: '1px',
-                  }}
-                  onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.color = 'var(--theme-text-primary)'; }}
-                  onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.color = 'var(--theme-text-muted)'; }}
-                >
-                  {s.label}
-                  <span style={{
-                    fontSize: '0.65rem',
-                    padding: '1px 6px',
-                    borderRadius: 999,
-                    background: isActive ? 'var(--theme-bg-hover)' : 'var(--theme-bg-secondary)',
-                    color: 'var(--theme-text-secondary)',
-                    minWidth: 16, textAlign: 'center',
-                  }}>{count}</span>
-                </button>
-              );
-            })}
-          </div>
+  const todosCount = (board.cards || []).filter((c) => (c.type || 'todo') === 'todo').length;
+  const notesCount = (board.cards || []).filter((c) => c.type === 'note').length;
+  const scheduleLabel = scheduleView
+    ? scheduleView.charAt(0).toUpperCase() + scheduleView.slice(1)
+    : null;
 
+  return (
+    <div className="mac-board">
+      {/* Board header — segmented control + metadata */}
+      <div className="mac-board-head">
+        <div className="mac-segmented" role="tablist" aria-label="Board section">
           <button
-            onClick={handleResetClick}
-            className="header-icon-btn"
-            style={{ color: "var(--theme-text-secondary)" }}
-            title="Reset board to default"
+            role="tab"
+            aria-selected={section === 'todos'}
+            className={`mac-segmented__btn${section === 'todos' ? ' is-active' : ''}`}
+            onClick={() => setSection?.('todos')}
           >
-            <VscHistory className="text-xl" />
-            <span className="header-icon-label">Reset</span>
+            Todos <span className="mac-segmented__count">{todosCount}</span>
+          </button>
+          <button
+            role="tab"
+            aria-selected={section === 'notes'}
+            className={`mac-segmented__btn${section === 'notes' ? ' is-active' : ''}`}
+            onClick={() => setSection?.('notes')}
+          >
+            Notes <span className="mac-segmented__count">{notesCount}</span>
           </button>
         </div>
+
+        {section === 'todos' && !scheduleView && (
+          <span className="mac-board-head__meta">
+            {taskCount} task{taskCount === 1 ? '' : 's'} · {storageLabel}
+          </span>
+        )}
+
+        {scheduleView && (
+          <button
+            className="mac-chip"
+            data-tone={scheduleView === 'overdue' ? 'overdue' : scheduleView === 'today' ? 'today' : 'upcoming'}
+            onClick={onClearSchedule}
+            title="Clear schedule filter"
+            style={{ border: 'none', cursor: 'pointer' }}
+          >
+            {scheduleLabel} <VscClose style={{ marginLeft: 2 }} />
+          </button>
+        )}
+
+        <div style={{ flex: 1 }} />
+
+        {section === 'todos' && (
+          <button
+            onClick={handleResetClick}
+            className="mac-iconbtn"
+            title="Reset board to default"
+            aria-label="Reset board to default"
+          >
+            <VscHistory />
+          </button>
+        )}
       </div>
 
+      <div className="mac-board-scroll">
       {section === 'notes' ? (
         <>
           <NotesView
@@ -416,7 +404,6 @@ function Cards({ boardId, searchTerm, query, filterMode = false, currentMatchTas
               ref={modalRef}
               addCard={(title, color, type) => {
                 addCard(title, color, type);
-                // After adding, the sync effect picks the new note as active
               }}
               cards={board.cards}
               initialType="note"
@@ -431,7 +418,7 @@ function Cards({ boardId, searchTerm, query, filterMode = false, currentMatchTas
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="container pl-10">
+        <div className="container">
           <SortableContext
             items={board.cards
               .filter((c) => (section === 'notes' ? c.type === 'note' : (c.type || 'todo') === 'todo'))
@@ -473,6 +460,7 @@ function Cards({ boardId, searchTerm, query, filterMode = false, currentMatchTas
                     searchTerm={searchTerm}
                     query={query}
                     filterMode={filterMode}
+                    scheduleView={scheduleView}
                     currentMatchTaskId={currentMatchTaskId}
                     quickAddSignal={cardIndex === 0 ? quickAddSignal : 0}
                     dragHandleProps={dragHandleProps}
@@ -504,6 +492,18 @@ function Cards({ boardId, searchTerm, query, filterMode = false, currentMatchTas
             />
           )}
         </div>
+
+        {filterMode && !query.isEmpty && activeMatchCount === 0 && (
+          <div className="mac-empty" style={{ padding: '40px 24px' }}>
+            <div className="mac-empty__title">No matches here</div>
+            <div className="mac-empty__body">
+              No tasks match “{query.raw}” in this board.
+              {otherBoardsWithMatches.length > 0 && (
+                <> Found {totalMatches} match{totalMatches > 1 ? 'es' : ''} in {otherBoardsWithMatches.length} other board{otherBoardsWithMatches.length > 1 ? 's' : ''}.</>
+              )}
+            </div>
+          </div>
+        )}
 
         <DragOverlay dropAnimation={{ duration: 180, easing: "ease-out" }}>
           {activeId && activeType === "card" && (() => {
@@ -556,6 +556,7 @@ function Cards({ boardId, searchTerm, query, filterMode = false, currentMatchTas
         </DragOverlay>
       </DndContext>
       )}
+      </div>
     </div>
   );
 }
