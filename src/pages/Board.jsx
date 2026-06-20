@@ -28,6 +28,7 @@ import ShortcutsHelpModal from "../components/ShortcutsHelpModal";
 import ContextMenu from "../components/ContextMenu";
 import ExportImportModal from "../components/Board/ExportImportModal";
 import HelpModal from "../components/HelpModal";
+import TaskConflictModal from "../components/Board/TaskConflictModal";
 
 const SIDEBAR_MIN = 210;
 const SIDEBAR_MAX = 360;
@@ -63,6 +64,7 @@ function Board() {
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showExportImport, setShowExportImport]   = useState(false);
   const [showHelpModal, setShowHelpModal]         = useState(false);
+  const [helpSection,   setHelpSection]           = useState(null);
   const [filterMode, setFilterMode]               = useState(false);
   const [currentMatchIdx, setCurrentMatchIdx]     = useState(0);
   const [showCrossBoardDropdown, setShowCrossBoardDropdown] = useState(false);
@@ -684,7 +686,7 @@ function Board() {
           </button>
           {user ? (
             <button
-              className="mac-iconbtn mac-accountbtn is-signed-in"
+              className={`mac-iconbtn mac-accountbtn is-signed-in${user.photoUrl ? ' has-avatar' : ''}`}
               onClick={openAccountMenu}
               title={`Signed in as ${user.email || user.phone || user.displayName || "Kandoo user"}`}
               aria-label="Open account menu"
@@ -758,6 +760,7 @@ function Board() {
           onClose={() => setShowSettings(false)}
           onOpenExportImport={() => { setShowSettings(false); setShowExportImport(true); }}
           onResetWorkspace={resetWorkspace}
+          onOpenHelp={() => { setShowSettings(false); setShowHelpModal(true); setHelpSection('sync'); }}
         />
       )}
       {showShortcutsHelp && <ShortcutsHelpModal onClose={() => setShowShortcutsHelp(false)} />}
@@ -768,7 +771,8 @@ function Board() {
         onClose={() => setShowExportImport(false)}
         onImport={(newBoards) => setBoards((prev) => [...prev, ...newBoards])}
       />
-      <HelpModal isOpen={showHelpModal} onClose={() => setShowHelpModal(false)} />
+      <HelpModal isOpen={showHelpModal} onClose={() => { setShowHelpModal(false); setHelpSection(null); }} defaultSection={helpSection} />
+      <TaskConflictModal />
       {ctxMenu && (
         <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />
       )}

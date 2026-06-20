@@ -4,11 +4,12 @@ import { toast } from 'sonner';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSettings } from '../../contexts/SettingsContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { CardsContext } from '../../contexts/CardsContext';
+import { CardsContext, taskSignature } from '../../contexts/CardsContext';
 import { THEME_TOKENS } from '../../themes/themes';
 import '../ThemeSettings.css';
 import {
   VscAccount, VscColorMode, VscEdit, VscSettingsGear, VscDatabase, VscClose, VscCopy,
+  VscQuestion, VscCloud, VscDesktopDownload,
 } from 'react-icons/vsc';
 
 const SQLITE_PATH = '~/Library/Application Support/com.kandoo.desktop/kandoo.db';
@@ -54,6 +55,42 @@ const SHORTCUTS = [
   ]},
 ];
 
+// ── Workspace diff ───────────────────────────────────────────────────────────
+function diffWorkspaces(localBoards = [], cloudBoards = []) {
+  const cloudById = Object.fromEntries(cloudBoards.map(b => [b.id, b]));
+  const localById = Object.fromEntries(localBoards.map(b => [b.id, b]));
+  let cloudOnlyBoards = 0, localOnlyBoards = 0;
+  let cloudOnlyTasks = 0, localOnlyTasks = 0, sharedEditedTasks = 0;
+
+  cloudBoards.forEach(b => {
+    if (!localById[b.id]) {
+      cloudOnlyBoards++;
+      (b.cards || []).forEach(col => { cloudOnlyTasks += Object.keys(col.tasks || {}).length; });
+    }
+  });
+  localBoards.forEach(b => {
+    if (!cloudById[b.id]) {
+      localOnlyBoards++;
+      (b.cards || []).forEach(col => { localOnlyTasks += Object.keys(col.tasks || {}).length; });
+    } else {
+      const cloudBoard = cloudById[b.id];
+      const cloudColByUid = Object.fromEntries((cloudBoard.cards || []).map(c => [c.uid, c]));
+      (b.cards || []).forEach(col => {
+        if ((col.type || 'todo') !== 'todo') return;
+        const cloudCol = cloudColByUid[col.uid];
+        if (!cloudCol) return;
+        const lTasks = col.tasks || {}, cTasks = cloudCol.tasks || {};
+        Object.keys(cTasks).forEach(k => {
+          if (!lTasks[k]) cloudOnlyTasks++;
+          else if (taskSignature(lTasks[k]) !== taskSignature(cTasks[k])) sharedEditedTasks++;
+        });
+        Object.keys(lTasks).forEach(k => { if (!cTasks[k]) localOnlyTasks++; });
+      });
+    }
+  });
+  return { cloudOnlyBoards, localOnlyBoards, cloudOnlyTasks, localOnlyTasks, sharedEditedTasks };
+}
+
 const TABS = [
   { id: 'account', label: 'Account & Sync', icon: <VscAccount /> },
   { id: 'appearance', label: 'Appearance', icon: <VscColorMode /> },
@@ -62,7 +99,7 @@ const TABS = [
   { id: 'data', label: 'Data & About', icon: <VscDatabase /> },
 ];
 
-export default function SettingsModal({ onClose, initialTab = 'appearance', onOpenExportImport, onResetWorkspace, storageKind }) {
+export default function SettingsModal({ onClose, initialTab = 'appearance', onOpenExportImport, onResetWorkspace, storageKind, onOpenHelp }) {
   const [tab, setTab] = useState(initialTab);
   const panelRef = useRef(null);
 
@@ -86,7 +123,7 @@ export default function SettingsModal({ onClose, initialTab = 'appearance', onOp
 
         <div className="settings-content">
           <button className="settings-close" onClick={onClose} aria-label="Close settings"><VscClose /></button>
-          {tab === 'account' && <AccountPanel />}
+          {tab === 'account' && <AccountPanel onOpenHelp={onOpenHelp} />}
           {tab === 'appearance' && <AppearancePanel />}
           {tab === 'editor' && <EditorPanel />}
           {tab === 'behavior' && <BehaviorPanel />}
@@ -104,9 +141,133 @@ export default function SettingsModal({ onClose, initialTab = 'appearance', onOp
   );
 }
 
-function AccountPanel() {
+function ConflictTooltip({ onOpenHelp }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <span
+      style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
+    >
+      <button
+        onFocus={() => setVisible(true)}
+        onBlur={() => setVisible(false)}
+        style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: 16, height: 16, borderRadius: '50%',
+          background: 'var(--theme-bg-hover)',
+          border: '1px solid var(--theme-border)',
+          color: 'var(--theme-text-muted)',
+          fontSize: '0.65rem', fontWeight: 700,
+          cursor: 'default', flexShrink: 0,
+          padding: 0, lineHeight: 1,
+        }}
+        aria-label="What is a sync conflict?"
+        tabIndex={0}
+      >
+        ?
+      </button>
+      {visible && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, zIndex: 9999,
+          paddingTop: 6, // fills the gap so the mouse doesn't leave the span
+        }}>
+          <div style={{
+            width: 260,
+            background: 'var(--theme-bg-modal)',
+            border: '1px solid var(--theme-border)',
+            borderRadius: '0.625rem',
+            boxShadow: '0 8px 28px rgba(0,0,0,0.22)',
+            padding: '0.75rem 0.875rem',
+          }}>
+            <p style={{ margin: '0 0 0.4rem', fontSize: '0.78rem', fontWeight: 600, color: 'var(--theme-text-primary)' }}>
+              What is a sync conflict?
+            </p>
+            <p style={{ margin: '0 0 0.625rem', fontSize: '0.75rem', lineHeight: 1.55, color: 'var(--theme-text-secondary)' }}>
+              This happens when you edit your workspace on two devices while one was offline. Both versions have changes the other doesn't know about.
+            </p>
+            {onOpenHelp && (
+              <button
+                onClick={onOpenHelp}
+                style={{
+                  background: 'none', border: 'none', padding: 0,
+                  fontSize: '0.72rem', fontWeight: 600,
+                  color: 'var(--theme-accent)', cursor: 'pointer',
+                  textDecoration: 'underline', textUnderlineOffset: 2,
+                }}
+              >
+                Learn more →
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </span>
+  );
+}
+
+function DiffSummary({ localBoards, cloudBoards }) {
+  const diff = diffWorkspaces(localBoards, cloudBoards);
+  const rows = [
+    {
+      icon: <VscCloud />,
+      side: 'Cloud',
+      parts: [
+        diff.cloudOnlyTasks   > 0 && `+${diff.cloudOnlyTasks} task${diff.cloudOnlyTasks !== 1 ? 's' : ''}`,
+        diff.cloudOnlyBoards  > 0 && `${diff.cloudOnlyBoards} new board${diff.cloudOnlyBoards !== 1 ? 's' : ''}`,
+      ].filter(Boolean),
+    },
+    {
+      icon: <VscDesktopDownload />,
+      side: 'This device',
+      parts: [
+        diff.localOnlyTasks   > 0 && `+${diff.localOnlyTasks} task${diff.localOnlyTasks !== 1 ? 's' : ''}`,
+        diff.localOnlyBoards  > 0 && `${diff.localOnlyBoards} new board${diff.localOnlyBoards !== 1 ? 's' : ''}`,
+      ].filter(Boolean),
+    },
+  ];
+  const hasEdited = diff.sharedEditedTasks > 0;
+
+  if (rows.every(r => r.parts.length === 0) && !hasEdited) {
+    return (
+      <p style={{ fontSize: '0.78rem', color: 'var(--theme-text-muted)', margin: '0 0 0.75rem' }}>
+        Both versions appear similar — the revision counter diverged but content may be identical.
+      </p>
+    );
+  }
+
+  return (
+    <div style={{
+      background: 'var(--theme-bg-hover)',
+      borderRadius: '0.625rem',
+      padding: '0.625rem 0.875rem',
+      display: 'flex', flexDirection: 'column', gap: '0.4rem',
+      marginBottom: '0.875rem',
+      fontSize: '0.78rem',
+    }}>
+      {rows.map(({ icon, side, parts }) => parts.length > 0 && (
+        <div key={side} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--theme-text-secondary)' }}>
+          <span style={{ color: 'var(--theme-accent)', fontSize: '0.85rem', flexShrink: 0 }}>{icon}</span>
+          <span style={{ fontWeight: 600, minWidth: 84, color: 'var(--theme-text-primary)' }}>{side}</span>
+          <span>{parts.join(' · ')}</span>
+        </div>
+      ))}
+      {hasEdited && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--theme-text-muted)', paddingTop: rows.some(r => r.parts.length > 0) ? '0.2rem' : 0, borderTop: rows.some(r => r.parts.length > 0) ? '1px solid var(--theme-border)' : 'none', marginTop: rows.some(r => r.parts.length > 0) ? '0.2rem' : 0 }}>
+          <span style={{ fontSize: '0.85rem', flexShrink: 0 }}>⚡</span>
+          <span>
+            <strong style={{ color: 'var(--theme-text-primary)' }}>{diff.sharedEditedTasks} task{diff.sharedEditedTasks !== 1 ? 's' : ''}</strong>
+            {' '}edited on both — you'll choose per task if you merge
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AccountPanel({ onOpenHelp }) {
   const { user, isGuest, logout, exitOfflineMode } = useAuth();
-  const { syncState, cloudConflict, resolveSyncConflict } = useContext(CardsContext);
+  const { boards, syncState, cloudConflict, resolveSyncConflict } = useContext(CardsContext);
 
   const resolve = async (strategy) => {
     try { await resolveSyncConflict(strategy); }
@@ -142,16 +303,71 @@ function AccountPanel() {
       </Section>
 
       {cloudConflict && (
-        <Section title="Sync conflict">
-          <Row title="Choose which workspace to keep" desc="Loading cloud replaces this device's current workspace. Uploading this device replaces the cloud revision.">
-            <span style={{ display: 'inline-flex', gap: 6 }}>
-              <button className="settings-btn" onClick={() => resolve('cloud')}>Load cloud</button>
-              <button className="settings-btn settings-btn--danger" onClick={() => resolve('local')}>Upload this device</button>
-            </span>
-          </Row>
+        <Section title={
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+            Sync conflict
+            <ConflictTooltip onOpenHelp={onOpenHelp} />
+          </span>
+        }>
+          <DiffSummary localBoards={boards} cloudBoards={cloudConflict.boards || []} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <ConflictOption
+              label="Load cloud"
+              desc="Replaces everything on this device with the cloud version. Your local changes will be lost."
+              onClick={() => resolve('cloud')}
+            />
+            <ConflictOption
+              label="Upload this device"
+              desc="Overwrites the cloud with this device's version. Cloud-only changes will be lost."
+              onClick={() => resolve('local')}
+              danger
+            />
+            <ConflictOption
+              label="Merge both"
+              desc="Keeps everything from both sides. If the same task was edited on both, you'll pick a version per task."
+              onClick={() => resolve('merge')}
+              primary
+            />
+          </div>
         </Section>
       )}
     </div>
+  );
+}
+
+function ConflictOption({ label, desc, onClick, danger, primary }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+        gap: '0.2rem',
+        padding: '0.625rem 0.875rem',
+        borderRadius: '0.5rem',
+        background: primary
+          ? 'color-mix(in srgb, var(--theme-accent) 10%, var(--theme-bg-card))'
+          : danger
+            ? 'color-mix(in srgb, var(--theme-danger) 8%, var(--theme-bg-card))'
+            : 'var(--theme-bg-card)',
+        border: `1px solid ${primary ? 'var(--theme-accent)' : danger ? 'var(--theme-danger)' : 'var(--theme-border)'}`,
+        cursor: 'pointer',
+        textAlign: 'left',
+        width: '100%',
+        transition: 'opacity 0.15s',
+      }}
+      onMouseEnter={e => e.currentTarget.style.opacity = '0.82'}
+      onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+    >
+      <span style={{
+        fontSize: '0.82rem', fontWeight: 600,
+        color: primary ? 'var(--theme-accent)' : danger ? 'var(--theme-danger)' : 'var(--theme-text-primary)',
+      }}>
+        {label}
+      </span>
+      <span style={{ fontSize: '0.73rem', color: 'var(--theme-text-muted)', lineHeight: 1.45 }}>
+        {desc}
+      </span>
+    </button>
   );
 }
 

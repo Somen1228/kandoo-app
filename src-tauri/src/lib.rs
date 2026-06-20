@@ -1,9 +1,16 @@
 #[cfg(target_os = "macos")]
 use tauri::{
+    image::Image,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, PhysicalPosition, WindowEvent,
 };
+
+// Embedded dock-icon variants — swapped when the window is minimized/restored.
+#[cfg(target_os = "macos")]
+const ICON_AWAKE: &[u8] = include_bytes!("../icons/icon.png");
+#[cfg(target_os = "macos")]
+const ICON_SLEEP: &[u8] = include_bytes!("../icons/icon-sleep.png");
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
@@ -316,6 +323,31 @@ pub fn run() {
             WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
                 api.prevent_close();
                 let _ = window.hide();
+            }
+            // Dock icon: check for minimize after a short delay so the animation
+            // completes before is_minimized() is read (Focused fires before the
+            // window actually lands in the dock).
+            WindowEvent::Focused(false) if window.label() == "main" => {
+                let app = window.app_handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(250));
+                    if let Some(w) = app.get_webview_window("main") {
+                        if w.is_minimized().unwrap_or(false) {
+                            if let Ok(icon) = Image::from_bytes(ICON_SLEEP) {
+                                let _ = w.set_icon(icon);
+                            }
+                        }
+                    }
+                });
+            }
+            // Restore awake icon the moment the window regains focus.
+            WindowEvent::Focused(true) if window.label() == "main" => {
+                let app = window.app_handle().clone();
+                if let Some(w) = app.get_webview_window("main") {
+                    if let Ok(icon) = Image::from_bytes(ICON_AWAKE) {
+                        let _ = w.set_icon(icon);
+                    }
+                }
             }
             _ => {}
         });

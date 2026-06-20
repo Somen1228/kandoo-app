@@ -1,126 +1,303 @@
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import kandooLogo from "../assets/kandoo-head.png";
 import kandooLogoSmiling from "../assets/kandoo-smiling.png";
 
-// Bounce + face-swap loader. Pass `fullscreen` to fill the viewport
-// with the themed background and an optional message below the logo.
-function KandooLoader({ fullscreen = false, message, size = 72 }) {
-  const stage = (
-    <div className="kandoo-loader">
-      <div className="kandoo-loader-stage" style={{ width: size + 24, height: size + 38 }}>
-        <div className="kandoo-loader-bouncer" style={{ width: size, height: size }}>
-          <img src={kandooLogo}        alt="" className="kandoo-loader-face kandoo-loader-face-neutral" draggable={false} />
-          <img src={kandooLogoSmiling} alt="" className="kandoo-loader-face kandoo-loader-face-smile"   draggable={false} />
-        </div>
-        <div className="kandoo-loader-shadow" style={{ width: size * 0.78 }} />
-      </div>
-      {message && (
-        <div
-          className="kandoo-loader-message"
-          style={{ color: 'var(--theme-text-muted)' }}
-        >
-          {message}
-        </div>
-      )}
-      <style>{`
-        .kandoo-loader {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 1rem 0;
-        }
-        .kandoo-loader-stage {
-          position: relative;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: flex-end;
-        }
-        .kandoo-loader-bouncer {
-          position: relative;
-          animation: kandooBounce 1.1s cubic-bezier(0.5, 0, 0.5, 1) infinite;
-          filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.15));
-        }
-        .kandoo-loader-face {
-          position: absolute;
-          inset: 0;
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
-          user-select: none;
-        }
-        .kandoo-loader-face-neutral {
-          animation: kandooFaceNeutral 1.1s steps(1, end) infinite;
-        }
-        .kandoo-loader-face-smile {
-          animation: kandooFaceSmile 1.1s steps(1, end) infinite;
-        }
-        .kandoo-loader-shadow {
-          height: 8px;
-          margin-top: 6px;
-          border-radius: 50%;
-          background: var(--theme-accent, #3b82f6);
-          opacity: 0.35;
-          filter: blur(3px);
-          animation: kandooShadow 1.1s cubic-bezier(0.5, 0, 0.5, 1) infinite;
-        }
-        .kandoo-loader-message {
-          margin-top: 1rem;
-          font-size: 0.875rem;
-          letter-spacing: 0.02em;
-          opacity: 0.85;
-          animation: kandooFadeIn 0.4s ease-out;
-        }
+const RIPPLE_COUNT = 3;
 
-        @keyframes kandooBounce {
-          0%, 100% { transform: translateY(0)     scale(1.02, 0.96); }
-          15%      { transform: translateY(-6px)  scale(1, 1); }
-          50%      { transform: translateY(-34px) scale(0.96, 1.04); }
-          85%      { transform: translateY(-6px)  scale(1, 1); }
-        }
-        @keyframes kandooFaceNeutral {
-          0%, 35%   { opacity: 1; }
-          36%, 64%  { opacity: 0; }
-          65%, 100% { opacity: 1; }
-        }
-        @keyframes kandooFaceSmile {
-          0%, 35%   { opacity: 0; }
-          36%, 64%  { opacity: 1; }
-          65%, 100% { opacity: 0; }
-        }
-        @keyframes kandooShadow {
-          0%, 100% { transform: scaleX(1);   opacity: 0.35; }
-          50%      { transform: scaleX(0.5); opacity: 0.15; }
-        }
-        @keyframes kandooFadeIn {
-          from { opacity: 0; transform: translateY(4px); }
-          to   { opacity: 0.85; transform: translateY(0); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .kandoo-loader-bouncer,
-          .kandoo-loader-face-neutral,
-          .kandoo-loader-face-smile,
-          .kandoo-loader-shadow { animation: none; }
-          .kandoo-loader-face-smile { opacity: 0; }
-        }
-      `}</style>
-    </div>
-  );
-
-  if (!fullscreen) return stage;
-
+function Ripple() {
   return (
-    <div
-      style={{
-        position: 'fixed', inset: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'var(--theme-bg-primary)',
-        zIndex: 1000,
-      }}
-    >
-      {stage}
+    <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+      {Array.from({ length: RIPPLE_COUNT }).map((_, i) => (
+        <motion.div
+          key={i}
+          initial={{ scale: 0.6, opacity: 0.5 }}
+          animate={{ scale: 2.4, opacity: 0 }}
+          transition={{
+            duration: 2.2,
+            delay: i * 0.7,
+            repeat: Infinity,
+            ease: "easeOut",
+          }}
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: "50%",
+            border: "2px solid var(--theme-accent, #3b82f6)",
+          }}
+        />
+      ))}
     </div>
   );
 }
 
-export default KandooLoader;
+function OrbitDot({ angle, radius, delay }) {
+  return (
+    <motion.div
+      animate={{ rotate: 360 }}
+      transition={{ duration: 3.5, repeat: Infinity, ease: "linear", delay }}
+      style={{
+        position: "absolute",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <motion.div
+        animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1.2, 0.8] }}
+        transition={{ duration: 1.8, repeat: Infinity, delay: delay * 0.5, ease: "easeInOut" }}
+        style={{
+          position: "absolute",
+          width: 7,
+          height: 7,
+          borderRadius: "50%",
+          background: "var(--theme-accent, #3b82f6)",
+          transform: `translateX(${radius}px)`,
+          boxShadow: "0 0 6px 2px var(--theme-accent, #3b82f6)",
+        }}
+      />
+    </motion.div>
+  );
+}
+
+function SlothCore({ size }) {
+  const [smiling, setSmiling] = useState(false);
+
+  useEffect(() => {
+    const id = setInterval(() => setSmiling(s => !s), 1100);
+    return () => clearInterval(id);
+  }, []);
+
+  const orbitRadius = size * 0.68;
+
+  return (
+    <motion.div
+      initial={{ scale: 0.5, opacity: 0, y: 20 }}
+      animate={{ scale: 1, opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, ease: [0.34, 1.26, 0.64, 1] }}
+      style={{
+        position: "relative",
+        width: size + orbitRadius * 2,
+        height: size + orbitRadius * 2,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {/* ripple rings — centred on the mascot */}
+      <div
+        style={{
+          position: "absolute",
+          width: size,
+          height: size,
+          borderRadius: "50%",
+          overflow: "visible",
+        }}
+      >
+        <Ripple />
+      </div>
+
+      {/* orbiting dots */}
+      <div
+        style={{
+          position: "absolute",
+          width: size,
+          height: size,
+          borderRadius: "50%",
+        }}
+      >
+        <OrbitDot radius={orbitRadius} delay={0} />
+        <OrbitDot radius={orbitRadius} delay={1.17} />
+        <OrbitDot radius={orbitRadius} delay={2.33} />
+      </div>
+
+      {/* glow blob */}
+      <motion.div
+        animate={{ scale: [1, 1.25, 1], opacity: [0.22, 0.45, 0.22] }}
+        transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
+        style={{
+          position: "absolute",
+          width: size * 0.9,
+          height: size * 0.9,
+          borderRadius: "50%",
+          background: "var(--theme-accent, #3b82f6)",
+          filter: "blur(20px)",
+        }}
+      />
+
+      {/* floating sloth */}
+      <motion.div
+        animate={{ y: [0, -10, 0] }}
+        transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+        style={{ position: "relative", width: size, height: size, zIndex: 1 }}
+      >
+        <AnimatePresence mode="wait">
+          {!smiling ? (
+            <motion.img
+              key="neutral"
+              src={kandooLogo}
+              alt=""
+              draggable={false}
+              initial={{ opacity: 1 }}
+              exit={{ opacity: 0, scale: 0.88, rotate: -6 }}
+              transition={{ duration: 0.18 }}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                userSelect: "none",
+                filter: "drop-shadow(0 6px 18px rgba(0,0,0,0.18))",
+              }}
+            />
+          ) : (
+            <motion.img
+              key="smile"
+              src={kandooLogoSmiling}
+              alt=""
+              draggable={false}
+              initial={{ opacity: 0, scale: 0.88, rotate: 6 }}
+              animate={{ opacity: 1, scale: 1, rotate: 0 }}
+              transition={{ duration: 0.22, ease: [0.34, 1.2, 0.64, 1] }}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                userSelect: "none",
+                filter: "drop-shadow(0 6px 18px rgba(0,0,0,0.18))",
+              }}
+            />
+          )}
+        </AnimatePresence>
+      </motion.div>
+
+      {/* squash shadow */}
+      <motion.div
+        animate={{ scaleX: [1, 0.55, 1], opacity: [0.28, 0.1, 0.28] }}
+        transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+        style={{
+          position: "absolute",
+          bottom: orbitRadius * 0.3,
+          width: size * 0.55,
+          height: 10,
+          borderRadius: "50%",
+          background: "var(--theme-accent, #3b82f6)",
+          filter: "blur(5px)",
+        }}
+      />
+    </motion.div>
+  );
+}
+
+function LoaderContent({ message, size }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "1.5rem",
+        padding: "2rem",
+      }}
+    >
+      <SlothCore size={size} />
+
+      {message && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4, duration: 0.4 }}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "0.625rem",
+          }}
+        >
+          <span
+            style={{
+              fontSize: "0.825rem",
+              color: "var(--theme-text-muted)",
+              letterSpacing: "0.04em",
+            }}
+          >
+            {message}
+          </span>
+
+          {/* pulsing dots */}
+          <div style={{ display: "flex", gap: "5px" }}>
+            {[0, 0.2, 0.4].map((d, i) => (
+              <motion.div
+                key={i}
+                animate={{ opacity: [0.2, 1, 0.2], scale: [0.8, 1.3, 0.8] }}
+                transition={{ duration: 1.0, repeat: Infinity, delay: d, ease: "easeInOut" }}
+                style={{
+                  width: 5,
+                  height: 5,
+                  borderRadius: "50%",
+                  background: "var(--theme-accent, #3b82f6)",
+                }}
+              />
+            ))}
+          </div>
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+export default function KandooLoader({ fullscreen = false, message, size = 80 }) {
+  if (!fullscreen) return <LoaderContent message={message} size={size} />;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "var(--theme-bg-primary)",
+        zIndex: 1000,
+        overflow: "hidden",
+      }}
+    >
+      {/* scanning progress bar */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: "2px",
+          background: "var(--theme-bg-hover)",
+          overflow: "hidden",
+        }}
+      >
+        <motion.div
+          animate={{ x: ["-100%", "120%"] }}
+          transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "45%",
+            background: "linear-gradient(90deg, transparent, var(--theme-accent, #3b82f6), transparent)",
+          }}
+        />
+      </div>
+
+      {/* subtle background radial */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: "radial-gradient(ellipse 55% 55% at 50% 50%, color-mix(in srgb, var(--theme-accent, #3b82f6) 7%, transparent) 0%, transparent 70%)",
+          pointerEvents: "none",
+        }}
+      />
+
+      <LoaderContent message={message} size={size} />
+    </div>
+  );
+}

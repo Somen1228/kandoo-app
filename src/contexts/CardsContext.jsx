@@ -38,6 +38,133 @@ const ensureCardUids = (boards) =>
     cards: (b.cards || []).map(c => c.uid ? c : { ...c, uid: uuidv4() }),
   }));
 
+// ── Workspace merge ───────────────────────────────────────────────────────────
+// Union strategy: boards/columns/tasks only on one side are always kept.
+// Tasks that exist on BOTH sides with different content are surfaced as
+// conflicts for the user to resolve manually (see TaskConflictModal).
+// Note cards keep local content (rich text can't be auto-combined).
+// Items deleted on one side are resurrected (no tombstone tracking).
+
+// Conflict key: "<boardId>:<colUid>:<taskId>" — globally unique.
+export function conflictKey(boardId, colUid, taskId) {
+  return `${boardId}:${colUid}:${taskId}`;
+}
+
+// Normalise optional fields so field-order / undefined-vs-empty differences
+// don't count as conflicts. Only semantically meaningful fields are compared.
+export function taskSignature(t) {
+  return JSON.stringify({
+    value:  t.value  ?? '',
+    done:   t.done   ?? false,
+    due:    t.due    ?? null,
+    images: (t.images ?? []).slice().sort(),
+  });
+}
+
+// Count what each side uniquely contributes so we can summarise auto-merges.
+function buildMergeSummary(localBoards, cloudBoards) {
+  const cloudById = Object.fromEntries(cloudBoards.map(b => [b.id, b]));
+  const localById = Object.fromEntries(localBoards.map(b => [b.id, b]));
+  let addedFromCloud = 0, addedFromLocal = 0;
+
+  cloudBoards.forEach(b => {
+    if (!localById[b.id]) {
+      (b.cards || []).forEach(col => { addedFromCloud += Object.keys(col.tasks || {}).length; });
+    } else {
+      const localBoard = localById[b.id];
+      const localColByUid = Object.fromEntries((localBoard.cards || []).map(c => [c.uid, c]));
+      (b.cards || []).forEach(col => {
+        if ((col.type || 'todo') !== 'todo') return;
+        const lCol = localColByUid[col.uid];
+        const lTasks = lCol?.tasks || {};
+        Object.keys(col.tasks || {}).forEach(k => { if (!lTasks[k]) addedFromCloud++; });
+      });
+    }
+  });
+
+  localBoards.forEach(b => {
+    if (!cloudById[b.id]) {
+      (b.cards || []).forEach(col => { addedFromLocal += Object.keys(col.tasks || {}).length; });
+    } else {
+      const cloudBoard = cloudById[b.id];
+      const cloudColByUid = Object.fromEntries((cloudBoard.cards || []).map(c => [c.uid, c]));
+      (b.cards || []).forEach(col => {
+        if ((col.type || 'todo') !== 'todo') return;
+        const cCol = cloudColByUid[col.uid];
+        const cTasks = cCol?.tasks || {};
+        Object.keys(col.tasks || {}).forEach(k => { if (!cTasks[k]) addedFromLocal++; });
+      });
+    }
+  });
+
+  return { addedFromCloud, addedFromLocal };
+}
+
+// Returns { boards, conflicts[] } where conflicts are tasks needing user input.
+// Pass choices = { [conflictKey]: 'local' | 'cloud' } to resolve them.
+export function mergeWorkspaces(localBoards, cloudBoards, choices = {}) {
+  const conflicts = [];
+  const cloudById = Object.fromEntries(cloudBoards.map(b => [b.id, b]));
+  const localIds  = new Set(localBoards.map(b => b.id));
+
+  const boards = [
+    ...localBoards.map(localBoard => {
+      const cloudBoard = cloudById[localBoard.id];
+      if (!cloudBoard) return localBoard;
+
+      const cloudColByUid = Object.fromEntries((cloudBoard.cards || []).map(c => [c.uid, c]));
+      const localUids = new Set((localBoard.cards || []).map(c => c.uid));
+
+      const mergedCards = [
+        ...(localBoard.cards || []).map(col => {
+          const cloudCol = cloudColByUid[col.uid];
+          if (!cloudCol) return col;
+          if ((col.type || 'todo') !== 'todo') return col; // notes: keep local
+
+          const localTasks = col.tasks || {};
+          const cloudTasks = cloudCol.tasks || {};
+          const merged = { ...cloudTasks }; // start with cloud (adds cloud-only tasks)
+
+          for (const taskId of Object.keys(localTasks)) {
+            const ck = conflictKey(localBoard.id, col.uid, taskId);
+            if (cloudTasks[taskId] && taskSignature(localTasks[taskId]) !== taskSignature(cloudTasks[taskId])) {
+              // Task edited on both sides — check if user already made a choice
+              if (choices[ck] === 'cloud') {
+                merged[taskId] = cloudTasks[taskId];
+              } else if (choices[ck] === 'local') {
+                merged[taskId] = localTasks[taskId];
+              } else {
+                // No choice yet — record conflict, placeholder = local
+                conflicts.push({
+                  key: ck,
+                  boardId: localBoard.id,
+                  boardTitle: localBoard.title,
+                  colUid: col.uid,
+                  colTitle: col.title,
+                  taskId,
+                  local: localTasks[taskId],
+                  cloud: cloudTasks[taskId],
+                });
+                merged[taskId] = localTasks[taskId]; // placeholder
+              }
+            } else {
+              merged[taskId] = localTasks[taskId]; // local-only or identical
+            }
+          }
+
+          return { ...col, tasks: merged };
+        }),
+        ...(cloudBoard.cards || []).filter(col => !localUids.has(col.uid)),
+      ];
+
+      return { ...localBoard, cards: mergedCards };
+    }),
+    ...cloudBoards.filter(b => !localIds.has(b.id)),
+  ];
+
+  return { boards, conflicts };
+}
+
 const SAVE_DEBOUNCE_MS    = 500;
 const HISTORY_LIMIT       = 50;
 const HISTORY_DEBOUNCE_MS = 400;
@@ -53,6 +180,7 @@ export const CardsProvider = ({ children }) => {
   const [lastSavedAt,   setLastSavedAt]  = useState(null);
   const [syncState,     setSyncState]    = useState('local');
   const [cloudConflict, setCloudConflict] = useState(null);
+  const [pendingMerge,  setPendingMerge] = useState(null); // {localBoards, cloudBoards, conflicts, revision}
   const [history,       setHistory]      = useState({ past: [], future: [] });
 
   const saveTimeoutRef      = useRef(null);
@@ -364,12 +492,70 @@ export const CardsProvider = ({ children }) => {
         toast.error('Could not upload local workspace. Try again.');
       }
     }
+
+    if (strategy === 'merge') {
+      const cloudBoards = ensureCardUids(conflict.boards || []);
+      const { boards: mergedBoards, conflicts } = mergeWorkspaces(boardsRef.current, cloudBoards);
+      if (conflicts.length > 0) {
+        // Pause — surface per-task conflicts for the user to resolve
+        setPendingMerge({ localBoards: boardsRef.current, cloudBoards, conflicts, revision: conflict.revision });
+        return;
+      }
+      // No real content conflicts — compute what changed so we can tell the user
+      const autoMergeSummary = buildMergeSummary(boardsRef.current, cloudBoards);
+      await applyMerge(ensureCardUids(mergedBoards), conflict.revision, autoMergeSummary);
+    }
+  }, [storageScope, userUid]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const cancelMerge = useCallback(() => setPendingMerge(null), []);
+
+  // Called by TaskConflictModal once the user has chosen local/cloud per task
+  const resolveTaskConflicts = useCallback(async (choices) => {
+    if (!pendingMerge || !userUid) return;
+    const { localBoards, cloudBoards, revision } = pendingMerge;
+    const { boards: finalBoards } = mergeWorkspaces(localBoards, cloudBoards, choices);
+    setPendingMerge(null);
+    await applyMerge(ensureCardUids(finalBoards), revision);
+  }, [pendingMerge, userUid]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const applyMerge = useCallback(async (merged, revision, summary = null) => {
+    setSyncState('syncing');
+    try {
+      const { workspace: saved } = await saveWorkspace(userUid, merged, revision, true);
+      cloudRevisionRef.current = saved.revision;
+      localRevisionRef.current = saved.revision;
+      cloudConflictRef.current = null;
+      setCloudConflict(null);
+      skipNextSaveRef.current = true;
+      setBoardsRaw(merged);
+      await saveBoards(merged, storageScope);
+      setSyncState('synced');
+
+      if (summary) {
+        const { addedFromCloud, addedFromLocal } = summary;
+        if (addedFromCloud === 0 && addedFromLocal === 0) {
+          toast.success('Workspaces merged — both sides were already in sync, no changes needed');
+        } else {
+          const parts = [];
+          if (addedFromCloud > 0) parts.push(`${addedFromCloud} task${addedFromCloud !== 1 ? 's' : ''} from cloud`);
+          if (addedFromLocal > 0) parts.push(`${addedFromLocal} task${addedFromLocal !== 1 ? 's' : ''} kept from this device`);
+          toast.success(`Merged automatically — ${parts.join(', ')} · no conflicting edits found`);
+        }
+      } else {
+        toast.success('Workspaces merged');
+      }
+    } catch (err) {
+      console.error('[Kandoo] Merge failed:', err);
+      setSyncState('offline');
+      toast.error('Could not save merged workspace. Try again.');
+    }
   }, [storageScope, userUid]);
 
   return (
     <CardsContext.Provider value={{
       boards, setBoards, defaultCards, isLoaded,
       saveState, lastSavedAt, storageKind, syncState, cloudConflict, resolveSyncConflict,
+      pendingMerge, resolveTaskConflicts, cancelMerge,
       undo, redo,
       canUndo: history.past.length > 0,
       canRedo: history.future.length > 0,
