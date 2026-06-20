@@ -11,6 +11,7 @@ import {
   VscAccount, VscColorMode, VscEdit, VscSettingsGear, VscDatabase, VscClose, VscCopy,
   VscQuestion, VscCloud, VscDesktopDownload,
 } from 'react-icons/vsc';
+import AvatarCropper from '../AvatarCropper';
 
 const SQLITE_PATH = '~/Library/Application Support/com.kandoo.desktop/kandoo.db';
 const APP_VERSION = '1.0.0';
@@ -266,8 +267,79 @@ function DiffSummary({ localBoards, cloudBoards }) {
 }
 
 function AccountPanel({ onOpenHelp }) {
-  const { user, isGuest, logout, exitOfflineMode } = useAuth();
+  const { user, isGuest, logout, exitOfflineMode, updateDisplayName, updatePhotoURL, changeEmail, changePassword, deleteAccount } = useAuth();
   const { boards, syncState, cloudConflict, resolveSyncConflict } = useContext(CardsContext);
+  const [editingName, setEditingName]   = useState(false);
+  const [newName, setNewName]           = useState('');
+  const [showEmailForm, setShowEmailForm]   = useState(false);
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [formData, setFormData] = useState({ currentPassword: '', newEmail: '', newPassword: '', confirmPassword: '', deletePassword: '' });
+  const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [cropSrc, setCropSrc] = useState(null);
+  const photoInputRef = useRef(null);
+
+  const isEmailUser   = user?.authProvider === 'password';
+  const isGoogleUser  = user?.authProvider === 'google.com';
+
+  const runAction = async (fn, onSuccess) => {
+    setSaving(true);
+    try { await fn(); onSuccess?.(); }
+    catch (err) { toast.error(err.message?.replace('Firebase: ', '').replace(/\s*\(auth\/[\w-]+\)\.?\s*$/, '') || 'Action failed'); }
+    finally { setSaving(false); }
+  };
+
+  const saveName = () => runAction(
+    () => updateDisplayName(newName),
+    () => { setEditingName(false); toast.success('Display name updated'); }
+  );
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Show cropper instead of uploading directly
+    const reader = new FileReader();
+    reader.onload = () => setCropSrc(reader.result);
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleCropDone = async (croppedFile) => {
+    setCropSrc(null);
+    setUploadingPhoto(true);
+    const tid = toast.loading('Uploading photo…');
+    try {
+      const { uploadImage } = await import('../../services/imageStorage');
+      const url = await uploadImage(croppedFile);
+      await updatePhotoURL(url);
+      toast.dismiss(tid);
+      toast.success('Profile photo updated');
+    } catch (err) {
+      toast.dismiss(tid);
+      toast.error(err.message || 'Upload failed');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const saveEmail = () => runAction(
+    () => changeEmail(formData.newEmail, formData.currentPassword),
+    () => { setShowEmailForm(false); setFormData(f => ({ ...f, newEmail: '', currentPassword: '' })); toast.success('Verification sent to new email — click the link to confirm.'); }
+  );
+
+  const savePassword = () => {
+    if (formData.newPassword !== formData.confirmPassword) { toast.error('Passwords do not match'); return; }
+    runAction(
+      () => changePassword(formData.currentPassword, formData.newPassword),
+      () => { setShowPasswordForm(false); setFormData(f => ({ ...f, currentPassword: '', newPassword: '', confirmPassword: '' })); toast.success('Password updated'); }
+    );
+  };
+
+  const confirmDelete = () => runAction(
+    () => deleteAccount(isEmailUser ? formData.deletePassword : undefined),
+    () => toast.success('Account deleted')
+  );
 
   const resolve = async (strategy) => {
     try { await resolveSyncConflict(strategy); }
@@ -280,14 +352,77 @@ function AccountPanel({ onOpenHelp }) {
       <Section title="Account">
         {user ? (
           <>
-            <Row title={user.displayName || 'Kandoo user'} desc={user.email || user.phone || 'Signed in'}>
-              <button className="settings-btn" onClick={logout}>Sign out</button>
-            </Row>
+            {/* Profile row with avatar */}
+            <div className="settings-row" style={{ alignItems: 'flex-start', gap: 14 }}>
+              {/* Avatar */}
+              <div style={{ flexShrink: 0 }}>
+                <input ref={photoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoChange} />
+                <button
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={uploadingPhoto}
+                  title="Change profile photo"
+                  style={{
+                    position: 'relative', width: 52, height: 52, borderRadius: '50%',
+                    border: '2px solid var(--theme-border)', overflow: 'hidden',
+                    background: 'var(--theme-bg-input)', cursor: 'pointer', padding: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                  {user.photoUrl
+                    ? <img src={user.photoUrl} alt="" referrerPolicy="no-referrer" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <span style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--accent)' }}>
+                        {(user.displayName || user.email || '?')[0].toUpperCase()}
+                      </span>
+                  }
+                  <span style={{
+                    position: 'absolute', inset: 0, borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.38)', opacity: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'white', fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.02em',
+                    transition: 'opacity 0.15s',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                  onMouseLeave={e => e.currentTarget.style.opacity = '0'}>
+                    {uploadingPhoto ? '…' : 'Edit'}
+                  </span>
+                </button>
+              </div>
+
+              {/* Name / email */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {editingName ? (
+                  <>
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
+                      <input
+                        className="settings-inline-input"
+                        value={newName} onChange={e => setNewName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditingName(false); }}
+                        autoFocus style={{ flex: 1 }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="settings-btn settings-btn--primary" onClick={saveName} disabled={saving}>Save</button>
+                      <button className="settings-btn" onClick={() => setEditingName(false)}>Cancel</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="settings-row__name" style={{ marginBottom: 2 }}>{user.displayName || 'Kandoo user'}</div>
+                    <div className="settings-row__desc" style={{ marginBottom: 8 }}>{user.email || user.phone || 'Signed in'}</div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="settings-btn" onClick={() => { setNewName(user.displayName || ''); setEditingName(true); }}>Edit name</button>
+                      <button className="settings-btn" onClick={logout}>Sign out</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
             <Row title="Cloud sync" desc={
-                syncState === 'synced'     ? 'Workspace is up to date across all devices.' :
-                syncState === 'syncing'    ? 'Saving changes to the cloud…' :
-                syncState === 'conflict'   ? 'Another device saved a newer version.' :
-                syncState === 'offline'    ? 'Firestore unreachable. Changes are saved locally.' :
+                syncState === 'synced'   ? 'Workspace is up to date across all devices.' :
+                syncState === 'syncing'  ? 'Saving changes to the cloud…' :
+                syncState === 'conflict' ? 'Another device saved a newer version.' :
+                syncState === 'offline'  ? 'Firestore unreachable. Changes are saved locally.' :
                 'Connecting to Firestore…'
               }>
               <span className="mac-chip" data-tone={syncState === 'conflict' || syncState === 'offline' ? 'overdue' : syncState === 'synced' ? 'today' : undefined}>
@@ -301,6 +436,81 @@ function AccountPanel({ onOpenHelp }) {
           </Row>
         )}
       </Section>
+
+      {/* Email/password management — only for email users */}
+      {user && isEmailUser && (
+        <Section title="Security">
+          <Row title="Change email" desc={showEmailForm ? '' : `Current: ${user.email}`}>
+            {!showEmailForm ? (
+              <button className="settings-btn" onClick={() => setShowEmailForm(true)}>Change</button>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', marginTop: 8 }}>
+                <input className="settings-inline-input" type="password" placeholder="Current password"
+                  value={formData.currentPassword} onChange={e => setFormData(f => ({ ...f, currentPassword: e.target.value }))} />
+                <input className="settings-inline-input" type="email" placeholder="New email address"
+                  value={formData.newEmail} onChange={e => setFormData(f => ({ ...f, newEmail: e.target.value }))} />
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="settings-btn settings-btn--primary" onClick={saveEmail} disabled={saving}>Send verification</button>
+                  <button className="settings-btn" onClick={() => setShowEmailForm(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </Row>
+          <Row title="Change password" desc={showPasswordForm ? '' : 'Update your account password'}>
+            {!showPasswordForm ? (
+              <button className="settings-btn" onClick={() => setShowPasswordForm(true)}>Change</button>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', marginTop: 8 }}>
+                <input className="settings-inline-input" type="password" placeholder="Current password"
+                  value={formData.currentPassword} onChange={e => setFormData(f => ({ ...f, currentPassword: e.target.value }))} />
+                <input className="settings-inline-input" type="password" placeholder="New password (min 6 chars)"
+                  value={formData.newPassword} onChange={e => setFormData(f => ({ ...f, newPassword: e.target.value }))} />
+                <input className="settings-inline-input" type="password" placeholder="Confirm new password"
+                  value={formData.confirmPassword} onChange={e => setFormData(f => ({ ...f, confirmPassword: e.target.value }))} />
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="settings-btn settings-btn--primary" onClick={savePassword} disabled={saving}>Update password</button>
+                  <button className="settings-btn" onClick={() => setShowPasswordForm(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </Row>
+        </Section>
+      )}
+
+      {/* Account deletion */}
+      {user && (
+        <Section title="Danger zone">
+          {!showDeleteConfirm ? (
+            <Row title="Delete account" desc="Permanently removes your account and all cloud data.">
+              <button className="settings-btn" style={{ color: 'var(--theme-danger)', borderColor: 'var(--theme-danger)' }}
+                onClick={() => setShowDeleteConfirm(true)}>Delete account</button>
+            </Row>
+          ) : (
+            <div style={{ padding: '12px', borderRadius: 8, border: '1px solid var(--theme-danger)', background: 'var(--theme-danger-bg)' }}>
+              <p style={{ margin: '0 0 10px', fontSize: '0.8rem', color: 'var(--theme-danger)', fontWeight: 600 }}>
+                This cannot be undone. All your cloud data will be deleted.
+              </p>
+              {isEmailUser && (
+                <input className="settings-inline-input" type="password" placeholder="Enter your password to confirm"
+                  style={{ marginBottom: 8 }}
+                  value={formData.deletePassword} onChange={e => setFormData(f => ({ ...f, deletePassword: e.target.value }))} />
+              )}
+              {isGoogleUser && (
+                <p style={{ margin: '0 0 8px', fontSize: '0.75rem', color: 'var(--theme-text-muted)' }}>
+                  You'll be asked to sign in with Google to confirm.
+                </p>
+              )}
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="settings-btn" style={{ background: 'var(--theme-danger)', color: 'white', border: 'none' }}
+                  onClick={confirmDelete} disabled={saving}>
+                  {saving ? 'Deleting…' : 'Yes, delete my account'}
+                </button>
+                <button className="settings-btn" onClick={() => { setShowDeleteConfirm(false); setFormData(f => ({ ...f, deletePassword: '' })); }}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </Section>
+      )}
 
       {cloudConflict && (
         <Section title={
@@ -330,6 +540,13 @@ function AccountPanel({ onOpenHelp }) {
             />
           </div>
         </Section>
+      )}
+      {cropSrc && (
+        <AvatarCropper
+          imageSrc={cropSrc}
+          onDone={handleCropDone}
+          onCancel={() => setCropSrc(null)}
+        />
       )}
     </div>
   );

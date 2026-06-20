@@ -15,13 +15,18 @@ const GoogleIcon = () => (
 );
 
 const FRIENDLY_ERRORS = {
-  'auth/invalid-email': 'Enter a valid email address.',
-  'auth/invalid-credential': 'Email or password is incorrect.',
-  'auth/email-already-in-use': 'An account already exists with this email.',
-  'auth/weak-password': 'Password must be at least six characters.',
-  'auth/network-request-failed': 'Network error. Check your connection and try again.',
-  'auth/popup-closed-by-user': 'The sign-in window was closed.',
-  'auth/unauthorized-domain': 'This domain is not authorized in Firebase.',
+  'auth/invalid-email':                        'Enter a valid email address.',
+  'auth/invalid-credential':                   'Email or password is incorrect.',
+  'auth/email-already-in-use':                 'An account already exists with this email.',
+  'auth/weak-password':                        'Password must be at least six characters.',
+  'auth/network-request-failed':               'Network error. Check your connection and try again.',
+  'auth/popup-closed-by-user':                 'The sign-in window was closed.',
+  'auth/unauthorized-domain':                  'This domain is not authorized in Firebase.',
+  'auth/account-exists-with-different-credential':
+    'This email is already linked to a Google account. Sign in with Google instead.',
+  'auth/wrong-password':                       'Incorrect password.',
+  'auth/user-not-found':                       'No account found with this email.',
+  'auth/too-many-requests':                    'Too many attempts. Try again later or reset your password.',
 };
 
 function friendlyError(message) {
@@ -29,12 +34,62 @@ function friendlyError(message) {
   return FRIENDLY_ERRORS[code] || message?.replace('Firebase: ', '').replace(/\s*\(auth\/[\w-]+\)\.?$/, '') || '';
 }
 
+// ── Forgot password sub-screen ────────────────────────────────────────────────
+function ForgotPassword({ onBack }) {
+  const { forgotPassword, error, clearError } = useAuth();
+  const [email, setEmail]       = useState('');
+  const [sent, setSent]         = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    clearError();
+    try {
+      await forgotPassword(email);
+      setSent(true);
+    } catch { /* error shown via authState.error */ }
+    finally { setSubmitting(false); }
+  };
+
+  if (sent) return (
+    <div style={{ textAlign: 'center' }}>
+      <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📬</div>
+      <p style={{ color: 'var(--theme-text-secondary)', fontSize: '0.88rem', lineHeight: 1.5 }}>
+        Reset link sent to <strong>{email}</strong>. Check your inbox and follow the link.
+      </p>
+      <button type="button" className="login-switch" style={{ marginTop: 18 }} onClick={onBack}>
+        ← Back to sign in
+      </button>
+    </div>
+  );
+
+  return (
+    <form onSubmit={submit} className="login-form">
+      <p style={{ margin: '0 0 4px', color: 'var(--theme-text-secondary)', fontSize: '0.84rem' }}>
+        Enter your email and we'll send a reset link.
+      </p>
+      {error && <div className="login-alert">{friendlyError(error)}</div>}
+      <label>Email
+        <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email" autoFocus />
+      </label>
+      <button className="login-primary" disabled={submitting}>
+        {submitting ? 'Sending…' : 'Send reset link'}
+      </button>
+      <button type="button" className="login-switch" onClick={onBack}>← Back to sign in</button>
+    </form>
+  );
+}
+
+// ── Main login page ───────────────────────────────────────────────────────────
 export default function Login() {
   const authState = useAuth();
-  const [tab, setTab] = useState(() => authState.supportsGoogle ? 'google' : 'email');
+  const [tab, setTab]           = useState(() => authState.supportsGoogle ? 'google' : 'email');
   const [isSignUp, setIsSignUp] = useState(false);
+  const [forgotPw, setForgotPw] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [form, setForm] = useState({ displayName: '', email: '', password: '' });
+  const [form, setForm]         = useState({ displayName: '', email: '', password: '' });
   const [submitting, setSubmitting] = useState(false);
 
   if (authState.user || authState.isGuest) return <Navigate to="/" replace />;
@@ -53,6 +108,8 @@ export default function Login() {
       : authState.signInWithEmail(form.email, form.password, rememberMe));
   };
 
+  const switchTab = (t) => { setTab(t); setForgotPw(false); authState.clearError(); };
+
   return (
     <main className="login-page">
       <div className="login-drag-region" data-tauri-drag-region />
@@ -65,43 +122,72 @@ export default function Login() {
         </div>
 
         {!authState.firebaseConfigured && (
-          <div className="login-alert">Cloud login is not configured yet. Add the Firebase variables from <code>.env.example</code>.</div>
+          <div className="login-alert">Cloud login is not configured yet.</div>
         )}
         {authState.supportsGoogle && !authState.googleConfigured && (
-          <div className="login-alert">Desktop Google login needs <code>VITE_GOOGLE_DESKTOP_CLIENT_ID</code>. Email login remains available.</div>
+          <div className="login-alert">Desktop Google login needs <code>VITE_GOOGLE_DESKTOP_CLIENT_ID</code>.</div>
         )}
-        {authState.error && <div className="login-alert">{friendlyError(authState.error)}</div>}
+        {authState.error && !forgotPw && <div className="login-alert">{friendlyError(authState.error)}</div>}
 
         {authState.supportsGoogle && (
           <div className="login-tabs" role="tablist">
-            <button className={tab === 'google' ? 'is-active' : ''} onClick={() => { setTab('google'); authState.clearError(); }}>Google</button>
-            <button className={tab === 'email' ? 'is-active' : ''} onClick={() => { setTab('email'); authState.clearError(); }}>Email</button>
+            <button className={tab === 'google' ? 'is-active' : ''} onClick={() => switchTab('google')}>Google</button>
+            <button className={tab === 'email'  ? 'is-active' : ''} onClick={() => switchTab('email')}>Email</button>
           </div>
         )}
 
         {tab === 'google' && authState.supportsGoogle ? (
-          <button className="login-google" disabled={submitting || !authState.firebaseConfigured || !authState.googleConfigured}
+          <button className="login-google"
+            disabled={submitting || !authState.firebaseConfigured || !authState.googleConfigured}
             onClick={() => run(() => authState.signInWithGoogle(rememberMe))}>
             <GoogleIcon /> Continue with Google
           </button>
+        ) : forgotPw ? (
+          <ForgotPassword onBack={() => { setForgotPw(false); authState.clearError(); }} />
         ) : (
           <form className="login-form" onSubmit={submitEmail}>
             {isSignUp && (
-              <label>Name<input value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} autoComplete="name" /></label>
+              <label>Name
+                <input value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })}
+                  autoComplete="name" placeholder="How should we call you?" />
+              </label>
             )}
-            <label>Email<input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} autoComplete="email" /></label>
-            <label>Password<input type="password" required minLength={6} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete={isSignUp ? 'new-password' : 'current-password'} /></label>
-            <button className="login-primary" disabled={submitting || !authState.firebaseConfigured}>{isSignUp ? 'Create account' : 'Sign in'}</button>
-            <button type="button" className="login-switch" onClick={() => { setIsSignUp((value) => !value); authState.clearError(); }}>
+            <label>Email
+              <input type="email" required value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })} autoComplete="email" />
+            </label>
+            <label>Password
+              <input type="password" required minLength={6} value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                autoComplete={isSignUp ? 'new-password' : 'current-password'} />
+            </label>
+            <button className="login-primary" disabled={submitting || !authState.firebaseConfigured}>
+              {isSignUp ? 'Create account' : 'Sign in'}
+            </button>
+            {!isSignUp && (
+              <button type="button" className="login-switch"
+                onClick={() => { setForgotPw(true); authState.clearError(); }}>
+                Forgot password?
+              </button>
+            )}
+            <button type="button" className="login-switch"
+              onClick={() => { setIsSignUp((v) => !v); authState.clearError(); }}>
               {isSignUp ? 'Already have an account? Sign in' : 'New to Kandoo? Create an account'}
             </button>
           </form>
         )}
 
-        <label className="login-remember"><input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} /> Remember me</label>
-        <div className="login-divider"><span>or</span></div>
-        <button className="login-offline" onClick={authState.continueOffline}>Continue offline on this device</button>
-        <p className="login-footnote">Offline work stays local. Sign in to back it up and use it on other devices.</p>
+        {!forgotPw && (
+          <>
+            <label className="login-remember">
+              <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
+              Remember me
+            </label>
+            <div className="login-divider"><span>or</span></div>
+            <button className="login-offline" onClick={authState.continueOffline}>Continue offline on this device</button>
+            <p className="login-footnote">Offline work stays local. Sign in to back it up and use it on other devices.</p>
+          </>
+        )}
       </section>
     </main>
   );

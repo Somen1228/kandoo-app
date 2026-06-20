@@ -29,6 +29,7 @@ import ContextMenu from "../components/ContextMenu";
 import ExportImportModal from "../components/Board/ExportImportModal";
 import HelpModal from "../components/HelpModal";
 import TaskConflictModal from "../components/Board/TaskConflictModal";
+import OnboardingTour from "../components/OnboardingTour";
 
 const SIDEBAR_MIN = 210;
 const SIDEBAR_MAX = 360;
@@ -46,7 +47,7 @@ function Board() {
     boards, setBoards, defaultCards, isLoaded, undo, redo,
     saveState, lastSavedAt, storageKind, syncState,
   } = useContext(CardsContext);
-  const { user, logout, exitOfflineMode } = useAuth();
+  const { user, isGuest, logout, exitOfflineMode } = useAuth();
   const { currentThemeId, allThemes, setTheme } = useTheme();
   const isDesktopApp = isTauri();
   const [activeBoard, setActiveBoard] = useState(boards[0]?.id || null);
@@ -707,6 +708,9 @@ function Board() {
           )}
         </header>
 
+        {/* Guest upgrade nudge */}
+        {isGuest && <GuestUpgradeBanner boards={boards} onSignIn={exitOfflineMode} />}
+
         {/* Board content */}
         {!isLoaded ? (
           <div className="mac-board-scroll">
@@ -774,9 +778,63 @@ function Board() {
       />
       <HelpModal isOpen={showHelpModal} onClose={() => { setShowHelpModal(false); setHelpSection(null); }} defaultSection={helpSection} />
       <TaskConflictModal />
+      <OnboardingTour />
       {ctxMenu && (
         <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />
       )}
+    </div>
+  );
+}
+
+const GUEST_NUDGE_THRESHOLD = 5;
+const GUEST_NUDGE_KEY = 'kandoo-guest-nudge-dismissed';
+
+function GuestUpgradeBanner({ boards, onSignIn }) {
+  const [dismissed, setDismissed] = useState(
+    () => localStorage.getItem(GUEST_NUDGE_KEY) === '1'
+  );
+
+  const totalTasks = useMemo(() => {
+    let n = 0;
+    boards.forEach(b => b.cards?.forEach(c => { if ((c.type || 'todo') === 'todo') n += Object.keys(c.tasks || {}).length; }));
+    return n;
+  }, [boards]);
+
+  if (dismissed || totalTasks < GUEST_NUDGE_THRESHOLD) return null;
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+      padding: '9px 16px',
+      background: 'color-mix(in srgb, var(--accent) 10%, var(--theme-bg-card))',
+      borderBottom: '1px solid color-mix(in srgb, var(--accent) 25%, var(--theme-border))',
+      fontSize: '0.78rem', color: 'var(--theme-text-secondary)',
+    }}>
+      <span>
+        <strong style={{ color: 'var(--theme-text-primary)' }}>You have {totalTasks} tasks</strong>
+        {' '}— sign in to back them up and access them from any device.
+      </span>
+      <span style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+        <button
+          onClick={onSignIn}
+          style={{
+            padding: '4px 12px', borderRadius: 6, border: 'none',
+            background: 'var(--accent)', color: 'white',
+            fontWeight: 600, fontSize: '0.76rem', cursor: 'pointer',
+          }}>
+          Sign in
+        </button>
+        <button
+          onClick={() => { localStorage.setItem(GUEST_NUDGE_KEY, '1'); setDismissed(true); }}
+          style={{
+            padding: '4px 8px', borderRadius: 6,
+            border: '1px solid var(--theme-border)',
+            background: 'transparent', color: 'var(--theme-text-muted)',
+            fontSize: '0.76rem', cursor: 'pointer',
+          }}>
+          Dismiss
+        </button>
+      </span>
     </div>
   );
 }

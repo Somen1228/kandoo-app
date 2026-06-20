@@ -2016,6 +2016,12 @@ html.reduce-motion *::after {
 .settings-btn--danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border-subtle)); }
 .settings-btn--danger:hover { background: var(--theme-danger-bg); color: var(--danger); }
 .settings-actions { display: flex; gap: 8px; margin-top: 10px; }
+.settings-inline-input {
+  width: 100%; padding: 7px 10px; border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); background: var(--bg-input); color: var(--text-primary);
+  font: inherit; font-size: 0.82rem; outline: none; box-sizing: border-box;
+}
+.settings-inline-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 
 /* Shortcuts list */
 .settings-shortcuts { display: flex; flex-direction: column; gap: 16px; }

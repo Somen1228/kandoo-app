@@ -1,19 +1,30 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import {
+  EmailAuthProvider,
   GoogleAuthProvider,
   browserLocalPersistence,
   browserSessionPersistence,
   createUserWithEmailAndPassword,
+  deleteUser,
   onAuthStateChanged,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
+  reload,
+  sendEmailVerification,
+  sendPasswordResetEmail,
   setPersistence,
   signInWithCredential,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  updatePassword,
   updateProfile,
+  verifyBeforeUpdateEmail,
 } from 'firebase/auth';
+import { doc, deleteDoc } from 'firebase/firestore';
 import { auth, firebaseConfigured } from '../config/firebase';
+import { db } from '../config/firestore';
 
 const AuthContext = createContext(null);
 const GUEST_KEY = 'kandoo-offline-mode';
@@ -94,6 +105,7 @@ export function AuthProvider({ children }) {
       await applyPersistence(rememberMe);
       const result = await createUserWithEmailAndPassword(auth, email, password);
       if (displayName?.trim()) await updateProfile(result.user, { displayName: displayName.trim() });
+      await sendEmailVerification(result.user);
       return result.user;
     } catch (authError) {
       setError(authError.message);
@@ -122,6 +134,101 @@ export function AuthProvider({ children }) {
         return (await signInWithCredential(auth, credential)).user;
       }
       return (await signInWithPopup(auth, new GoogleAuthProvider())).user;
+    } catch (authError) {
+      setError(authError.message);
+      throw authError;
+    }
+  };
+
+  const sendVerificationEmail = async () => {
+    if (!auth?.currentUser) return;
+    await sendEmailVerification(auth.currentUser);
+  };
+
+  const reloadUser = async () => {
+    if (!auth?.currentUser) return false;
+    await reload(auth.currentUser);
+    const verified = auth.currentUser.emailVerified;
+    if (verified) setUser(firebaseProfile(auth.currentUser));
+    return verified;
+  };
+
+  const forgotPassword = async (email) => {
+    requireAuth();
+    setError(null);
+    try {
+      await sendPasswordResetEmail(auth, email);
+    } catch (authError) {
+      setError(authError.message);
+      throw authError;
+    }
+  };
+
+  const updateDisplayName = async (name) => {
+    if (!auth?.currentUser) return;
+    await updateProfile(auth.currentUser, { displayName: name.trim() });
+    setUser(firebaseProfile(auth.currentUser));
+  };
+
+  const updatePhotoURL = async (url) => {
+    if (!auth?.currentUser) return;
+    await updateProfile(auth.currentUser, { photoURL: url });
+    setUser(firebaseProfile(auth.currentUser));
+  };
+
+  const reauthenticate = async (password) => {
+    const currentUser = auth?.currentUser;
+    if (!currentUser) throw new Error('Not signed in');
+    const provider = currentUser.providerData[0]?.providerId;
+    if (provider === 'google.com') {
+      if (desktopNativeApp) {
+        const tokens = await invoke('google_oauth_sign_in', {
+          clientId: DESKTOP_GOOGLE_CLIENT_ID,
+          clientSecret: DESKTOP_GOOGLE_CLIENT_SECRET || null,
+        });
+        const credential = GoogleAuthProvider.credential(tokens.idToken, tokens.accessToken);
+        await reauthenticateWithCredential(currentUser, credential);
+      } else {
+        await reauthenticateWithPopup(currentUser, new GoogleAuthProvider());
+      }
+    } else {
+      const credential = EmailAuthProvider.credential(currentUser.email, password);
+      await reauthenticateWithCredential(currentUser, credential);
+    }
+  };
+
+  const changeEmail = async (newEmail, password) => {
+    setError(null);
+    try {
+      await reauthenticate(password);
+      await verifyBeforeUpdateEmail(auth.currentUser, newEmail);
+    } catch (authError) {
+      setError(authError.message);
+      throw authError;
+    }
+  };
+
+  const changePassword = async (currentPassword, newPassword) => {
+    setError(null);
+    try {
+      await reauthenticate(currentPassword);
+      await updatePassword(auth.currentUser, newPassword);
+    } catch (authError) {
+      setError(authError.message);
+      throw authError;
+    }
+  };
+
+  const deleteAccount = async (password) => {
+    setError(null);
+    try {
+      await reauthenticate(password);
+      if (db && user?.uid) {
+        try { await deleteDoc(doc(db, 'workspaces', user.uid)); } catch { /* ignore */ }
+      }
+      await deleteUser(auth.currentUser);
+      localStorage.removeItem(GUEST_KEY);
+      setUser(null);
     } catch (authError) {
       setError(authError.message);
       throw authError;
@@ -162,6 +269,14 @@ export function AuthProvider({ children }) {
     exitOfflineMode,
     logout,
     clearError: () => setError(null),
+    sendVerificationEmail,
+    reloadUser,
+    forgotPassword,
+    updateDisplayName,
+    updatePhotoURL,
+    changeEmail,
+    changePassword,
+    deleteAccount,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
