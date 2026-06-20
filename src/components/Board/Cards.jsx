@@ -430,7 +430,7 @@ function Cards({
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="container">
+        <div className="container" data-tour="board">
           <SortableContext
             items={board.cards
               .filter((c) => (section === 'notes' ? c.type === 'note' : (c.type || 'todo') === 'todo'))

@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import {
   VscClose, VscRocket, VscPreview, VscEdit, VscChecklist, VscBold,
   VscSearch, VscDiscard, VscArchive, VscMortarBoard, VscNote, VscSave,
-  VscSettingsGear, VscLayoutSidebarLeft, VscCalendar,
+  VscSettingsGear, VscLayoutSidebarLeft, VscCalendar, VscDebugStart,
 } from 'react-icons/vsc';
 import { IoImageOutline, IoColorPaletteOutline, IoSwapHorizontalOutline } from 'react-icons/io5';
 
@@ -561,10 +561,117 @@ const SECTIONS = [
   },
 ];
 
-function HelpModal({ isOpen, onClose, defaultSection = null }) {
-  const [activeId, setActiveId] = useState(SECTIONS[0].id);
+const TOUR_AUTO_KEY = 'kandoo-tour-auto';
+
+function HelpModal({ isOpen, onClose, defaultSection = null, onLaunchTour }) {
+  const [activeId, setActiveId] = useState('tutorial');
+  const [tourAutoShow, setTourAutoShow] = useState(() => localStorage.getItem(TOUR_AUTO_KEY) !== '0');
   const modalRef = useRef(null);
   const contentRef = useRef(null);
+
+  const handleTourAutoToggle = (checked) => {
+    setTourAutoShow(checked);
+    if (checked) {
+      localStorage.removeItem(TOUR_AUTO_KEY);
+    } else {
+      localStorage.setItem(TOUR_AUTO_KEY, '0');
+    }
+  };
+
+  const tutorialSection = {
+    id: 'tutorial',
+    icon: <VscDebugStart />,
+    label: 'Tutorial',
+    content: (
+      <div>
+        <H2>Interactive Tutorial</H2>
+        <P>Take the guided tour to discover Kandoo's key features — boards, tasks, notes, and sync — in under a minute.</P>
+
+        <div style={{
+          margin: '1.5rem 0',
+          padding: '1.25rem 1.5rem',
+          border: '1px solid var(--theme-border)',
+          borderRadius: '0.75rem',
+          background: 'var(--theme-bg-secondary)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '1rem',
+          flexWrap: 'wrap',
+        }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--theme-text-primary)', marginBottom: 4 }}>
+              Launch guided tour
+            </div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--theme-text-secondary)' }}>
+              6 steps · ~30 seconds · highlights key features with animations
+            </div>
+          </div>
+          <button
+            onClick={() => { onClose(); onLaunchTour?.(); }}
+            style={{
+              padding: '9px 22px',
+              borderRadius: 10,
+              border: 'none',
+              background: 'var(--theme-accent)',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <VscDebugStart style={{ fontSize: '1rem' }} />
+            Start tour
+          </button>
+        </div>
+
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0.85rem 1rem',
+          border: '1px solid var(--theme-border)',
+          borderRadius: '0.5rem',
+          background: 'var(--theme-bg-secondary)',
+        }}>
+          <div>
+            <div style={{ fontSize: '0.86rem', fontWeight: 500, color: 'var(--theme-text-primary)' }}>Show tutorial on startup</div>
+            <div style={{ fontSize: '0.76rem', color: 'var(--theme-text-secondary)', marginTop: 2 }}>Automatically launch the tour each time you open Kandoo</div>
+          </div>
+          <label style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <input
+              type="checkbox"
+              checked={tourAutoShow}
+              onChange={e => handleTourAutoToggle(e.target.checked)}
+              style={{ width: 0, height: 0, opacity: 0, position: 'absolute' }}
+            />
+            <div style={{
+              width: 38, height: 22, borderRadius: 11,
+              background: tourAutoShow ? 'var(--theme-accent)' : 'var(--theme-border)',
+              transition: 'background 0.2s',
+              position: 'relative',
+            }}>
+              <div style={{
+                position: 'absolute',
+                top: 3, left: tourAutoShow ? 19 : 3,
+                width: 16, height: 16,
+                borderRadius: '50%',
+                background: 'white',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                transition: 'left 0.2s',
+              }} />
+            </div>
+          </label>
+        </div>
+      </div>
+    ),
+  };
+
+  const allSections = [tutorialSection, ...SECTIONS];
 
   useEffect(() => {
     if (!isOpen) return;
@@ -575,20 +682,21 @@ function HelpModal({ isOpen, onClose, defaultSection = null }) {
     return () => document.removeEventListener('mousedown', onMouse);
   }, [isOpen, onClose]);
 
-  // Jump to a specific section when opened from an external link
   useEffect(() => {
     if (isOpen && defaultSection) {
-      const match = SECTIONS.find(s => s.id === defaultSection);
+      const match = allSections.find(s => s.id === defaultSection);
       if (match) setActiveId(match.id);
+    } else if (isOpen && !defaultSection) {
+      setActiveId('tutorial');
     }
-  }, [isOpen, defaultSection]);
+  }, [isOpen, defaultSection]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0;
   }, [activeId]);
 
   if (!isOpen) return null;
-  const active = SECTIONS.find((s) => s.id === activeId) || SECTIONS[0];
+  const active = allSections.find((s) => s.id === activeId) || allSections[0];
 
   return (
     <div style={{
@@ -638,7 +746,7 @@ function HelpModal({ isOpen, onClose, defaultSection = null }) {
             background: 'var(--theme-bg-secondary)',
             flexShrink: 0,
           }}>
-            {SECTIONS.map((s) => {
+            {allSections.map((s) => {
               const isActive = s.id === activeId;
               return (
                 <button

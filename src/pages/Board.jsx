@@ -66,6 +66,7 @@ function Board() {
   const [showExportImport, setShowExportImport]   = useState(false);
   const [showHelpModal, setShowHelpModal]         = useState(false);
   const [helpSection,   setHelpSection]           = useState(null);
+  const [showTour, setShowTour] = useState(() => localStorage.getItem('kandoo-tour-auto') !== '0');
   const [filterMode, setFilterMode]               = useState(false);
   const [currentMatchIdx, setCurrentMatchIdx]     = useState(0);
   const [showCrossBoardDropdown, setShowCrossBoardDropdown] = useState(false);
@@ -776,9 +777,14 @@ function Board() {
         onClose={() => setShowExportImport(false)}
         onImport={(newBoards) => setBoards((prev) => [...prev, ...newBoards])}
       />
-      <HelpModal isOpen={showHelpModal} onClose={() => { setShowHelpModal(false); setHelpSection(null); }} defaultSection={helpSection} />
+      <HelpModal
+        isOpen={showHelpModal}
+        onClose={() => { setShowHelpModal(false); setHelpSection(null); }}
+        defaultSection={helpSection}
+        onLaunchTour={() => { setShowHelpModal(false); setHelpSection(null); setShowTour(true); }}
+      />
       <TaskConflictModal />
-      <OnboardingTour />
+      <OnboardingTour setSection={setSection} open={showTour} onClose={() => setShowTour(false)} />
       {ctxMenu && (
         <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />
       )}
