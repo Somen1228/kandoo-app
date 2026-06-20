@@ -15,7 +15,7 @@ import { ThemeProvider } from "./contexts/ThemeContext.jsx";
 import { SettingsProvider } from "./contexts/SettingsContext.jsx";
 import { CardsProvider } from "./contexts/CardsContext.jsx";
 import { AuthProvider } from './contexts/AuthContext.jsx';
-import KandooToaster from "./components/KandooToaster.jsx";
+import KandooToastContainer from "./components/KandooToastContainer.jsx";
 
 // Both desktop windows (main + menu-bar panel) load this same bundle; branch
 // the rendered surface on the Tauri window label.
@@ -33,7 +33,7 @@ createRoot(document.getElementById("root")).render(
           <AuthProvider>
             <CardsProvider>
               {isPanel ? <Panel /> : <App />}
-              <KandooToaster />
+              <KandooToastContainer />
             </CardsProvider>
           </AuthProvider>
         </SettingsProvider>

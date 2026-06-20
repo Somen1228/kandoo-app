@@ -868,7 +868,7 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
 .mac-due-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   font-size: 0.72rem;
   color: var(--theme-text-muted);
   border: 1px dashed var(--theme-border);
@@ -877,10 +877,22 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   background: none;
   cursor: pointer;
   font-family: var(--font-ui);
-  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 .mac-due-trigger:hover {
   color: var(--theme-text-primary);
+  border-color: var(--theme-accent);
+}
+.mac-due-trigger.has-date {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--theme-accent) 45%, var(--theme-border));
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  color: var(--theme-accent);
+  font-weight: 600;
+}
+.mac-due-trigger.has-date:hover {
+  background: color-mix(in srgb, var(--theme-accent) 20%, transparent);
   border-color: var(--theme-accent);
 }
 
@@ -2084,6 +2096,21 @@ html.reduce-motion *::after {
 .settings-about__name { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
 .settings-about__ver { font-size: 0.8rem; color: var(--text-muted); margin: 3px 0 8px; }
 .settings-link { font-size: 0.82rem; color: var(--accent); text-decoration: underline; }
+
+/* ── Kandoo custom toasts ────────────────────────────────────────────────── */
+
+/* Loading shimmer — sweeps left-to-right across the bottom of the toast */
+@keyframes kandoo-loading-bar {
+  0%   { transform: translateX(-100%); opacity: 0.4; }
+  50%  { opacity: 0.8; }
+  100% { transform: translateX(100%);  opacity: 0.4; }
+}
+
+/* Gentle bob for the mascot while a loading toast is visible */
+@keyframes kandoo-mascot-float {
+  0%, 100% { transform: translateY(0px);  }
+  50%       { transform: translateY(-3px); }
+}
 
 /* ── Motion: respect the user's reduced-motion preference ───────────────── */
 @media (prefers-reduced-motion: reduce) {

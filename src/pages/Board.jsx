@@ -7,7 +7,7 @@ import {
   VscAccount, VscInbox, VscNotebook, VscLayoutSidebarLeft, VscClose,
   VscSettingsGear, VscSignIn, VscSignOut, VscCloud, VscSync, VscWarning,
 } from "react-icons/vsc";
-import { toast } from "sonner";
+import { toast } from '../utils/toast';
 import { CgRename } from "react-icons/cg";
 import { AiOutlineDelete } from "react-icons/ai";
 import { IoColorFilterOutline } from "react-icons/io5";
@@ -28,6 +28,7 @@ import ShortcutsHelpModal from "../components/ShortcutsHelpModal";
 import ContextMenu from "../components/ContextMenu";
 import ExportImportModal from "../components/Board/ExportImportModal";
 import HelpModal from "../components/HelpModal";
+import FeedbackModal from "../components/FeedbackModal";
 import TaskConflictModal from "../components/Board/TaskConflictModal";
 import OnboardingTour from "../components/OnboardingTour";
 
@@ -66,6 +67,7 @@ function Board() {
   const [showExportImport, setShowExportImport]   = useState(false);
   const [showHelpModal, setShowHelpModal]         = useState(false);
   const [helpSection,   setHelpSection]           = useState(null);
+  const [showFeedback,  setShowFeedback]          = useState(false);
   const [showTour, setShowTour] = useState(() => localStorage.getItem('kandoo-tour-auto') !== '0');
   const [filterMode, setFilterMode]               = useState(false);
   const [currentMatchIdx, setCurrentMatchIdx]     = useState(0);
@@ -782,7 +784,9 @@ function Board() {
         onClose={() => { setShowHelpModal(false); setHelpSection(null); }}
         defaultSection={helpSection}
         onLaunchTour={() => { setShowHelpModal(false); setHelpSection(null); setShowTour(true); }}
+        onFeedback={() => setShowFeedback(true)}
       />
+      <FeedbackModal isOpen={showFeedback} onClose={() => setShowFeedback(false)} />
       <TaskConflictModal />
       <OnboardingTour setSection={setSection} open={showTour} onClose={() => setShowTour(false)} />
       {ctxMenu && (

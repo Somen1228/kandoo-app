@@ -563,7 +563,7 @@ const SECTIONS = [
 
 const TOUR_AUTO_KEY = 'kandoo-tour-auto';
 
-function HelpModal({ isOpen, onClose, defaultSection = null, onLaunchTour }) {
+function HelpModal({ isOpen, onClose, defaultSection = null, onLaunchTour, onFeedback }) {
   const [activeId, setActiveId] = useState('tutorial');
   const [tourAutoShow, setTourAutoShow] = useState(() => localStorage.getItem(TOUR_AUTO_KEY) !== '0');
   const modalRef = useRef(null);
@@ -787,8 +787,26 @@ function HelpModal({ isOpen, onClose, defaultSection = null, onLaunchTour }) {
             }}
           >
             {active.content}
-            <div style={{ marginTop: '2rem', paddingTop: '1rem', borderTop: '1px solid var(--theme-border)', fontSize: '0.75rem', color: 'var(--theme-text-muted)', textAlign: 'center' }}>
-              Kandoo v1.1.0 — local-first, cloud-synced, built for students.
+            <div style={{ marginTop: '2rem', paddingTop: '1rem', borderTop: '1px solid var(--theme-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--theme-text-muted)' }}>
+                Kandoo v1.1.0 — local-first, cloud-synced, built for students.
+              </span>
+              {onFeedback && (
+                <button
+                  onClick={() => { onClose(); onFeedback(); }}
+                  style={{
+                    padding: '5px 14px', borderRadius: 20,
+                    border: '1.5px solid var(--theme-border)',
+                    background: 'transparent', color: 'var(--theme-text-secondary)',
+                    fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--theme-accent)'; e.currentTarget.style.color = 'var(--theme-accent)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--theme-border)'; e.currentTarget.style.color = 'var(--theme-text-secondary)'; }}
+                >
+                  Send Feedback
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -88,10 +88,11 @@ export default function DatePicker({ value, onChange, onPointerDown, style = {} 
   const TODAY_STR    = todayStr();
   const TOMORROW_STR = tomorrowStr();
 
-  // Trigger label
+  // Trigger label — manual format avoids locale-dependent wrapping (e.g. "21\nJun")
+  const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const parsed    = parseDue(value);
   const labelText = parsed
-    ? parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    ? `${SHORT_MONTHS[parsed.getMonth()]} ${parsed.getDate()}`
     : null;
 
   return (
@@ -104,7 +105,7 @@ export default function DatePicker({ value, onChange, onPointerDown, style = {} 
         ref={triggerRef}
         type="button"
         onClick={openPicker}
-        className="mac-due-trigger"
+        className={`mac-due-trigger${labelText ? ' has-date' : ''}`}
         aria-label="Set due date"
       >
         <VscCalendar />

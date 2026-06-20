@@ -37,6 +37,7 @@ const RichEditor = forwardRef(function RichEditor({
   onSave,
   onCancel,
   onBlur,
+  onMultilinePaste,
   className = '',
   style,
   placeholder = '',
@@ -185,6 +186,15 @@ const RichEditor = forwardRef(function RichEditor({
     const text = cb.getData('text/plain');
     if (!text) return; // let browser handle non-text payloads
     e.preventDefault();
+
+    // Multiline paste → hand each non-empty line to the parent as separate tasks
+    if (onMultilinePaste) {
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length > 1) {
+        onMultilinePaste(lines);
+        return;
+      }
+    }
 
     if (markdownPaste && looksLikeMarkdown(text)) {
       try {

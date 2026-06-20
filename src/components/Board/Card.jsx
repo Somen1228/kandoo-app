@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { toast } from "sonner";
+import { toast } from '../../utils/toast';
 import { generateTaskID } from "../../utils/taskIdGenerator";
 import { renderTaskValue } from "../../utils/richText";
 import { sanitizeHtml, markdownToHtml, isHtml, htmlToText } from "../../utils/htmlEditor";
@@ -464,6 +464,20 @@ function Card({
     setToggleAddTask(true);
   };
 
+  const addMultipleTasks = (lines) => {
+    const now = Date.now();
+    const newTasks = { ...tasks };
+    lines.forEach(line => {
+      const task = { id: generateTaskID(title), value: line, images: [], due: newTaskDue || null, createdAt: now, updatedAt: now };
+      newTasks[task.id] = task;
+    });
+    updateCardTasks(index, newTasks);
+    setTaskValue('');
+    newEditorRef.current?.setHtml('');
+    newEditorRef.current?.focus();
+    toast.success(`Added ${lines.length} tasks`);
+  };
+
   const deleteTask = (taskId) => {
     const removed = tasks[taskId];
     // "Confirm" mode asks first; "Undo" mode deletes immediately + offers a toast.
@@ -759,7 +773,6 @@ function Card({
                       onSubmit={e => { e.preventDefault(); saveEditedTask(task.id); }}
                       style={{
                         background: 'var(--theme-bg-card)',
-                        border: '1.5px solid var(--theme-accent)',
                         borderRadius: 10, overflow: 'hidden',
                         boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
                         margin: '2px 0',
@@ -975,6 +988,7 @@ function Card({
             onChange={setTaskValue}
             onSave={() => addTask()}
             onCancel={() => { setToggleAddTask(false); setTaskValue(''); setNewTaskImages([]); }}
+            onMultilinePaste={addMultipleTasks}
             autoFocus
             placeholder="New task…"
             className=""

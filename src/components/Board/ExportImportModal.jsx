@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { toast } from 'sonner';
+import { toast } from '../../utils/toast';
 import { VscClose, VscExport, VscFile } from 'react-icons/vsc';
 import {
   serializeBoards, downloadJson, safeFilename, downloadBoardsAsXlsx,

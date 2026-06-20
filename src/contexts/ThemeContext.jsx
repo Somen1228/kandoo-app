@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { toast } from 'sonner';
+import { toast } from '../utils/toast';
 import themes, { themeToCSSVars, validateTheme } from '../themes/themes';
 
 const ThemeContext = createContext();

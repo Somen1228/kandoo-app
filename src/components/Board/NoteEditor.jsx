@@ -23,7 +23,7 @@ import { SlashCommand, SlashMenuPortal } from './slashCommand';
 import { PageLink } from './pageLink';
 import { ResizableImage } from './ResizableImage';
 import ContextMenu from '../ContextMenu';
-import { toast } from 'sonner';
+import { toast } from '../../utils/toast';
 import { compressImage } from './NoteCard';
 import { useSettings } from '../../contexts/SettingsContext';
 import {
