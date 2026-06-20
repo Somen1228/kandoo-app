@@ -10,6 +10,7 @@ import { matchesTask, matchesCardTitle } from "../../utils/search";
 import { classifyTask, formatDueShort, dueTone } from "../../utils/dueDate";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useSettings } from "../../contexts/SettingsContext";
+import { uploadImage, deleteImage, isStorageUrl } from "../../services/imageStorage";
 import {
   VscEdit, VscCheck, VscTrash, VscSave, VscCopy, VscClose,
   VscBold, VscItalic, VscCalendar,
@@ -255,6 +256,7 @@ function Card({
   const isNote = type === 'note';
   const { currentThemeId } = useTheme();
   const { settings } = useSettings();
+  const [uploading, setUploading]             = useState(false);
   const [isMounted, setIsMounted]             = useState(false);
   const [toggleAddTask, setToggleAddTask]     = useState(false);
   const [toggleMenu, setToggleMenu]           = useState(false);
@@ -514,38 +516,55 @@ function Card({
 
   // ── Image upload ───────────────────────────────────────────────────────────
 
-  const processUpload = async (files) => {
-    const results = await Promise.allSettled(files.map(compressImage));
-    const b64s = [];
-    results.forEach((r, i) => {
-      if (r.status === 'fulfilled') b64s.push(r.value);
-      else toast.error(`${files[i].name}: ${r.reason.message}`);
-    });
-    return b64s;
+  const processUpload = async (files, onDone) => {
+    setUploading(true);
+    const toastId = files.length > 1
+      ? toast.loading(`Uploading ${files.length} images…`)
+      : toast.loading('Uploading image…');
+    try {
+      const results = await Promise.allSettled(
+        files.map(f => uploadImage(f))
+      );
+      const urls = [];
+      results.forEach((r, i) => {
+        if (r.status === 'fulfilled') urls.push(r.value);
+        else toast.error(`${files[i].name}: ${r.reason?.message || 'Upload failed'}`);
+      });
+      toast.dismiss(toastId);
+      if (urls.length) onDone(urls);
+    } catch (err) {
+      toast.dismiss(toastId);
+      toast.error(err.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleEditUpload = async (e) => {
     const files = Array.from(e.target.files);
     e.target.value = '';
-    const b64s = await processUpload(files);
-    if (b64s.length) setEditingTaskImages(prev => [...prev, ...b64s]);
-    // Return focus to the editor so Enter saves the task
+    await processUpload(files, (urls) => setEditingTaskImages(prev => [...prev, ...urls]));
     editEditorRef.current?.focus();
   };
 
   const handleNewUpload = async (e) => {
     const files = Array.from(e.target.files);
     e.target.value = '';
-    const b64s = await processUpload(files);
-    if (b64s.length) setNewTaskImages(prev => [...prev, ...b64s]);
+    await processUpload(files, (urls) => setNewTaskImages(prev => [...prev, ...urls]));
     newEditorRef.current?.focus();
   };
 
-  const removeEditingImage = (i) =>
+  const removeEditingImage = (i) => {
+    const url = editingTaskImages[i];
+    if (isStorageUrl(url)) deleteImage(url);
     setEditingTaskImages(prev => prev.filter((_, idx) => idx !== i));
+  };
 
-  const removeNewImage = (i) =>
+  const removeNewImage = (i) => {
+    const url = newTaskImages[i];
+    if (isStorageUrl(url)) deleteImage(url);
     setNewTaskImages(prev => prev.filter((_, idx) => idx !== i));
+  };
 
   // ── Computed ───────────────────────────────────────────────────────────────
 
@@ -783,13 +802,15 @@ function Card({
                       {/* Upload button */}
                       <button
                         type="button"
-                        onClick={() => editFileInputRef.current?.click()}
+                        onClick={() => !uploading && editFileInputRef.current?.click()}
                         onPointerDown={e => e.stopPropagation()}
+                        disabled={uploading}
                         style={{
                           alignSelf: 'flex-start',
                           display: 'flex', alignItems: 'center', gap: '4px',
                           background: 'none', border: '1px dashed var(--theme-border)',
                           borderRadius: '0.25rem', color: 'var(--theme-text-muted)',
+                          opacity: uploading ? 0.5 : 1, cursor: uploading ? 'not-allowed' : 'pointer',
                           fontSize: '0.75rem', padding: '3px 8px', cursor: 'pointer',
                           marginTop: '2px',
                         }}
@@ -945,10 +966,12 @@ function Card({
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
             <button
               type="button"
-              onClick={() => newFileInputRef.current?.click()}
+              onClick={() => !uploading && newFileInputRef.current?.click()}
               onPointerDown={e => e.stopPropagation()}
+              disabled={uploading}
               style={{
                 display: 'flex', alignItems: 'center', gap: '4px',
+                opacity: uploading ? 0.5 : 1, cursor: uploading ? 'not-allowed' : 'pointer',
                 background: 'none', border: '1px dashed var(--theme-border)',
                 borderRadius: '0.25rem', color: 'var(--theme-text-muted)',
                 fontSize: '0.75rem', padding: '3px 8px', cursor: 'pointer',
