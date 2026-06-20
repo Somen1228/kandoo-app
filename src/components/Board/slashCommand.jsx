@@ -1,16 +1,14 @@
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Extension } from '@tiptap/core';
 import Suggestion from '@tiptap/suggestion';
-import { ReactRenderer } from '@tiptap/react';
 import {
   VscSymbolString, VscListUnordered, VscListOrdered, VscChecklist,
   VscQuote, VscCode, VscHorizontalRule, VscTable, VscFile,
 } from 'react-icons/vsc';
 import { IoImageOutline } from 'react-icons/io5';
 
-// ── Command catalogue (Notion-style "/" blocks) ─────────────────────────────
-// Each `run(editor, range, ctx)` first removes the typed "/query", then applies
-// the block. `ctx.onImage` opens the editor's file picker.
+// ── Command catalogue ───────────────────────────────────────────────────────
 const COMMANDS = [
   { title: 'Text', desc: 'Plain paragraph', kw: ['text', 'paragraph', 'p'], icon: <VscSymbolString />,
     run: (e, r) => e.chain().focus().deleteRange(r).setParagraph().run() },
@@ -49,16 +47,16 @@ const COMMANDS = [
     run: (e, r, ctx) => { e.chain().focus().deleteRange(r).run(); ctx?.onImage?.(); } },
 ];
 
-// ── Popup list component ────────────────────────────────────────────────────
-const SlashMenu = forwardRef(function SlashMenu({ items, command }, ref) {
+// ── SlashMenu list (rendered inside the portal) ─────────────────────────────
+const SlashMenu = forwardRef(function SlashMenu({ items, onSelect }, ref) {
   const [selected, setSelected] = useState(0);
   useEffect(() => setSelected(0), [items]);
 
   useImperativeHandle(ref, () => ({
-    onKeyDown: ({ event }) => {
+    onKeyDown: (event) => {
       if (event.key === 'ArrowUp') { setSelected((s) => (s + items.length - 1) % items.length); return true; }
       if (event.key === 'ArrowDown') { setSelected((s) => (s + 1) % items.length); return true; }
-      if (event.key === 'Enter') { if (items[selected]) command(items[selected]); return true; }
+      if (event.key === 'Enter') { if (items[selected]) { onSelect(items[selected]); } return true; }
       return false;
     },
   }));
@@ -71,7 +69,7 @@ const SlashMenu = forwardRef(function SlashMenu({ items, command }, ref) {
           key={item.title}
           className={`slash-menu__item${i === selected ? ' is-active' : ''}`}
           onMouseEnter={() => setSelected(i)}
-          onMouseDown={(e) => { e.preventDefault(); command(item); }}
+          onMouseDown={(e) => { e.preventDefault(); onSelect(item); }}
         >
           <span className="slash-menu__icon">{item.icon}</span>
           <span className="slash-menu__text">
@@ -84,106 +82,76 @@ const SlashMenu = forwardRef(function SlashMenu({ items, command }, ref) {
   );
 });
 
-function rectIsInEditor(rect, editorRect) {
-  return rect && editorRect
-    && rect.left >= editorRect.left - 1
-    && rect.right <= editorRect.right + 1
-    && rect.top >= editorRect.top - 1
-    && rect.bottom <= editorRect.bottom + 1;
-}
+// ── Portal component — lives in the React tree, positions via useLayoutEffect ─
+// useLayoutEffect fires after React + TipTap have both committed to the DOM,
+// so clientRect() is reliable here (no timing race with the suggestion mark).
+export function SlashMenuPortal({ state }) {
+  const popupRef = useRef(null);
+  const menuRef  = useRef(null);
 
-function getAnchorRect({ editor, range, clientRect }) {
-  const editorRect = editor?.view?.dom?.getBoundingClientRect();
-  const markerRect = clientRect?.();
+  // Register the keyboard handler with the extension after every state change.
+  // This runs in useLayoutEffect so menuRef.current is already set.
+  useLayoutEffect(() => {
+    if (!state) return;
+    state.setKeyHandler?.((event) => menuRef.current?.onKeyDown(event) ?? false);
+  }, [state]);
 
-  if (rectIsInEditor(markerRect, editorRect)) return markerRect;
+  // Position the popup after every state change (items filter, new open, etc.)
+  // useLayoutEffect fires AFTER TipTap has committed its DOM update, so
+  // clientRect() reliably returns the suggestion mark's real coordinates here.
+  useLayoutEffect(() => {
+    const el = popupRef.current;
+    if (!el || !state) return;
 
-  // TipTap's temporary suggestion marker can briefly report (0, 0), which
-  // puts the menu at the viewport edge. The document position is stable and
-  // gives us the actual caret coordinates in that case.
-  if (editor?.view && range) {
-    const caretRect = editor.view.coordsAtPos(range.to);
-    if (rectIsInEditor(caretRect, editorRect)) return caretRect;
-  }
-  return null;
-}
+    const rect = state.clientRect?.();
+    if (!rect || (rect.top === 0 && rect.left === 0 && rect.bottom === 0)) return;
 
-function positionPopup(el, props) {
-  const rect = getAnchorRect(props);
-  if (!rect) return false;
-  const margin = 8;
-  const width = el.offsetWidth || 260;
-  const height = el.offsetHeight || 280;
-  let left = rect.left;
-  let top = rect.bottom + 6;
-  if (left + width > window.innerWidth - margin) left = window.innerWidth - width - margin;
-  if (top + height > window.innerHeight - margin) top = rect.top - height - 6; // flip above
-  el.style.position = 'fixed';
-  el.style.left = `${Math.max(margin, left)}px`;
-  el.style.top = `${Math.max(margin, top)}px`;
-  el.style.zIndex = '2000';
-  return true;
-}
+    const margin = 8;
+    const width  = el.offsetWidth  || 260;
+    const height = el.offsetHeight || 300;
+    let left = rect.left;
+    let top  = rect.bottom + 6;
 
-function makeRenderer() {
-  let component;
-  let el;
-  let positionFrame;
+    if (left + width > window.innerWidth - margin)  left = window.innerWidth  - width  - margin;
+    if (top + height > window.innerHeight - margin) top  = rect.top - height - 6;
 
-  const schedulePosition = (props, attempt = 0) => {
-    cancelAnimationFrame(positionFrame);
-    positionFrame = requestAnimationFrame(() => {
-      positionFrame = null;
-      if (!el) return;
-      if (positionPopup(el, props)) {
-        el.style.visibility = 'visible';
-      } else if (attempt < 2) {
-        schedulePosition(props, attempt + 1);
-      }
-    });
-  };
+    el.style.left = `${Math.max(margin, left)}px`;
+    el.style.top  = `${Math.max(margin, top)}px`;
+    el.style.visibility = 'visible';
+  }, [state]);
 
-  return {
-    onStart: (props) => {
-      component = new ReactRenderer(SlashMenu, { props, editor: props.editor });
-      el = document.createElement('div');
-      el.className = 'slash-popup';
-      el.style.visibility = 'hidden';
-      document.body.appendChild(el);
-      el.appendChild(component.element);
-      schedulePosition(props);
-    },
-    onUpdate: (props) => {
-      component?.updateProps(props);
-      schedulePosition(props);
-    },
-    onKeyDown: (props) => {
-      if (props.event.key === 'Escape') { el?.remove(); el = null; return true; }
-      return component?.ref?.onKeyDown(props) ?? false;
-    },
-    onExit: () => {
-      cancelAnimationFrame(positionFrame);
-      positionFrame = null;
-      el?.remove();
-      el = null;
-      component?.destroy();
-      component = null;
-    },
-  };
+  if (!state) return null;
+
+  return createPortal(
+    <div
+      ref={popupRef}
+      className="slash-popup"
+      style={{ position: 'fixed', zIndex: 2000, visibility: 'hidden' }}
+    >
+      <SlashMenu
+        ref={menuRef}
+        items={state.items}
+        onSelect={state.onSelect}
+      />
+    </div>,
+    document.body
+  );
 }
 
 // ── The extension ───────────────────────────────────────────────────────────
+// Instead of managing its own DOM/ReactRenderer, this extension just calls
+// onOpen/onUpdate/onClose so the host React component can manage state.
 export const SlashCommand = Extension.create({
   name: 'slashCommand',
   addOptions() {
-    return { onImage: null, onCreatePage: null, onInsertTable: null };
+    return { onImage: null, onCreatePage: null, onInsertTable: null, onOpen: null, onUpdate: null, onClose: null };
   },
   addProseMirrorPlugins() {
-    const ctx = {
-      onImage: this.options.onImage,
-      onCreatePage: this.options.onCreatePage,
-      onInsertTable: this.options.onInsertTable,
-    };
+    const ext = this;
+    // keyHandler is set by the portal component so the extension can forward
+    // keyboard events (ArrowUp/Down/Enter) into the React menu.
+    let keyHandler = null;
+
     return [
       Suggestion({
         editor: this.editor,
@@ -197,8 +165,56 @@ export const SlashCommand = Extension.create({
             (c) => c.title.toLowerCase().includes(q) || c.kw.some((k) => k.includes(q))
           );
         },
-        command: ({ editor, range, props }) => props.run(editor, range, ctx),
-        render: makeRenderer,
+        command: ({ editor, range, props: item }) => {
+          const ctx = {
+            onImage: ext.options.onImage,
+            onCreatePage: ext.options.onCreatePage,
+            onInsertTable: ext.options.onInsertTable,
+          };
+          item.run(editor, range, ctx);
+        },
+        render: () => ({
+          onStart: (props) => {
+            const ctx = {
+              onImage: ext.options.onImage,
+              onCreatePage: ext.options.onCreatePage,
+              onInsertTable: ext.options.onInsertTable,
+            };
+            ext.options.onOpen?.({
+              items: props.items,
+              clientRect: props.clientRect,
+              onSelect: (item) => {
+                item.run(props.editor, props.range, ctx);
+                ext.options.onClose?.();
+              },
+              setKeyHandler: (fn) => { keyHandler = fn; },
+            });
+          },
+          onUpdate: (props) => {
+            const ctx = {
+              onImage: ext.options.onImage,
+              onCreatePage: ext.options.onCreatePage,
+              onInsertTable: ext.options.onInsertTable,
+            };
+            ext.options.onUpdate?.({
+              items: props.items,
+              clientRect: props.clientRect,
+              onSelect: (item) => {
+                item.run(props.editor, props.range, ctx);
+                ext.options.onClose?.();
+              },
+              setKeyHandler: (fn) => { keyHandler = fn; },
+            });
+          },
+          onKeyDown: ({ event }) => {
+            if (event.key === 'Escape') { ext.options.onClose?.(); return true; }
+            return keyHandler?.(event) ?? false;
+          },
+          onExit: () => {
+            keyHandler = null;
+            ext.options.onClose?.();
+          },
+        }),
       }),
     ];
   },

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react';
 import { Extension } from '@tiptap/core';
@@ -19,7 +19,7 @@ import TableRow from '@tiptap/extension-table-row';
 import TableHeader from '@tiptap/extension-table-header';
 import TableCell from '@tiptap/extension-table-cell';
 import { createLowlight, common } from 'lowlight';
-import { SlashCommand } from './slashCommand';
+import { SlashCommand, SlashMenuPortal } from './slashCommand';
 import { PageLink } from './pageLink';
 import { ResizableImage } from './ResizableImage';
 import ContextMenu from '../ContextMenu';
@@ -79,6 +79,11 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
   const [tableDialogOpen, setTableDialogOpen] = useState(false);
   const [editorContextMenu, setEditorContextMenu] = useState(null);
   const [tableContextMenu, setTableContextMenu] = useState(null);
+  const [slashState, setSlashState] = useState(null);
+
+  const handleSlashOpen   = useCallback((s) => setSlashState(s), []);
+  const handleSlashUpdate = useCallback((s) => setSlashState(s), []);
+  const handleSlashClose  = useCallback(() => setSlashState(null), []);
   const { settings } = useSettings();
 
   // Live title lookup for pageLink nodes (kept current as pages are renamed).
@@ -243,6 +248,9 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
         onImage: () => fileRef.current?.click(),
         onCreatePage,
         onInsertTable: () => setTableDialogOpen(true),
+        onOpen:   handleSlashOpen,
+        onUpdate: handleSlashUpdate,
+        onClose:  handleSlashClose,
       }),
       PageLink.configure({
         getTitle: (uid) => titlesRef.current[uid] || 'Untitled page',
@@ -319,6 +327,7 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
             <TableMenu editor={editor} position={tableContextMenu}
               onClose={() => setTableContextMenu(null)} />
           )}
+          <SlashMenuPortal state={slashState} />
         </>
       )}
     </div>
