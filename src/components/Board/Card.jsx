@@ -191,35 +191,33 @@ const compressImage = (file) =>
 // onMouseDown preventDefault keeps the editor focused while clicking buttons.
 function FormattingToolbar({ editorRef }) {
   const apply = (cmd) => editorRef.current?.exec(cmd);
-
-  const btnStyle = {
-    background: 'var(--theme-bg-hover)',
-    border: '1px solid var(--theme-border)',
-    borderRadius: '0.25rem',
-    color: 'var(--theme-text-secondary)',
-    cursor: 'pointer',
-    padding: '2px 7px',
-    fontSize: '0.8rem',
-    display: 'flex',
-    alignItems: 'center',
-  };
-
   const mod = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform) ? '⌘' : 'Ctrl';
 
+  const fmtBtn = (cmd, icon, label) => (
+    <button
+      type="button"
+      title={`${label} (${mod}+${label[0]})`}
+      onMouseDown={e => e.preventDefault()}
+      onClick={() => apply(cmd)}
+      style={{
+        background: 'none', border: 'none', cursor: 'pointer',
+        color: 'var(--theme-text-muted)', padding: '3px 6px',
+        borderRadius: 5, fontSize: '0.85rem',
+        display: 'flex', alignItems: 'center', lineHeight: 1,
+        transition: 'color 0.12s, background 0.12s',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-text-primary)'; e.currentTarget.style.background = 'var(--theme-bg-hover)'; }}
+      onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-text-muted)'; e.currentTarget.style.background = 'none'; }}
+    >
+      {icon}
+    </button>
+  );
+
   return (
-    <div style={{ display: 'flex', gap: '4px', marginBottom: '5px' }}>
-      <button type="button" style={btnStyle} title={`Bold (${mod}+B)`}
-        onMouseDown={e => e.preventDefault()} onClick={() => apply('bold')}>
-        <VscBold />
-      </button>
-      <button type="button" style={btnStyle} title={`Italic (${mod}+I)`}
-        onMouseDown={e => e.preventDefault()} onClick={() => apply('italic')}>
-        <VscItalic />
-      </button>
-      <button type="button" style={btnStyle} title={`Underline (${mod}+U)`}
-        onMouseDown={e => e.preventDefault()} onClick={() => apply('underline')}>
-        <RiUnderline />
-      </button>
+    <div style={{ display: 'flex', gap: 1, padding: '4px 8px 3px', borderBottom: '1px solid var(--theme-border)' }}>
+      {fmtBtn('bold',      <VscBold />,      'Bold')}
+      {fmtBtn('italic',    <VscItalic />,    'Italic')}
+      {fmtBtn('underline', <RiUnderline />,  'Underline')}
     </div>
   );
 }
@@ -759,43 +757,38 @@ function Card({
                     /* ── Edit mode ── */
                     <form
                       onSubmit={e => { e.preventDefault(); saveEditedTask(task.id); }}
-                      className="flex flex-col w-full gap-1"
+                      style={{
+                        background: 'var(--theme-bg-card)',
+                        border: '1.5px solid var(--theme-accent)',
+                        borderRadius: 10, overflow: 'hidden',
+                        boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+                        margin: '2px 0',
+                      }}
                     >
                       <FormattingToolbar editorRef={editEditorRef} />
-                      <div className="flex items-start gap-2">
-                        <RichEditor
-                          ref={editEditorRef}
-                          initialHtml={editingTaskValue}
-                          onChange={setEditingTaskValue}
-                          onSave={() => saveEditedTask(task.id)}
-                          onCancel={cancelEditingTask}
-                          autoFocus
-                          placeholder="Edit task (Shift+Enter for newline)"
-                          className="flex-1 p-2 border-2 rounded text-sm"
-                          style={{
-                            background: 'var(--theme-bg-input)',
-                            borderColor: 'var(--theme-border)',
-                            color: 'var(--theme-text-primary)',
-                            minHeight: '4rem',
-                            fontFamily: 'inherit',
-                          }}
-                        />
-                        <button
-                          type="submit"
-                          className="mt-1 text-lg"
-                          style={{ color: 'var(--theme-text-muted)' }}
-                          onMouseEnter={e => e.currentTarget.style.color = 'var(--theme-success)'}
-                          onMouseLeave={e => e.currentTarget.style.color = 'var(--theme-text-muted)'}
-                          title="Save (Enter)"
-                          onPointerDown={e => e.stopPropagation()}
-                        >
-                          <VscSave />
-                        </button>
-                      </div>
+                      <RichEditor
+                        ref={editEditorRef}
+                        initialHtml={editingTaskValue}
+                        onChange={setEditingTaskValue}
+                        onSave={() => saveEditedTask(task.id)}
+                        onCancel={cancelEditingTask}
+                        autoFocus
+                        placeholder="Edit task…"
+                        className=""
+                        style={{
+                          background: 'transparent',
+                          color: 'var(--theme-text-primary)',
+                          minHeight: '3.25rem',
+                          fontFamily: 'inherit',
+                          fontSize: '0.875rem',
+                          padding: '8px 12px',
+                          outline: 'none', border: 'none',
+                        }}
+                      />
 
-                      {/* Image thumbnails in edit mode */}
+                      {/* Image thumbnails */}
                       {editingTaskImages.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 12px 8px' }}>
                           {editingTaskImages.map((src, i) => (
                             <div key={i} style={{ position: 'relative' }}>
                               <img src={src} alt={`img-${i}`} style={thumbStyle(false)} />
@@ -804,12 +797,12 @@ function Card({
                                 onClick={() => removeEditingImage(i)}
                                 onPointerDown={e => e.stopPropagation()}
                                 style={{
-                                  position: 'absolute', top: '-6px', right: '-6px',
-                                  background: 'var(--theme-danger)',
-                                  border: 'none', borderRadius: '50%',
-                                  color: 'white', width: '16px', height: '16px',
+                                  position: 'absolute', top: -6, right: -6,
+                                  background: 'var(--theme-danger)', border: 'none',
+                                  borderRadius: '50%', color: 'white',
+                                  width: 16, height: 16, padding: 0,
                                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  cursor: 'pointer', fontSize: '10px', padding: 0,
+                                  cursor: 'pointer', fontSize: 10,
                                 }}
                               >
                                 <VscClose />
@@ -819,32 +812,63 @@ function Card({
                         </div>
                       )}
 
-                      {/* Upload button */}
-                      <button
-                        type="button"
-                        onClick={() => !uploading && editFileInputRef.current?.click()}
-                        onPointerDown={e => e.stopPropagation()}
-                        disabled={uploading}
-                        style={{
-                          alignSelf: 'flex-start',
-                          display: 'flex', alignItems: 'center', gap: '4px',
-                          background: 'none', border: '1px dashed var(--theme-border)',
-                          borderRadius: '0.25rem', color: 'var(--theme-text-muted)',
-                          opacity: uploading ? 0.5 : 1, cursor: uploading ? 'not-allowed' : 'pointer',
-                          fontSize: '0.75rem', padding: '3px 8px', cursor: 'pointer',
-                          marginTop: '2px',
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.color = 'var(--theme-text-primary)'}
-                        onMouseLeave={e => e.currentTarget.style.color = 'var(--theme-text-muted)'}
-                      >
-                        <IoImageOutline /> Add image
-                      </button>
-                      <DatePicker
-                        value={editingTaskDue}
-                        onChange={setEditingTaskDue}
-                        onPointerDown={e => e.stopPropagation()}
-                        style={{ alignSelf: 'flex-start', marginTop: '4px' }}
-                      />
+                      {/* Bottom action row */}
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '6px 10px 8px',
+                        borderTop: '1px solid var(--theme-border)',
+                      }}>
+                        <button
+                          type="button"
+                          onClick={() => !uploading && editFileInputRef.current?.click()}
+                          onPointerDown={e => e.stopPropagation()}
+                          disabled={uploading}
+                          title="Attach image"
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            background: 'none', border: 'none', cursor: uploading ? 'not-allowed' : 'pointer',
+                            color: 'var(--theme-text-muted)', padding: '3px 5px',
+                            borderRadius: 6, fontSize: '1rem',
+                            opacity: uploading ? 0.4 : 1, transition: 'color 0.12s',
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.color = 'var(--theme-text-primary)'}
+                          onMouseLeave={e => e.currentTarget.style.color = 'var(--theme-text-muted)'}
+                        >
+                          <IoImageOutline />
+                        </button>
+                        <DatePicker
+                          value={editingTaskDue}
+                          onChange={setEditingTaskDue}
+                          onPointerDown={e => e.stopPropagation()}
+                        />
+                        <div style={{ flex: 1 }} />
+                        <button
+                          type="button"
+                          onPointerDown={e => e.stopPropagation()}
+                          onClick={cancelEditingTask}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            color: 'var(--theme-text-muted)', fontSize: '0.75rem',
+                            padding: '4px 8px', borderRadius: 6,
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          onPointerDown={e => e.stopPropagation()}
+                          title="Save (Enter)"
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 5,
+                            background: 'var(--theme-accent)', border: 'none',
+                            borderRadius: 7, color: 'white',
+                            fontSize: '0.78rem', fontWeight: 600,
+                            padding: '5px 12px', cursor: 'pointer',
+                          }}
+                        >
+                          <VscSave style={{ fontSize: '0.85rem' }} /> Save
+                        </button>
+                      </div>
                     </form>
                   ) : (
                     /* ── Display mode ── */
@@ -929,8 +953,22 @@ function Card({
 
       {/* Add task area */}
       {toggleAddTask ? (
-        <form onSubmit={addTask} className="w-full px-1 py-1 flex flex-col gap-1" ref={inputRef}>
+        <form
+          onSubmit={addTask}
+          ref={inputRef}
+          style={{
+            margin: '4px 8px 8px',
+            background: 'var(--theme-bg-card)',
+            border: '1.5px solid var(--theme-accent)',
+            borderRadius: 10,
+            overflow: 'hidden',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+          }}
+        >
+          {/* Formatting toolbar */}
           <FormattingToolbar editorRef={newEditorRef} />
+
+          {/* Text editor */}
           <RichEditor
             ref={newEditorRef}
             initialHtml=""
@@ -938,20 +976,23 @@ function Card({
             onSave={() => addTask()}
             onCancel={() => { setToggleAddTask(false); setTaskValue(''); setNewTaskImages([]); }}
             autoFocus
-            placeholder="Enter task (Shift+Enter for newline)"
-            className="w-full p-2 border-b-2 shadow-lg rounded text-sm"
+            placeholder="New task…"
+            className=""
             style={{
-              background: 'var(--theme-bg-input)',
-              borderColor: 'var(--theme-border)',
+              background: 'transparent',
               color: 'var(--theme-text-primary)',
-              minHeight: '3rem',
+              minHeight: '2.75rem',
               fontFamily: 'inherit',
+              fontSize: '0.875rem',
+              padding: '8px 12px',
+              outline: 'none',
+              border: 'none',
             }}
           />
 
-          {/* New task: image thumbnails */}
+          {/* Image thumbnails */}
           {newTaskImages.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px', justifyContent: 'flex-start' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 12px 8px' }}>
               {newTaskImages.map((src, i) => (
                 <div key={i} style={{ position: 'relative' }}>
                   <img src={src} alt={`new-img-${i}`} style={thumbStyle(false)} />
@@ -960,12 +1001,12 @@ function Card({
                     onClick={() => removeNewImage(i)}
                     onPointerDown={e => e.stopPropagation()}
                     style={{
-                      position: 'absolute', top: '-6px', right: '-6px',
-                      background: 'var(--theme-danger)',
-                      border: 'none', borderRadius: '50%',
-                      color: 'white', width: '16px', height: '16px',
+                      position: 'absolute', top: -6, right: -6,
+                      background: 'var(--theme-danger)', border: 'none',
+                      borderRadius: '50%', color: 'white',
+                      width: 16, height: 16, padding: 0,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      cursor: 'pointer', fontSize: '10px', padding: 0,
+                      cursor: 'pointer', fontSize: 10,
                     }}
                   >
                     <VscClose />
@@ -975,43 +1016,70 @@ function Card({
             </div>
           )}
 
-          {/* New task: upload + save */}
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
+          {/* Bottom action row */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '6px 10px 8px',
+            borderTop: '1px solid var(--theme-border)',
+          }}>
+            {/* Image upload */}
             <button
               type="button"
               onClick={() => !uploading && newFileInputRef.current?.click()}
               onPointerDown={e => e.stopPropagation()}
               disabled={uploading}
+              title="Attach image"
               style={{
-                display: 'flex', alignItems: 'center', gap: '4px',
-                opacity: uploading ? 0.5 : 1, cursor: uploading ? 'not-allowed' : 'pointer',
-                background: 'none', border: '1px dashed var(--theme-border)',
-                borderRadius: '0.25rem', color: 'var(--theme-text-muted)',
-                fontSize: '0.75rem', padding: '3px 8px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'none', border: 'none', cursor: uploading ? 'not-allowed' : 'pointer',
+                color: 'var(--theme-text-muted)', padding: '3px 5px',
+                borderRadius: 6, fontSize: '1rem',
+                opacity: uploading ? 0.4 : 1, transition: 'color 0.12s',
               }}
               onMouseEnter={e => e.currentTarget.style.color = 'var(--theme-text-primary)'}
               onMouseLeave={e => e.currentTarget.style.color = 'var(--theme-text-muted)'}
             >
-              <IoImageOutline /> Add image
+              <IoImageOutline />
             </button>
+
+            {/* Date picker */}
             <DatePicker
               value={newTaskDue}
               onChange={setNewTaskDue}
               onPointerDown={e => e.stopPropagation()}
             />
+
+            {/* Spacer */}
+            <div style={{ flex: 1 }} />
+
+            {/* Cancel */}
+            <button
+              type="button"
+              onPointerDown={e => e.stopPropagation()}
+              onClick={() => { setToggleAddTask(false); setTaskValue(''); setNewTaskImages([]); }}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--theme-text-muted)', fontSize: '0.75rem',
+                padding: '4px 8px', borderRadius: 6,
+              }}
+            >
+              Cancel
+            </button>
+
+            {/* Save */}
             <button
               type="submit"
               onPointerDown={e => e.stopPropagation()}
-              style={{
-                marginLeft: 'auto',
-                display: 'flex', alignItems: 'center', gap: '4px',
-                background: 'var(--theme-accent)', border: 'none',
-                borderRadius: '0.25rem', color: 'white',
-                fontSize: '0.75rem', padding: '4px 10px', cursor: 'pointer',
-              }}
               title="Save task (Enter)"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                background: 'var(--theme-accent)', border: 'none',
+                borderRadius: 7, color: 'white',
+                fontSize: '0.78rem', fontWeight: 600,
+                padding: '5px 12px', cursor: 'pointer',
+              }}
             >
-              <VscSave /> Save
+              <VscSave style={{ fontSize: '0.85rem' }} /> Save
             </button>
           </div>
         </form>

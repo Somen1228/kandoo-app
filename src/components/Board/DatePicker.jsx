@@ -27,22 +27,19 @@ export default function DatePicker({ value, onChange, onPointerDown, style = {} 
   const [popPos, setPopPos]       = useState({ top: 0, left: 0 });
 
   const triggerRef = useRef(null);
-  const popRef     = useRef(null);
 
-  // Sync pending when value changes externally
-  useEffect(() => { setPending(value || ''); }, [value]);
-
-  // Position popover below trigger, clamped to viewport
   const computePos = () => {
     if (!triggerRef.current) return;
-    const r   = triggerRef.current.getBoundingClientRect();
-    const PW  = 280;
-    const top = r.bottom + 6;
-    const left = Math.min(r.left, window.innerWidth - PW - 12);
-    setPopPos({ top, left });
+    const r  = triggerRef.current.getBoundingClientRect();
+    const PW = 280;
+    setPopPos({
+      top:  r.bottom + 6,
+      left: Math.min(r.left, window.innerWidth - PW - 12),
+    });
   };
 
-  const openPicker = () => {
+  const openPicker = (e) => {
+    e.stopPropagation();
     const cur = parseDue(value);
     if (cur) { setViewYear(cur.getFullYear()); setViewMonth(cur.getMonth()); }
     else     { const n = new Date(); setViewYear(n.getFullYear()); setViewMonth(n.getMonth()); }
@@ -51,15 +48,20 @@ export default function DatePicker({ value, onChange, onPointerDown, style = {} 
     setOpen(true);
   };
 
-  // Close on outside click
+  // Close on outside click + reposition on scroll/resize while open
   useEffect(() => {
     if (!open) return;
-    const fn = (e) => {
-      if (!popRef.current?.contains(e.target) && !triggerRef.current?.contains(e.target))
-        setOpen(false);
+    const close = () => setOpen(false);
+    const id = setTimeout(() => document.addEventListener('click', close), 0);
+    const reposition = () => computePos();
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener('click', close);
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
     };
-    document.addEventListener('mousedown', fn);
-    return () => document.removeEventListener('mousedown', fn);
   }, [open]);
 
   const done   = () => { onChange(pending); setOpen(false); };
@@ -120,11 +122,9 @@ export default function DatePicker({ value, onChange, onPointerDown, style = {} 
         </button>
       )}
 
-      {/* ── Popover (portal) ── */}
+      {/* Popover portal */}
       {open && createPortal(
         <div
-          ref={popRef}
-          onPointerDown={e => e.stopPropagation()}
           style={{
             position: 'fixed',
             top: popPos.top,
@@ -138,122 +138,137 @@ export default function DatePicker({ value, onChange, onPointerDown, style = {} 
             fontFamily: 'inherit',
             userSelect: 'none',
           }}
+          onClick={e => e.stopPropagation()}
+          onMouseDown={e => e.stopPropagation()}
+          onPointerDown={e => e.stopPropagation()}
         >
-          {/* Quick chips */}
-          <div style={{ display: 'flex', gap: 8, padding: '14px 14px 0' }}>
-            {[
-              { label: 'Today',    str: TODAY_STR },
-              { label: 'Tomorrow', str: TOMORROW_STR },
-            ].map(({ label, str }) => {
-              const active = pending === str;
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => quick(str)}
-                  style={{
-                    flex: 1, padding: '7px 0',
-                    borderRadius: 20,
-                    border: `1.5px solid ${active ? 'var(--theme-accent)' : 'var(--theme-border)'}`,
-                    background: active ? 'var(--theme-accent)' : 'transparent',
-                    color: active ? '#fff' : 'var(--theme-text-primary)',
-                    fontSize: '0.8125rem', fontWeight: 600,
-                    cursor: 'pointer', transition: 'all 0.15s',
-                  }}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
+            {/* Quick chips */}
+            <div style={{ display: 'flex', gap: 8, padding: '14px 14px 0' }}>
+              {[
+                { label: 'Today',    str: TODAY_STR },
+                { label: 'Tomorrow', str: TOMORROW_STR },
+              ].map(({ label, str }) => {
+                const active = pending === str;
+                return (
+                  <button
+                    key={label}
+                    type="button"
+                    onMouseDown={e => e.stopPropagation()}
+                    onClick={() => quick(str)}
+                    style={{
+                      flex: 1, padding: '7px 0',
+                      borderRadius: 20,
+                      border: `1.5px solid ${active ? 'var(--theme-accent)' : 'var(--theme-border)'}`,
+                      background: active ? 'var(--theme-accent)' : 'transparent',
+                      color: active ? '#fff' : 'var(--theme-text-primary)',
+                      fontSize: '0.8125rem', fontWeight: 600,
+                      cursor: 'pointer', transition: 'all 0.15s',
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
 
-          {/* Month navigation */}
-          <div style={{ display: 'flex', alignItems: 'center', padding: '10px 10px 6px' }}>
-            <button type="button" onClick={prevMonth} style={NAV_BTN}><VscChevronLeft /></button>
-            <span style={{
-              flex: 1, textAlign: 'center',
-              fontSize: '0.875rem', fontWeight: 700,
-              color: 'var(--theme-text-primary)',
+            {/* Month navigation */}
+            <div style={{ display: 'flex', alignItems: 'center', padding: '10px 10px 6px' }}>
+              <button type="button" onMouseDown={e => e.stopPropagation()} onClick={prevMonth} style={NAV_BTN}><VscChevronLeft /></button>
+              <span style={{
+                flex: 1, textAlign: 'center',
+                fontSize: '0.875rem', fontWeight: 700,
+                color: 'var(--theme-text-primary)',
+              }}>
+                {MONTHS[viewMonth]} {viewYear}
+              </span>
+              <button type="button" onMouseDown={e => e.stopPropagation()} onClick={nextMonth} style={NAV_BTN}><VscChevronRight /></button>
+            </div>
+
+            {/* Day-of-week headers */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)',
+              padding: '0 10px 2px', textAlign: 'center',
             }}>
-              {MONTHS[viewMonth]} {viewYear}
-            </span>
-            <button type="button" onClick={nextMonth} style={NAV_BTN}><VscChevronRight /></button>
-          </div>
+              {DAYS.map((d, i) => (
+                <div key={i} style={{
+                  fontSize: '0.68rem', fontWeight: 700,
+                  color: 'var(--theme-text-muted)', padding: '2px 0',
+                }}>{d}</div>
+              ))}
+            </div>
 
-          {/* Day-of-week headers */}
-          <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)',
-            padding: '0 10px 2px', textAlign: 'center',
-          }}>
-            {DAYS.map((d, i) => (
-              <div key={i} style={{
-                fontSize: '0.68rem', fontWeight: 700,
-                color: 'var(--theme-text-muted)', padding: '2px 0',
-              }}>{d}</div>
-            ))}
-          </div>
-
-          {/* Calendar grid */}
-          <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)',
-            padding: '0 10px 6px', gap: 1,
-          }}>
-            {cells.map((day, i) => {
-              if (!day) return <div key={i} />;
-              const cellStr    = toDueString(new Date(viewYear, viewMonth, day));
-              const isSelected = pending === cellStr;
-              const isToday    = cellStr === TODAY_STR;
-
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setPending(cellStr)}
-                  style={{
-                    padding: '7px 0', textAlign: 'center',
-                    borderRadius: '50%', aspectRatio: '1',
-                    border: isToday && !isSelected
-                      ? '1.5px solid var(--theme-accent)'
-                      : '1.5px solid transparent',
-                    background: isSelected ? 'var(--theme-accent)' : 'transparent',
-                    color: isSelected ? '#fff' : isToday ? 'var(--theme-accent)' : 'var(--theme-text-primary)',
-                    fontSize: '0.8125rem',
-                    fontWeight: isSelected || isToday ? 700 : 400,
-                    cursor: 'pointer', transition: 'background 0.1s',
-                    lineHeight: 1,
-                  }}
-                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--theme-bg-secondary)'; }}
-                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
-                >
-                  {day}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Footer */}
-          <div style={{
-            display: 'flex', gap: 8,
-            padding: '10px 14px 14px',
-            borderTop: '1px solid var(--theme-border)',
-          }}>
-            <button type="button" onClick={cancel} style={{
-              flex: 1, padding: '8px 0', borderRadius: 8,
-              border: '1.5px solid var(--theme-border)',
-              background: 'transparent', color: 'var(--theme-text-secondary)',
-              fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer',
+            {/* Calendar grid */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)',
+              padding: '0 10px 6px', gap: 1,
             }}>
-              Cancel
-            </button>
-            <button type="button" onClick={done} style={{
-              flex: 2, padding: '8px 0', borderRadius: 8,
-              border: 'none',
-              background: 'var(--theme-accent)', color: '#fff',
-              fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer',
+              {cells.map((day, i) => {
+                if (!day) return <div key={i} />;
+                const cellStr    = toDueString(new Date(viewYear, viewMonth, day));
+                const isSelected = pending === cellStr;
+                const isToday    = cellStr === TODAY_STR;
+
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onMouseDown={e => e.stopPropagation()}
+                    onClick={() => setPending(cellStr)}
+                    style={{
+                      padding: '7px 0', textAlign: 'center',
+                      borderRadius: '50%', aspectRatio: '1',
+                      border: isToday && !isSelected
+                        ? '1.5px solid var(--theme-accent)'
+                        : '1.5px solid transparent',
+                      background: isSelected ? 'var(--theme-accent)' : 'transparent',
+                      color: isSelected ? '#fff' : isToday ? 'var(--theme-accent)' : 'var(--theme-text-primary)',
+                      fontSize: '0.8125rem',
+                      fontWeight: isSelected || isToday ? 700 : 400,
+                      cursor: 'pointer', transition: 'background 0.1s',
+                      lineHeight: 1,
+                    }}
+                    onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--theme-bg-secondary)'; }}
+                    onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              display: 'flex', gap: 8,
+              padding: '10px 14px 14px',
+              borderTop: '1px solid var(--theme-border)',
             }}>
-              Done
-            </button>
-          </div>
+              <button
+                type="button"
+                onMouseDown={e => e.stopPropagation()}
+                onClick={cancel}
+                style={{
+                  flex: 1, padding: '8px 0', borderRadius: 8,
+                  border: '1.5px solid var(--theme-border)',
+                  background: 'transparent', color: 'var(--theme-text-secondary)',
+                  fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onMouseDown={e => e.stopPropagation()}
+                onClick={done}
+                style={{
+                  flex: 2, padding: '8px 0', borderRadius: 8,
+                  border: 'none',
+                  background: 'var(--theme-accent)', color: '#fff',
+                  fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                Done
+              </button>
+            </div>
         </div>,
         document.body
       )}

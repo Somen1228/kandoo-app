@@ -1832,7 +1832,8 @@ html.reduce-motion *::after {
   justify-content: center;
   padding: 5vh 2rem;
   background: var(--theme-bg-overlay);
-  backdrop-filter: blur(3px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 .settings-modal {
   display: flex;

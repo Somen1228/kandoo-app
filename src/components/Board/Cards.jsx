@@ -398,7 +398,7 @@ function Cards({
             className={`mac-segmented__btn${section === 'todos' ? ' is-active' : ''}`}
             onClick={() => setSection?.('todos')}
           >
-            Todos <span className="mac-segmented__count">{todosCount}</span>
+            Tasks <span className="mac-segmented__count">{todosCount}</span>
           </button>
           <button
             role="tab"

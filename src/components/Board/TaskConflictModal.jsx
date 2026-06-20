@@ -158,8 +158,8 @@ export default function TaskConflictModal() {
       onKeyDown={onKeyDown}
       style={{
         position: 'fixed', inset: 0,
-        background: 'rgba(0,0,0,0.6)',
-        backdropFilter: 'blur(4px)',
+        background: 'rgba(0,0,0,0.35)',
+        backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
         zIndex: 4500,
         display: 'flex',
         alignItems: 'center',

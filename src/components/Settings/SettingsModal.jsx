@@ -658,30 +658,66 @@ function AppearancePanel() {
   };
   const sampleTheme = JSON.stringify({ name: 'My Theme', colors: THEME_TOKENS.reduce((a, t) => (a[t] = '#000000', a), {}) }, null, 2);
 
-  const ThemeCard = ({ theme, custom }) => (
-    <div className={`ts-theme-card ${currentThemeId === theme.id ? 'active' : ''}`} onClick={() => setTheme(theme.id)}>
-      <div className="ts-preview">
-        <div className="ts-preview-bar" style={{ background: theme.colors.bgPrimary }} />
-        <div className="ts-preview-bar" style={{ background: theme.colors.bgCard }} />
-        <div className="ts-preview-bar" style={{ background: theme.colors.accent }} />
-        <div className="ts-preview-bar" style={{ background: theme.colors.bgInput }} />
-      </div>
-      <div className="ts-theme-name">{theme.emoji && <span className="emoji">{theme.emoji}</span>}{theme.name}</div>
-      {custom && (
-        <div className="ts-custom-actions">
-          <button className="ts-btn-sm ts-btn-export" onClick={(e) => { e.stopPropagation(); handleExport(theme.id); }}>Export</button>
-          <button className="ts-btn-sm ts-btn-delete" onClick={(e) => { e.stopPropagation(); removeCustomTheme(theme.id); }}>Delete</button>
+  const ThemeCard = ({ theme, custom }) => {
+    const isActive = currentThemeId === theme.id;
+    return (
+      <div
+        className="ts-theme-card"
+        onClick={() => setTheme(theme.id)}
+        style={{
+          borderColor: isActive ? theme.colors.accent : 'transparent',
+          borderRadius: 14, border: `2px solid ${isActive ? theme.colors.accent : 'transparent'}`,
+          overflow: 'hidden', cursor: 'pointer',
+          boxShadow: isActive ? `0 0 0 3px ${theme.colors.accentLight}` : '0 2px 8px rgba(0,0,0,0.08)',
+          transition: 'all 0.18s', transform: 'none',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.14)'; }}
+        onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = isActive ? `0 0 0 3px ${theme.colors.accentLight}` : '0 2px 8px rgba(0,0,0,0.08)'; }}
+      >
+        {/* Mini preview — full card bg */}
+        <div style={{ background: theme.colors.bgPrimary, padding: '18px 16px 14px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <div style={{ flex: 2, height: 9, borderRadius: 9, background: theme.colors.bgSecondary }} />
+            <div style={{ width: 22, height: 9, borderRadius: 9, background: theme.colors.accent, flexShrink: 0 }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <div style={{ width: 13, height: 13, borderRadius: '50%', background: theme.colors.danger, flexShrink: 0 }} />
+            <div style={{ width: 13, height: 13, borderRadius: '50%', background: theme.colors.accent, flexShrink: 0 }} />
+            <div style={{ flex: 1, height: 9, borderRadius: 9, background: theme.colors.bgInput }} />
+          </div>
         </div>
-      )}
-    </div>
-  );
+        {/* Name footer */}
+        <div style={{
+          background: theme.colors.bgCard,
+          borderTop: `1px solid ${theme.colors.border}`,
+          padding: '9px 13px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: theme.colors.textPrimary }}>{theme.name}</span>
+          {isActive && <span style={{ fontSize: '0.8rem', fontWeight: 700, color: theme.colors.accent }}>✓</span>}
+        </div>
+        {custom && (
+          <div style={{ display: 'flex', gap: 6, padding: '0 10px 10px', background: theme.colors.bgCard }}>
+            <button className="ts-btn-sm ts-btn-export" onClick={(e) => { e.stopPropagation(); handleExport(theme.id); }}>Export</button>
+            <button className="ts-btn-sm ts-btn-delete" onClick={(e) => { e.stopPropagation(); removeCustomTheme(theme.id); }}>Delete</button>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div>
       <h2 className="settings-h2">Appearance</h2>
       <Section title="Theme">
-        <div className="ts-grid">{builtInThemes.map((t) => <ThemeCard key={t.id} theme={t} />)}</div>
-        {customThemes.length > 0 && <div className="ts-grid" style={{ marginTop: 12 }}>{customThemes.map((t) => <ThemeCard key={t.id} theme={t} custom />)}</div>}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+          {builtInThemes.map((t) => <ThemeCard key={t.id} theme={t} />)}
+        </div>
+        {customThemes.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginTop: 12 }}>
+            {customThemes.map((t) => <ThemeCard key={t.id} theme={t} custom />)}
+          </div>
+        )}
       </Section>
 
       <Section title="Accent">

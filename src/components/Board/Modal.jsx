@@ -79,7 +79,7 @@ const Modal = forwardRef(({ addCard, cards, initialType = null }, ref) => {
   );
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-20" style={{ background: 'var(--theme-bg-overlay)' }}>
+    <div className="fixed inset-0 flex items-center justify-center z-20" style={{ background: 'var(--theme-bg-overlay)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }}>
       <div
         ref={ref}
         className="px-4 pt-4 pb-4 rounded shadow-lg"

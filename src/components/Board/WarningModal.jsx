@@ -28,7 +28,7 @@ function WarningModal({ boardName, onDeleteConfirm, onCancel }) {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--theme-bg-overlay)' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--theme-bg-overlay)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }}>
       <div ref={modalRef} className="p-6 rounded shadow-lg z-60" style={{ background: 'var(--theme-bg-modal)', border: '1px solid var(--theme-border)' }}>
         <h2 className="text-lg font-semibold mb-4" style={{ color: 'var(--theme-text-primary)' }}>Delete Board</h2>
         <p className="mb-4" style={{ color: 'var(--theme-text-secondary)' }}>

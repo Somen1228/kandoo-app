@@ -368,7 +368,7 @@ function TourCard({ step, stepIndex, total, onNext, onBack, onSkip, targetRect, 
         </button>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
           <span style={{ fontSize: '0.72rem', color: 'var(--theme-text-muted, #94a3b8)', userSelect: 'none' }}>
-            Show on startup
+            Show tips on startup
           </span>
           {/* mini toggle */}
           <div onClick={() => onToggleAutoShow(!noAutoShow)}

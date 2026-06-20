@@ -121,7 +121,8 @@ function ExportImportModal({ boards, activeBoardId, isOpen, onClose, onImport })
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 1000,
-      background: 'rgba(0,0,0,0.5)',
+      background: 'rgba(0,0,0,0.35)',
+      backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       <div
