@@ -25,16 +25,17 @@ export class SyncConflictError extends Error {
  * Returns an empty workspace (revision 0) when no cloud data exists yet.
  */
 export async function getWorkspace(userId) {
-  if (!db || !userId) return { workspace: { boards: [], revision: 0 } };
+  if (!db || !userId) return { workspace: { boards: [], revision: 0, forcedRevision: 0 } };
 
   const snap = await getDoc(workspaceRef(userId));
-  if (!snap.exists()) return { workspace: { boards: [], revision: 0 } };
+  if (!snap.exists()) return { workspace: { boards: [], revision: 0, forcedRevision: 0 } };
 
   const data = snap.data();
   return {
     workspace: {
       boards: data.boards ?? [],
       revision: data.revision ?? 0,
+      forcedRevision: data.forcedRevision ?? 0,
     },
   };
 }
@@ -52,8 +53,10 @@ export async function saveWorkspace(userId, boards, currentRevision, force = fal
 
   if (force) {
     const newRevision = currentRevision + 1;
-    await setDoc(ref, { boards, revision: newRevision, updatedAt: serverTimestamp() });
-    return { workspace: { boards, revision: newRevision } };
+    // forcedRevision marks this as an intentional override (conflict resolution).
+    // Other devices check this on load and silently accept cloud instead of re-prompting.
+    await setDoc(ref, { boards, revision: newRevision, forcedRevision: newRevision, updatedAt: serverTimestamp() });
+    return { workspace: { boards, revision: newRevision, forcedRevision: newRevision } };
   }
 
   const result = await runTransaction(db, async (tx) => {
@@ -90,7 +93,7 @@ export function subscribeWorkspace(userId, callback) {
     (snap) => {
       if (!snap.exists()) return;
       const data = snap.data();
-      callback({ boards: data.boards ?? [], revision: data.revision ?? 0 });
+      callback({ boards: data.boards ?? [], revision: data.revision ?? 0, forcedRevision: data.forcedRevision ?? 0 });
     },
     (err) => console.warn('[Kandoo] Firestore snapshot error:', err),
   );

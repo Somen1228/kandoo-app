@@ -156,6 +156,7 @@ function Board() {
   }, [boards, activeBoard]);
 
   const boardTaskCount = (board) => {
+    if (!board) return 0;
     let n = 0;
     for (const card of board.cards || []) {
       if ((card.type || "todo") !== "todo") continue;

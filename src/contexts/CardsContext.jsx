@@ -292,15 +292,23 @@ export const CardsProvider = ({ children }) => {
               const localDiffers = hasLocalData &&
                 JSON.stringify(localBoards) !== JSON.stringify(remote.boards);
 
-              if (localDiffers) {
-                // Both sides have data that diverged — present conflict UI.
+              // If cloud was force-pushed during a conflict resolution on another device,
+              // its forcedRevision === revision. Silently accept it — no need to re-conflict.
+              const cloudWasForceReset = remote.forcedRevision > 0 &&
+                remote.forcedRevision === remote.revision;
+
+              if (localDiffers && !cloudWasForceReset) {
+                // Both sides have genuinely diverged — present conflict UI.
                 hydrated = localBoards;
                 cloudConflictRef.current = remote;
                 setCloudConflict(remote);
                 setSyncState('conflict');
               } else {
-                // Remote is authoritative.
+                // Remote is authoritative (either identical, or was a force-reset).
                 hydrated = remote.boards;
+                if (cloudWasForceReset && localDiffers) {
+                  toast.info('Loaded workspace resolved by another device.');
+                }
                 setSyncState('synced');
               }
             } else {
@@ -362,13 +370,23 @@ export const CardsProvider = ({ children }) => {
   useEffect(() => {
     if (!userUid || !isLoaded) return undefined;
 
-    const unsubscribe = subscribeWorkspace(userUid, ({ boards: remoteBoards, revision }) => {
+    const unsubscribe = subscribeWorkspace(userUid, ({ boards: remoteBoards, revision, forcedRevision }) => {
       // Ignore echoes of our own saves.
       if (revision <= localRevisionRef.current) return;
-      // Ignore while a conflict is pending — user needs to resolve first.
-      if (cloudConflictRef.current) return;
+
+      const cloudWasForceReset = forcedRevision > 0 && forcedRevision === revision;
+
+      // If another device force-reset the cloud during conflict resolution, auto-accept.
+      if (cloudConflictRef.current) {
+        if (!cloudWasForceReset) return; // still let user resolve their pending conflict
+        cloudConflictRef.current = null;
+        setCloudConflict(null);
+        setPendingMerge(null);
+        toast.info('Conflict resolved by another device — workspace updated.');
+      }
 
       cloudRevisionRef.current = revision;
+      localRevisionRef.current = revision;
       setSyncState('synced');
       skipNextSaveRef.current  = true;
       skipHistoryRef.current   = true;
