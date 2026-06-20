@@ -7,7 +7,7 @@ import { generateTaskID } from "../../utils/taskIdGenerator";
 import { renderTaskValue } from "../../utils/richText";
 import { sanitizeHtml, markdownToHtml, isHtml, htmlToText } from "../../utils/htmlEditor";
 import { matchesTask, matchesCardTitle } from "../../utils/search";
-import { classifyTask, formatDueShort, dueTone } from "../../utils/dueDate";
+import { classifyTask, formatDueShort, dueTone, toDueString } from "../../utils/dueDate";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useSettings } from "../../contexts/SettingsContext";
 import { uploadImage, deleteImage, isStorageUrl } from "../../services/imageStorage";
@@ -25,6 +25,7 @@ import ContextMenu from "../ContextMenu.jsx";
 import ImageModal from "./ImageModal.jsx";
 import RichEditor from "./RichEditor.jsx";
 import NoteCard from "./NoteCard.jsx";
+import DatePicker from "./DatePicker.jsx";
 
 const PROTECTED_COLUMN_TITLES = new Set(["To-do", "In-Progress", "Done"]);
 
@@ -251,7 +252,7 @@ function Card({
   index, uid, type = 'todo', title, color, isVisible, tasks, note,
   updateCardTasks, updateCardNote, updateCards, searchTerm,
   query, filterMode = false, scheduleView = null, currentMatchTaskId = null,
-  quickAddSignal = 0, dragHandleProps = {},
+  quickAddSignal = 0, dragHandleProps = {}, onMoveToDone,
 }) {
   const isNote = type === 'note';
   const { currentThemeId } = useTheme();
@@ -287,6 +288,16 @@ function Card({
   const colorInputRef    = useRef(null);
 
   const isProtectedColumn = PROTECTED_COLUMN_TITLES.has(title);
+
+  // Pre-fill due date with today when the add-task form opens, if the setting is on.
+  useEffect(() => {
+    if (toggleAddTask && settings.quickAddDueToday) {
+      setNewTaskDue(prev => prev || toDueString(new Date()));
+    }
+    if (!toggleAddTask) {
+      setNewTaskDue("");
+    }
+  }, [toggleAddTask, settings.quickAddDueToday]);
 
   // ── Context menus ──────────────────────────────────────────────────────────
 
@@ -334,7 +345,8 @@ function Card({
   };
 
   const duplicateTask = (task) => {
-    const newTask = { id: generateTaskID(title), value: task.value, images: task.images || [], due: task.due || null };
+    const now = Date.now();
+    const newTask = { id: generateTaskID(title), value: task.value, images: task.images || [], due: task.due || null, createdAt: now, updatedAt: now };
     updateCardTasks(index, { ...tasks, [newTask.id]: newTask });
   };
 
@@ -391,7 +403,8 @@ function Card({
             try {
               const text = await navigator.clipboard.readText();
               if (text.trim()) {
-                const newTask = { id: generateTaskID(title), value: text.trim(), images: [] };
+                const now = Date.now();
+                const newTask = { id: generateTaskID(title), value: text.trim(), images: [], createdAt: now, updatedAt: now };
                 updateCardTasks(index, { ...tasks, [newTask.id]: newTask });
                 toast.success("Task created from clipboard");
               } else {
@@ -442,11 +455,12 @@ function Card({
     const clean = sanitizeHtml(taskValue);
     const hasText = htmlToText(clean).length > 0;
     if (!hasText && newTaskImages.length === 0) { setToggleAddTask(false); return; }
-    const newTask = { id: generateTaskID(title), value: clean, images: newTaskImages, due: newTaskDue || null };
+    const now = Date.now();
+    const newTask = { id: generateTaskID(title), value: clean, images: newTaskImages, due: newTaskDue || null, createdAt: now, updatedAt: now };
     updateCardTasks(index, { ...tasks, [newTask.id]: newTask });
     setTaskValue("");
     setNewTaskImages([]);
-    setNewTaskDue("");
+    setNewTaskDue(settings.quickAddDueToday ? toDueString(new Date()) : "");
     newEditorRef.current?.setHtml('');
     newEditorRef.current?.focus();
     setToggleAddTask(true);
@@ -492,7 +506,7 @@ function Card({
     const clean = sanitizeHtml(editingTaskValue);
     updateCardTasks(index, {
       ...tasks,
-      [taskId]: { ...tasks[taskId], value: clean, images: editingTaskImages, due: editingTaskDue || null },
+      [taskId]: { ...tasks[taskId], value: clean, images: editingTaskImages, due: editingTaskDue || null, updatedAt: Date.now() },
     });
     setEditingTaskId(null);
     setEditingTaskValue("");
@@ -508,10 +522,15 @@ function Card({
     toast.success('Note cleared');
   };
   const toggleDoneTask = (taskId) => {
-    updateCardTasks(index, {
-      ...tasks,
-      [taskId]: { ...tasks[taskId], done: !tasks[taskId]?.done },
-    });
+    const nowDone = !tasks[taskId]?.done;
+    const updated = {
+      ...tasks[taskId],
+      done: nowDone,
+      updatedAt: Date.now(),
+      completedAt: nowDone ? Date.now() : null,
+    };
+    updateCardTasks(index, { ...tasks, [taskId]: updated });
+    if (nowDone) onMoveToDone?.(taskId, updated);
   };
 
   // ── Image upload ───────────────────────────────────────────────────────────
@@ -820,19 +839,12 @@ function Card({
                       >
                         <IoImageOutline /> Add image
                       </button>
-                      <label className="mac-due-row" onPointerDown={e => e.stopPropagation()} title="Set due date" style={{ alignSelf: 'flex-start', marginTop: '4px' }}>
-                        <VscCalendar />
-                        <input
-                          type="date"
-                          value={editingTaskDue}
-                          onChange={e => setEditingTaskDue(e.target.value)}
-                        />
-                        {editingTaskDue && (
-                          <button type="button" className="mac-due-row__clear" onClick={() => setEditingTaskDue("")} aria-label="Clear due date">
-                            <VscClose />
-                          </button>
-                        )}
-                      </label>
+                      <DatePicker
+                        value={editingTaskDue}
+                        onChange={setEditingTaskDue}
+                        onPointerDown={e => e.stopPropagation()}
+                        style={{ alignSelf: 'flex-start', marginTop: '4px' }}
+                      />
                     </form>
                   ) : (
                     /* ── Display mode ── */
@@ -982,19 +994,11 @@ function Card({
             >
               <IoImageOutline /> Add image
             </button>
-            <label className="mac-due-row" onPointerDown={e => e.stopPropagation()} title="Set due date">
-              <VscCalendar />
-              <input
-                type="date"
-                value={newTaskDue}
-                onChange={e => setNewTaskDue(e.target.value)}
-              />
-              {newTaskDue && (
-                <button type="button" className="mac-due-row__clear" onClick={() => setNewTaskDue("")} aria-label="Clear due date">
-                  <VscClose />
-                </button>
-              )}
-            </label>
+            <DatePicker
+              value={newTaskDue}
+              onChange={setNewTaskDue}
+              onPointerDown={e => e.stopPropagation()}
+            />
             <button
               type="submit"
               onPointerDown={e => e.stopPropagation()}

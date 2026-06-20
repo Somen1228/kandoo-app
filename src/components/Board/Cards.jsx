@@ -27,9 +27,11 @@ import { CSS } from "@dnd-kit/utilities";
 import Card from "./Card";
 import NotesView from "./NotesView";
 import { matchesTask, matchesCardTitle, matchesNote } from "../../utils/search";
+import { classifyTask } from "../../utils/dueDate";
 import { renderTaskValue } from "../../utils/richText";
 import Modal from "./Modal";
 import { CardsContext } from "../../contexts/CardsContext";
+import { useSettings } from "../../contexts/SettingsContext";
 import { VscHistory, VscClose } from "react-icons/vsc";
 import ResetWarningModal from "./ResetWarningModal";
 
@@ -65,6 +67,7 @@ function Cards({
 }) {
   const [activeNoteUid, setActiveNoteUid] = useState(null);
   const { boards, setBoards, defaultCards } = useContext(CardsContext);
+  const { settings } = useSettings();
   const board = boards.find((b) => b.id === boardId);
 
   // Notes-section helpers
@@ -208,6 +211,35 @@ function Cards({
         prevBoards.map((b) =>
           b.id === boardId ? { ...b, cards: updateFn(b.cards) } : b
         )
+      );
+    },
+    [boardId, setBoards]
+  );
+
+  // Move a completed task to the Done column (called by Card when autoMoveDone is on)
+  const moveTaskToDone = useCallback(
+    (fromCardUid, taskId, taskData) => {
+      setBoards((prevBoards) =>
+        prevBoards.map((b) => {
+          if (b.id !== boardId) return b;
+          const doneCol = b.cards.find(
+            (c) => c.type !== 'note' && /^(done|completed|finished)$/i.test(c.title.trim())
+          );
+          if (!doneCol || doneCol.uid === fromCardUid) return b;
+          return {
+            ...b,
+            cards: b.cards.map((col) => {
+              if (col.uid === fromCardUid) {
+                const { [taskId]: _, ...rest } = col.tasks;
+                return { ...col, tasks: rest };
+              }
+              if (col.uid === doneCol.uid) {
+                return { ...col, tasks: { ...col.tasks, [taskId]: taskData } };
+              }
+              return col;
+            }),
+          };
+        })
       );
     },
     [boardId, setBoards]
@@ -443,6 +475,14 @@ function Cards({
               if (section === 'notes' && cardType !== 'note') return null;
               if (section === 'todos' && cardType === 'note') return null;
 
+              // In schedule view, hide cards with no tasks in the active bucket.
+              if (scheduleView) {
+                const hasMatch = Object.values(card.tasks || {}).some(
+                  (t) => classifyTask(t) === scheduleView
+                );
+                if (!hasMatch) return null;
+              }
+
               // In filter mode, hide cards that have zero matching tasks AND
               // whose title doesn't match either.
               if (filterMode && query && !query.isEmpty) {
@@ -476,6 +516,7 @@ function Cards({
                     currentMatchTaskId={currentMatchTaskId}
                     quickAddSignal={cardIndex === 0 ? quickAddSignal : 0}
                     dragHandleProps={dragHandleProps}
+                    onMoveToDone={settings.autoMoveDone ? (taskId, taskData) => moveTaskToDone(card.uid, taskId, taskData) : undefined}
                   />
                 )}
               </SortableCardWrapper>
@@ -483,7 +524,7 @@ function Cards({
             })}
           </SortableContext>
 
-          {toggleModal ? (
+          {!scheduleView && !filterMode && (toggleModal ? (
             <Modal
               ref={modalRef}
               addCard={addCard}
@@ -494,7 +535,7 @@ function Cards({
             <button onClick={() => setToggleModal(true)} className="add-btn">
               + Add {section === 'notes' ? 'Note' : 'Card'}
             </button>
-          )}
+          ))}
 
           {warningBoardReset && (
             <ResetWarningModal

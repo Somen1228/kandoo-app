@@ -25,6 +25,7 @@ export const SETTINGS_DEFAULTS = {
   // Behavior
   taskDeleteMode: 'undo',     // 'undo' | 'confirm'
   quickAddDueToday: true,
+  autoMoveDone: true,         // move completed tasks to Done column
 };
 
 export function SettingsProvider({ children }) {

@@ -772,6 +772,10 @@ function BehaviorPanel() {
         <Row title="Quick-add due date" desc="Menu-bar quick-add sets the task due today.">
           <Toggle checked={settings.quickAddDueToday} onChange={(v) => setSetting('quickAddDueToday', v)} />
         </Row>
+        <Row title="Move done tasks to Done column" desc="When a task is marked complete, automatically move it to the Done column.">
+          <Toggle checked={settings.autoMoveDone} onChange={(v) => setSetting('autoMoveDone', v)} />
+        </Row>
+
       </Section>
       <Section title="Keyboard shortcuts">
         <div className="settings-shortcuts">

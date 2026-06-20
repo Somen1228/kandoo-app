@@ -864,6 +864,26 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   display: inline-flex;
 }
 
+/* Custom DatePicker trigger button */
+.mac-due-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--theme-text-muted);
+  border: 1px dashed var(--theme-border);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  transition: color 0.15s, border-color 0.15s;
+}
+.mac-due-trigger:hover {
+  color: var(--theme-text-primary);
+  border-color: var(--theme-accent);
+}
+
 /* ============================================================================
    Menu-bar quick panel (separate transparent Tauri window)
    ========================================================================== */
