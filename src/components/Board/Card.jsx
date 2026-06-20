@@ -645,6 +645,7 @@ function Card({
               onChange={e => setEditingTitleValue(e.target.value)}
               onBlur={saveCardTitle}
               onKeyDown={e => {
+                e.stopPropagation();
                 if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
                 if (e.key === 'Escape') { e.preventDefault(); cancelEditCardTitle(); }
               }}
