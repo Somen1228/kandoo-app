@@ -38,6 +38,7 @@ const RichEditor = forwardRef(function RichEditor({
   onCancel,
   onBlur,
   onMultilinePaste,
+  onRequestLink,
   className = '',
   style,
   placeholder = '',
@@ -45,6 +46,9 @@ const RichEditor = forwardRef(function RichEditor({
   markdownPaste = false,
 }, ref) {
   const editorRef = useRef(null);
+  // Last selection that lived inside this editor — kept current so a hyperlink
+  // can be applied even after focus moves to the URL input in the toolbar.
+  const savedRangeRef = useRef(null);
 
   const updateEmptyState = () => {
     if (!editorRef.current) return;
@@ -97,7 +101,39 @@ const RichEditor = forwardRef(function RichEditor({
       updateEmptyState();
       onChange?.(el.innerHTML);
     },
+    // Apply a hyperlink to the last editor selection (or insert one if collapsed).
+    insertLink: (url) => {
+      const el = editorRef.current;
+      if (!el || !url) return;
+      el.focus();
+      const sel = window.getSelection();
+      if (savedRangeRef.current) {
+        sel.removeAllRanges();
+        sel.addRange(savedRangeRef.current);
+      }
+      if (sel.rangeCount && !sel.isCollapsed) {
+        document.execCommand('createLink', false, url);
+      } else {
+        const safe = url.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+        document.execCommand('insertHTML', false, `<a href="${safe}">${safe}</a>`);
+      }
+      updateEmptyState();
+      onChange?.(el.innerHTML);
+    },
   }), [onChange]);
+
+  // Continuously remember the editor's selection so the toolbar's link input
+  // (which steals focus) can still target the right text.
+  useEffect(() => {
+    const save = () => {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount && editorRef.current?.contains(sel.anchorNode)) {
+        savedRangeRef.current = sel.getRangeAt(0).cloneRange();
+      }
+    };
+    document.addEventListener('selectionchange', save);
+    return () => document.removeEventListener('selectionchange', save);
+  }, []);
 
   // Seed initial content once. After mount, contentEditable owns the DOM.
   useEffect(() => {
@@ -142,6 +178,12 @@ const RichEditor = forwardRef(function RichEditor({
         document.execCommand('strikeThrough', false);
         updateEmptyState();
         onChange?.(editorRef.current?.innerHTML || '');
+        return;
+      }
+      // Cmd/Ctrl + K → ask the toolbar to open its hyperlink input
+      if (!e.shiftKey && k === 'k' && onRequestLink) {
+        e.preventDefault();
+        onRequestLink();
         return;
       }
     }

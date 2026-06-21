@@ -74,7 +74,7 @@ export default function Panel() {
     if (!value || !targetBoard) return;
     const cardIndex = targetBoard.cards.findIndex((c) => (c.type || "todo") === "todo");
     if (cardIndex < 0) return;
-    const id = generateTaskID(targetBoard.cards[cardIndex].title);
+    const id = generateTaskID();
     const due = settings.quickAddDueToday ? toDueString(new Date()) : null;
     setBoards((prev) => prev.map((b) => {
       if (b.id !== targetBoard.id) return b;

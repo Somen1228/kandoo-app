@@ -789,7 +789,7 @@ function HelpModal({ isOpen, onClose, defaultSection = null, onLaunchTour, onFee
             {active.content}
             <div style={{ marginTop: '2rem', paddingTop: '1rem', borderTop: '1px solid var(--theme-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: '0.75rem', color: 'var(--theme-text-muted)' }}>
-                Kandoo v1.1.0 — local-first, cloud-synced, built for students.
+                Kandoo v1.1.0
               </span>
               {onFeedback && (
                 <button

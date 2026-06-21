@@ -72,7 +72,28 @@ const FONT_FAMILIES = [
 ];
 const FONT_SIZES = ['', '12px', '13px', '14px', '16px', '18px', '20px', '24px', '30px'];
 
-export default function NoteEditor({ content, onChange, placeholder, paperless, notes, onCreatePage, onNavigatePage }) {
+// Collect every item of the list (bullet, ordered, or checklist) that encloses
+// a clicked row. Uses each item's own first-line text and, for checklists, its
+// checked state — so any list can be pushed to the board as tasks.
+const LIST_NODE_TYPES = new Set(['taskList', 'bulletList', 'orderedList']);
+function extractListItems(editor, liDom) {
+  let pos;
+  try { pos = editor.view.posAtDOM(liDom, 0); } catch { return []; }
+  const $pos = editor.state.doc.resolve(pos);
+  let listNode = null;
+  for (let d = $pos.depth; d > 0; d--) {
+    if (LIST_NODE_TYPES.has($pos.node(d).type.name)) { listNode = $pos.node(d); break; }
+  }
+  if (!listNode) return [];
+  const items = [];
+  listNode.forEach((child) => {
+    const text = (child.firstChild?.textContent ?? child.textContent).trim();
+    if (text) items.push({ text, checked: child.type.name === 'taskItem' ? !!child.attrs.checked : false });
+  });
+  return items;
+}
+
+export default function NoteEditor({ content, onChange, placeholder, paperless, notes, onCreatePage, onNavigatePage, onSendListToBoard }) {
   const fileRef = useRef(null);
   const editorRef = useRef(null);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -135,6 +156,7 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
     const imageNode = target?.closest('.note-image-node');
     const link = target?.closest('a[href]');
     const taskItem = target?.closest('li[data-type="taskItem"]');
+    const listItem = target?.closest('li'); // any list item: bullet, ordered, or task
     const hit = view.posAtCoords({ left: event.clientX, top: event.clientY });
 
     if (imageNode) {
@@ -162,6 +184,17 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
       ? ''
       : editor.state.doc.textBetween(selection.from, selection.to, '\n');
     let items;
+
+    // Reusable "Send list to board" action — available on any list, whether or
+    // not there's a selection (right-clicking a list with text selected is common).
+    const sendListAction = (li) => ({
+      label: 'Send list to board…',
+      onClick: () => {
+        const list = extractListItems(editor, li);
+        if (!list.length) { toast.error('This list is empty'); return; }
+        onSendListToBoard?.(list);
+      },
+    });
 
     if (imageNode) {
       items = [
@@ -194,14 +227,24 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
         { divider: true },
         { label: 'Clear formatting', onClick: () => editor.chain().focus().unsetAllMarks().clearNodes().run() },
       ];
-    } else if (taskItem) {
-      const checked = editor.getAttributes('taskItem').checked;
-      items = [
-        { label: checked ? 'Mark unchecked' : 'Mark checked', onClick: () => editor.chain().focus().updateAttributes('taskItem', { checked: !checked }).run() },
-        { label: 'Remove checklist formatting', onClick: () => editor.chain().focus().liftListItem('taskItem').run() },
+      if (listItem) {
+        items.push({ divider: true }, sendListAction(listItem));
+      }
+    } else if (listItem) {
+      items = [];
+      if (taskItem) {
+        const checked = editor.getAttributes('taskItem').checked;
+        items.push(
+          { label: checked ? 'Mark unchecked' : 'Mark checked', onClick: () => editor.chain().focus().updateAttributes('taskItem', { checked: !checked }).run() },
+          { label: 'Remove checklist formatting', onClick: () => editor.chain().focus().liftListItem('taskItem').run() },
+          { divider: true },
+        );
+      }
+      items.push(
+        sendListAction(listItem),
         { divider: true },
         { label: 'Paste', shortcut: '⌘V', onClick: () => pasteClipboard(editor) },
-      ];
+      );
     } else {
       items = [
         { label: 'Paste', shortcut: '⌘V', onClick: () => pasteClipboard(editor) },

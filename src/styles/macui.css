@@ -804,12 +804,27 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   gap: 7px;
   min-width: 0;
 }
-.mac-task__id {
-  font-size: 0.68rem;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
+/* Backlink chip on a task that was created from a note checklist. */
+.mac-note-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 11rem;
+  padding: 1px 7px 1px 5px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 0.66rem;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+.mac-note-chip:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
 }
 .mac-task__actions {
   display: flex;

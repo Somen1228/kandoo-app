@@ -90,10 +90,10 @@ export function parseExportFile(text) {
 }
 
 // Strip incoming IDs and assign fresh ones so imports can't clobber existing data
-function regenerateTaskIds(tasks, cardTitle) {
+function regenerateTaskIds(tasks) {
   const out = {};
   for (const t of Object.values(tasks || {})) {
-    const id = generateTaskID(cardTitle);
+    const id = generateTaskID();
     out[id] = { ...t, id };
   }
   return out;
@@ -106,7 +106,7 @@ export function regenerateIds(boards) {
     cards: (b.cards || []).map((c) => ({
       ...c,
       uid: uuidv4(),
-      tasks: regenerateTaskIds(c.tasks, c.title),
+      tasks: regenerateTaskIds(c.tasks),
     })),
   }));
 }
