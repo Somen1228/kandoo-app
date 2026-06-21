@@ -28,16 +28,16 @@ if (isPanel) document.documentElement.classList.add("is-panel-window");
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <Router>
-      <ThemeProvider>
-        <SettingsProvider>
-          <AuthProvider>
+      <AuthProvider>
+        <ThemeProvider>
+          <SettingsProvider>
             <CardsProvider>
               {isPanel ? <Panel /> : <App />}
               <KandooToastContainer />
             </CardsProvider>
-          </AuthProvider>
-        </SettingsProvider>
-      </ThemeProvider>
+          </SettingsProvider>
+        </ThemeProvider>
+      </AuthProvider>
     </Router>
   </StrictMode>
 );
