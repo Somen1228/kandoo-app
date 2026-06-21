@@ -1,5 +1,7 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useTheme } from './ThemeContext';
+import { useAuth } from './AuthContext';
+import { getWorkspace, savePrefs, subscribeWorkspace } from '../services/firestoreSync';
 
 const SettingsContext = createContext();
 
@@ -10,6 +12,8 @@ export const useSettings = () => {
 };
 
 const STORAGE_KEY = 'kandoo-settings-v1';
+const AT_KEY = 'kandoo-settings-v1-at';   // client timestamp of the last local change
+const PUSH_DEBOUNCE_MS = 700;
 
 export const SETTINGS_DEFAULTS = {
   // Appearance
@@ -30,6 +34,9 @@ export const SETTINGS_DEFAULTS = {
 
 export function SettingsProvider({ children }) {
   const { currentTheme, currentThemeId } = useTheme();
+  const { user } = useAuth();
+  const userUid = user?.uid || null;
+
   const [settings, setSettings] = useState(() => {
     try {
       return { ...SETTINGS_DEFAULTS, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') };
@@ -38,9 +45,67 @@ export function SettingsProvider({ children }) {
     }
   });
 
+  // ── Cloud sync refs ─────────────────────────────────────────────────────────
+  const updatedAtRef     = useRef(Number(localStorage.getItem(AT_KEY)) || 0);
+  const applyingRemoteRef = useRef(false);   // suppress the push when we adopt cloud
+  const hydratedRef       = useRef(false);   // don't push before the initial cloud read
+  const pushTimerRef      = useRef(null);
+  const userUidRef        = useRef(userUid);
+  useEffect(() => { userUidRef.current = userUid; }, [userUid]);
+
+  // Persist locally + push to the cloud whenever settings change.
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)); } catch { /* quota */ }
+    if (applyingRemoteRef.current) { applyingRemoteRef.current = false; return; }
+    if (!hydratedRef.current) return; // wait until the initial cloud hydrate settles
+    const at = Date.now();
+    updatedAtRef.current = at;
+    try { localStorage.setItem(AT_KEY, String(at)); } catch { /* quota */ }
+    const uid = userUidRef.current;
+    if (!uid) return;
+    clearTimeout(pushTimerRef.current);
+    pushTimerRef.current = setTimeout(() => {
+      savePrefs(uid, { settings, settingsUpdatedAt: at }).catch(() => {});
+    }, PUSH_DEBOUNCE_MS);
   }, [settings]);
+
+  // On login: adopt newer cloud settings, otherwise push the local ones up.
+  useEffect(() => {
+    if (!userUid) { hydratedRef.current = true; return undefined; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { workspace } = await getWorkspace(userUid);
+        if (cancelled) return;
+        const cloudAt = workspace.settingsUpdatedAt || 0;
+        if (workspace.settings && cloudAt > updatedAtRef.current) {
+          applyingRemoteRef.current = true;
+          updatedAtRef.current = cloudAt;
+          try { localStorage.setItem(AT_KEY, String(cloudAt)); } catch { /* quota */ }
+          setSettings({ ...SETTINGS_DEFAULTS, ...workspace.settings });
+        } else if (updatedAtRef.current > cloudAt) {
+          savePrefs(userUid, { settings, settingsUpdatedAt: updatedAtRef.current }).catch(() => {});
+        }
+      } catch { /* offline — keep local copy */ }
+      finally { if (!cancelled) hydratedRef.current = true; }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userUid]);
+
+  // Live-apply settings changed on another device (echo-suppressed by timestamp).
+  useEffect(() => {
+    if (!userUid) return undefined;
+    return subscribeWorkspace(userUid, (data) => {
+      const cloudAt = data.settingsUpdatedAt || 0;
+      if (data.settings && cloudAt > updatedAtRef.current) {
+        applyingRemoteRef.current = true;
+        updatedAtRef.current = cloudAt;
+        try { localStorage.setItem(AT_KEY, String(cloudAt)); } catch { /* quota */ }
+        setSettings({ ...SETTINGS_DEFAULTS, ...data.settings });
+      }
+    });
+  }, [userUid]);
 
   // ── Apply non-colour preferences to the document ────────────────────────
   useEffect(() => {
