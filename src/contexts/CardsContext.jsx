@@ -27,9 +27,9 @@ const WINDOW_LABEL = (() => {
 })();
 
 const defaultCards = [
-  { uid: 'col-todo',       title: 'To-do',       color: 'bg-gray-200',  isVisible: true, tasks: {} },
-  { uid: 'col-inprogress', title: 'In-Progress',  color: 'bg-blue-100',  isVisible: true, tasks: {} },
-  { uid: 'col-done',       title: 'Done',         color: 'bg-green-100', isVisible: true, tasks: {} },
+  { uid: 'col-todo',       title: 'To-do',       color: 'violet', isVisible: true, tasks: {} },
+  { uid: 'col-inprogress', title: 'In-Progress',  color: 'sky',    isVisible: true, tasks: {} },
+  { uid: 'col-done',       title: 'Done',         color: 'mint',   isVisible: true, tasks: {} },
 ];
 
 const ensureCardUids = (boards) =>

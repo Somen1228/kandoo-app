@@ -7,6 +7,7 @@ import {
   useMemo,
 } from "react";
 import { v4 as uuidv4 } from "uuid";
+import { pickCardColorKey } from "../../themes/cardPalettes";
 import {
   DndContext,
   closestCenter,
@@ -134,19 +135,23 @@ function Cards({
 
   const addCard = useCallback(
     (title, color, type = 'todo') => {
-      const newCard = {
-        uid: uuidv4(),
-        type,
-        title,
-        color,
-        isVisible: false,
-        tasks: {},
-        ...(type === 'note' ? { note: { content: '', images: [], updatedAt: Date.now() } } : {}),
-      };
+      const uid = uuidv4();
       setBoards((prevBoards) =>
-        prevBoards.map((b) =>
-          b.id === boardId ? { ...b, cards: [...b.cards, newCard] } : b
-        )
+        prevBoards.map((b) => {
+          if (b.id !== boardId) return b;
+          // Auto-assign a balanced hue from the live board so colours spread out.
+          const chosen = color || pickCardColorKey(b.cards.map((c) => c.color));
+          const newCard = {
+            uid,
+            type,
+            title,
+            color: chosen,
+            isVisible: false,
+            tasks: {},
+            ...(type === 'note' ? { note: { content: '', images: [], updatedAt: Date.now() } } : {}),
+          };
+          return { ...b, cards: [...b.cards, newCard] };
+        })
       );
       setTimeout(() => {
         setBoards((prevBoards) =>
@@ -592,13 +597,19 @@ function Cards({
             return (
               <div
                 style={{
-                  background: "var(--theme-task-bg)",
+                  // True liquid glass for the floating dragged card — translucent
+                  // so backdrop-blur refracts the board it moves over.
+                  background:
+                    "linear-gradient(315deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.04) 42%, rgba(255,255,255,0) 60%), color-mix(in srgb, var(--theme-bg-card) 78%, transparent)",
                   border: "1px solid var(--theme-task-border)",
-                  borderRadius: "0.375rem",
-                  padding: "0.5rem 0.625rem",
+                  borderRadius: 14,
+                  padding: "0.6rem 0.75rem",
                   minWidth: 200,
                   maxWidth: 280,
-                  boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+                  boxShadow:
+                    "0 16px 36px rgba(0,0,0,0.30), inset 0 -1px 0 rgba(255,255,255,0.12)",
+                  backdropFilter: "blur(18px) saturate(160%)",
+                  WebkitBackdropFilter: "blur(18px) saturate(160%)",
                   transform: "rotate(1.5deg)",
                 }}
               >

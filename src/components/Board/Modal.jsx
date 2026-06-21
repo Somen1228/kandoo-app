@@ -10,9 +10,7 @@ const Modal = forwardRef(({ addCard, cards, initialType = null }, ref) => {
   const [step, setStep] = useState(initialType ? 'details' : 'type');
   const [type, setType] = useState(initialType);      // 'todo' | 'note'
   const [cardTitle, setCardTitle] = useState("");
-  const [selectedColor, setSelectedColor] = useState("");
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
-  const [showColorWarning, setShowColorWarning] = useState(false);
 
   const isNote = type === 'note';
 
@@ -21,15 +19,11 @@ const Modal = forwardRef(({ addCard, cards, initialType = null }, ref) => {
       setShowDuplicateWarning(true);
     } else if (cards.some((c) => c.title.toLowerCase() === cardTitle.toLowerCase())) {
       setShowDuplicateWarning(true);
-    } else if (!isNote && !selectedColor) {
-      // colour is only required for todo cards
-      setShowColorWarning(true);
     } else {
-      addCard(cardTitle, selectedColor || 'bg-sky-200', type);
+      // Colour is auto-assigned (random hue from the theme palette).
+      addCard(cardTitle, undefined, type);
       setCardTitle("");
-      setSelectedColor("");
       setShowDuplicateWarning(false);
-      setShowColorWarning(false);
     }
   };
 
@@ -47,7 +41,7 @@ const Modal = forwardRef(({ addCard, cards, initialType = null }, ref) => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardTitle, selectedColor, step]);
+  }, [cardTitle, step]);
 
   const pickType = (t) => {
     setType(t);
@@ -165,50 +159,18 @@ const Modal = forwardRef(({ addCard, cards, initialType = null }, ref) => {
                 </span>
               </div>
             )}
-            {!isNote && showColorWarning && !selectedColor && (
-              <div className="px-4 py-3 rounded relative mt-2 flex gap-2" role="alert" style={{
-                background: 'rgba(234,179,8,0.12)',
-                border: '1px solid var(--theme-warning)',
-                color: 'var(--theme-warning)',
-              }}>
-                <img width="20" height="20" src="https://img.icons8.com/emoji/48/warning-emoji.png" alt="warning-emoji"/>
-                <span className="block sm:inline text-sm">
-                  Please select a colour.
-                </span>
-              </div>
-            )}
             <div className="flex flex-col items-center mt-4">
               {!isNote && (
-                <>
-                  <p className="text-sm font-medium" style={{ color: 'var(--theme-text-secondary)' }}>
-                    Select a colour
-                  </p>
-                  <div className="flex pt-2 space-x-3">
-                    {[
-                      ['bg-pink-200',   'pink'],
-                      ['bg-sky-200',    'sky'],
-                      ['bg-teal-200',   'teal'],
-                      ['bg-yellow-200', 'yellow'],
-                      ['bg-red-200',    'red'],
-                      ['bg-purple-200', 'purple'],
-                    ].map(([cls, name]) => (
-                      <div
-                        key={cls}
-                        className={`priority-colors ${cls} hover:ring-2 hover:ring-${name}-500 ${selectedColor === cls ? `ring-2 ring-${name}-500` : ""}`}
-                        onClick={() => setSelectedColor(cls)}
-                      />
-                    ))}
-                  </div>
-                </>
+                <p className="text-xs" style={{ color: 'var(--theme-text-muted)' }}>
+                  A colour is picked for you — change it anytime from the card menu.
+                </p>
               )}
               <div className="mt-4 w-full flex justify-end">
                 <button
                   onClick={handleAddCard}
-                  className={`w-full h-10 ${isNote ? '' : selectedColor} font-medium rounded-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed`}
-                  style={isNote
-                    ? { background: 'var(--theme-accent)', color: 'white' }
-                    : { color: 'var(--theme-text-primary)' }}
-                  disabled={!cardTitle || (!isNote && !selectedColor) || showDuplicateWarning}
+                  className="w-full h-10 font-medium rounded-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ background: 'var(--theme-accent)', color: 'white' }}
+                  disabled={!cardTitle || showDuplicateWarning}
                 >
                   Create {type === 'note' ? 'Note' : 'To-do'}
                 </button>

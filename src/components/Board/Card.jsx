@@ -8,6 +8,7 @@ import { renderTaskValue } from "../../utils/richText";
 import { sanitizeHtml, markdownToHtml, isHtml, htmlToText } from "../../utils/htmlEditor";
 import { matchesTask, matchesCardTitle } from "../../utils/search";
 import { classifyTask, formatDueShort, dueTone, toDueString } from "../../utils/dueDate";
+import { CARD_HUES, resolveCardColor, normalizeCardColor, isDarkSurface } from "../../themes/cardPalettes";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useSettings } from "../../contexts/SettingsContext";
 import { uploadImage, deleteImage, isStorageUrl } from "../../services/imageStorage";
@@ -29,49 +30,7 @@ import DatePicker from "./DatePicker.jsx";
 
 const PROTECTED_COLUMN_TITLES = new Set(["To-do", "In-Progress", "Done"]);
 
-const CARD_COLORS = {
-  light: {
-    'bg-pink-200':   { bg: '#fbcfe8', text: '#1e293b' },
-    'bg-sky-200':    { bg: '#bae6fd', text: '#1e293b' },
-    'bg-teal-200':   { bg: '#99f6e4', text: '#1e293b' },
-    'bg-yellow-200': { bg: '#fef08a', text: '#1e293b' },
-    'bg-red-200':    { bg: '#fecaca', text: '#1e293b' },
-    'bg-red-300':    { bg: '#fca5a5', text: '#1e293b' },
-    'bg-purple-200': { bg: '#e9d5ff', text: '#1e293b' },
-  },
-  dark: {
-    'bg-pink-200':   { bg: '#831843', text: '#fce7f3' },
-    'bg-sky-200':    { bg: '#1e3a5f', text: '#bae6fd' },
-    'bg-teal-200':   { bg: '#134e4a', text: '#99f6e4' },
-    'bg-yellow-200': { bg: '#713f12', text: '#fef08a' },
-    'bg-red-200':    { bg: '#7f1d1d', text: '#fecaca' },
-    'bg-red-300':    { bg: '#7f1d1d', text: '#fca5a5' },
-    'bg-purple-200': { bg: '#4c1d95', text: '#e9d5ff' },
-  },
-};
-
-// ── Card colour helpers ────────────────────────────────────────────────────
-
-// WCAG relative-luminance contrast — pick white or near-black for any bg hex.
-function getContrastText(hex) {
-  if (!hex || !hex.startsWith('#')) return null;
-  const m = hex.replace('#', '').match(/.{2}/g);
-  if (!m || m.length < 3) return null;
-  const [r, g, b] = m.map((h) => parseInt(h, 16));
-  const lin = (c) => {
-    const s = c / 255;
-    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
-  };
-  const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-  return L > 0.55 ? '#1e293b' : '#ffffff';
-}
-
-const PRESET_COLORS = [
-  '#fbcfe8', '#bae6fd', '#99f6e4', '#fef08a',
-  '#fecaca', '#e9d5ff', '#fed7aa', '#d9f99d',
-];
-
-function CardColorPicker({ x, y, currentColor, onPick, onOpenCustom, onClose }) {
+function CardColorPicker({ x, y, currentColor, isDark, onPick, onClose }) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -82,8 +41,10 @@ function CardColorPicker({ x, y, currentColor, onPick, onOpenCustom, onClose }) 
     return () => document.removeEventListener('mousedown', handler);
   }, [onClose]);
 
+  const activeKey = normalizeCardColor(currentColor);
+
   // Clamp to viewport
-  const W = 220, H = 150;
+  const W = 200, H = 96;
   const left = Math.min(x, window.innerWidth  - W - 8);
   const top  = Math.min(y, window.innerHeight - H - 8);
 
@@ -94,98 +55,52 @@ function CardColorPicker({ x, y, currentColor, onPick, onOpenCustom, onClose }) 
         position: 'fixed', top, left, width: W,
         background: 'var(--theme-bg-modal)',
         border: '1px solid var(--theme-border)',
-        borderRadius: '0.5rem',
+        borderRadius: '0.65rem',
         padding: '0.75rem',
         boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
         zIndex: 2000,
-        display: 'flex', flexDirection: 'column', gap: '0.5rem',
+        display: 'flex', flexDirection: 'column', gap: '0.6rem',
       }}
     >
       <div style={{ fontSize: '0.65rem', color: 'var(--theme-text-muted)', letterSpacing: '0.08em', fontWeight: 600 }}>
         CARD COLOUR
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: '4px' }}>
-        {PRESET_COLORS.map((c) => (
-          <button
-            key={c}
-            type="button"
-            onClick={() => { onPick(c); onClose(); }}
-            title={c}
-            style={{
-              width: '20px', height: '20px',
-              borderRadius: '50%',
-              background: c,
-              border: currentColor === c ? '2px solid var(--theme-accent)' : '1px solid var(--theme-border)',
-              cursor: 'pointer', padding: 0,
-            }}
-          />
-        ))}
-      </div>
-      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
-        <button
-          type="button"
-          onClick={() => {
-            // Close popover first, then trigger persistent input on the Card
-            // so the native picker's overlay events can't race with the
-            // popover's outside-click handler.
-            onClose();
-            requestAnimationFrame(() => onOpenCustom?.());
-          }}
-          title="Custom colour"
-          style={{
-            width: '24px', height: '24px',
-            borderRadius: '50%',
-            background: 'conic-gradient(red, orange, yellow, green, cyan, blue, magenta, red)',
-            border: '1px solid var(--theme-border)',
-            cursor: 'pointer', padding: 0, flexShrink: 0,
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => { onPick(null); onClose(); }}
-          style={{
-            flex: 1,
-            padding: '4px 8px',
-            border: '1px solid var(--theme-border)',
-            borderRadius: '0.25rem',
-            background: 'transparent',
-            color: 'var(--theme-text-muted)',
-            cursor: 'pointer', fontSize: '0.7rem',
-          }}
-          title="Use theme default"
-        >
-          Reset
-        </button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px' }}>
+        {CARD_HUES.map(({ key, label }) => {
+          const swatch = resolveCardColor(key, isDark);
+          const active = activeKey === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => { onPick(key); onClose(); }}
+              title={label}
+              aria-label={label}
+              style={{
+                width: '30px', height: '30px',
+                borderRadius: '50%',
+                background: swatch.header,
+                border: active
+                  ? '2px solid var(--theme-accent)'
+                  : '1.5px solid var(--theme-border)',
+                boxShadow: active ? '0 0 0 3px color-mix(in srgb, var(--theme-accent) 22%, transparent)' : 'none',
+                cursor: 'pointer', padding: 0, flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'transform 0.12s, box-shadow 0.12s',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.12)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+            >
+              {active && (
+                <VscCheck style={{ color: swatch.headerText, fontSize: '0.9rem' }} />
+              )}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
-
-// Compress uploaded images to max 900px and ~80% quality
-const compressImage = (file) =>
-  new Promise((resolve, reject) => {
-    if (file.size > 10 * 1024 * 1024) {
-      reject(new Error('Image must be smaller than 10 MB'));
-      return;
-    }
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Could not read file'));
-    reader.onload = ({ target: { result } }) => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('Not a valid image'));
-      img.onload = () => {
-        const MAX = 900;
-        const ratio = Math.min(MAX / img.width, MAX / img.height, 1);
-        const canvas = document.createElement('canvas');
-        canvas.width  = Math.round(img.width  * ratio);
-        canvas.height = Math.round(img.height * ratio);
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', 0.82));
-      };
-      img.src = result;
-    };
-    reader.readAsDataURL(file);
-  });
 
 // Formatting toolbar — delegates to RichEditor's exec API.
 // onMouseDown preventDefault keeps the editor focused while clicking buttons.
@@ -253,7 +168,7 @@ function Card({
   quickAddSignal = 0, dragHandleProps = {}, onMoveToDone,
 }) {
   const isNote = type === 'note';
-  const { currentThemeId } = useTheme();
+  const { currentTheme } = useTheme();
   const { settings } = useSettings();
   const [uploading, setUploading]             = useState(false);
   const [isMounted, setIsMounted]             = useState(false);
@@ -283,7 +198,6 @@ function Card({
   const newEditorRef  = useRef(null);
   const editFileInputRef = useRef(null);
   const newFileInputRef  = useRef(null);
-  const colorInputRef    = useRef(null);
 
   const isProtectedColumn = PROTECTED_COLUMN_TITLES.has(title);
 
@@ -599,12 +513,10 @@ function Card({
 
   // ── Computed ───────────────────────────────────────────────────────────────
 
-  const isDark = ['dark', 'midnight', 'forest', 'sunset', 'monokai', 'dracula', 'nightOwl', 'darcula'].includes(currentThemeId);
-  const palette = isDark ? CARD_COLORS.dark : CARD_COLORS.light;
-  // Custom hex → use directly + dynamic contrast. Otherwise palette lookup.
-  const cardColor = color?.startsWith('#')
-    ? { bg: color, text: getContrastText(color) || '#1e293b' }
-    : (palette[color] || { bg: 'var(--theme-accent)', text: '#fff' });
+  // Detect the theme register from its actual card surface so custom themes
+  // resolve correctly too, then map the card's hue key to concrete colours.
+  const isDark    = isDarkSurface(currentTheme?.colors?.bgCard);
+  const cardColor = resolveCardColor(color, isDark);
 
   // ── Shared styles ──────────────────────────────────────────────────────────
 
@@ -620,7 +532,13 @@ function Card({
       className={`card transition-all duration-300 ease-in-out transform ${
         isMounted ? "opacity-100 translate-x-0" : "opacity-0 translate-x-4"
       } shadow-lg relative`}
-      style={{ background: 'var(--theme-bg-card)' }}
+      style={{
+        background: cardColor.body,
+        '--card-hue': cardColor.accent,
+        '--card-tile-sheen': cardColor.tileSheen,
+        '--card-tile-border': cardColor.tileBorder,
+        '--card-tile-shadow': cardColor.tileShadow,
+      }}
     >
       {toggleMenu && (
         <div
@@ -664,7 +582,7 @@ function Card({
       {/* Card header — drag handle */}
       <div
         className="card-title flex justify-between items-center text-sm"
-        style={{ backgroundColor: cardColor.bg, color: cardColor.text, cursor: 'grab' }}
+        style={{ backgroundColor: cardColor.header, color: cardColor.headerText, cursor: 'grab' }}
         onContextMenu={openCardContextMenu}
         {...dragHandleProps}
       >
@@ -684,8 +602,8 @@ function Card({
               onPointerDown={e => e.stopPropagation()}
               className="font-semibold px-2 bg-transparent border-b focus:outline-none"
               style={{
-                color: cardColor.text,
-                borderColor: 'rgba(0,0,0,0.4)',
+                color: cardColor.headerText,
+                borderColor: 'currentColor',
                 width: `${Math.max(editingTitleValue.length + 2, 6)}ch`,
                 minWidth: '4rem',
                 maxWidth: '14rem',
@@ -705,13 +623,13 @@ function Card({
             </h5>
           )}
           <div className="w-4 h-5 text-sm rounded-sm text-center"
-            style={{ color: 'inherit', background: 'rgba(0,0,0,0.1)' }}>
+            style={{ color: 'inherit', background: cardColor.headerBadge }}>
             {Object.keys(tasks).length}
           </div>
         </div>
         <div
           ref={menuTriggerRef}
-          className="card-option-div h-8 w-10 pr-1 flex justify-center items-center cursor-pointer opacity-0"
+          className="card-option-div h-7 w-9 pr-1 flex justify-center items-center cursor-pointer opacity-0"
           onClick={e => { e.stopPropagation(); setToggleMenu(prev => !prev); }}
           onPointerDown={e => e.stopPropagation()}
         >
@@ -1151,22 +1069,12 @@ function Card({
           x={colorPickerPos.x}
           y={colorPickerPos.y}
           currentColor={color}
+          isDark={isDark}
           onPick={updateCardColor}
-          onOpenCustom={() => colorInputRef.current?.click()}
           onClose={() => setColorPickerPos(null)}
         />,
         document.body
       )}
-
-      {/* Persistent native colour picker — lives outside the popover so its
-          overlay events can't race with the popover's outside-click handler. */}
-      <input
-        ref={colorInputRef}
-        type="color"
-        defaultValue={color?.startsWith('#') ? color : '#fbcfe8'}
-        onChange={(e) => updateCardColor(e.target.value)}
-        style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
-      />
 
       {viewingImages && createPortal(
         <ImageModal

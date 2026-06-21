@@ -706,7 +706,7 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   overflow: hidden;
 }
 .card-title {
-  padding: 9px 12px;
+  padding: 7px 12px;
   font-weight: 600;
   letter-spacing: -0.005em;
   border-top-left-radius: var(--radius-lg);
@@ -748,18 +748,25 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 9px 11px;
-  margin-top: 8px;
-  border-radius: var(--radius-md);
-  background: var(--theme-task-bg);
+  padding: 10px 13px;
+  margin-top: 9px;
+  border-radius: 14px;
+  /* Flat and calm at rest — clean surface, hairline border, gentle lift. The
+     glass material (sheen + deeper shadow + lift) only appears on hover. */
+  background: var(--theme-bg-card);
   border: 1px solid var(--theme-task-border);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-sm);
   transition: box-shadow var(--motion-base) var(--ease-out),
-    border-color var(--motion-base) var(--ease-out);
+    border-color var(--motion-base) var(--ease-out),
+    background-color var(--motion-base) var(--ease-out),
+    transform var(--motion-base) var(--ease-out);
 }
 .mac-task:hover {
-  box-shadow: var(--shadow-sm);
-  border-color: color-mix(in srgb, var(--accent) 32%, var(--theme-task-border));
+  /* Specular sheen pools in the empty bottom-right, behind the text. */
+  background: var(--card-tile-sheen, none), var(--theme-bg-card);
+  border-color: var(--card-tile-border, color-mix(in srgb, var(--card-hue, var(--accent)) 30%, var(--theme-task-border)));
+  box-shadow: var(--card-tile-shadow, var(--shadow-md));
+  transform: translateY(-1px);
 }
 .mac-task:focus-within {
   border-color: var(--accent);
