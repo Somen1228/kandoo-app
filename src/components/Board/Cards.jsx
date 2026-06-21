@@ -8,6 +8,8 @@ import {
 } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { pickCardColorKey } from "../../themes/cardPalettes";
+import { generateTaskID } from "../../utils/taskIdGenerator";
+import { toast } from "../../utils/toast";
 import {
   DndContext,
   closestCenter,
@@ -35,6 +37,28 @@ import { CardsContext } from "../../contexts/CardsContext";
 import { useSettings } from "../../contexts/SettingsContext";
 import { VscHistory, VscClose } from "react-icons/vsc";
 import ResetWarningModal from "./ResetWarningModal";
+import SendToBoardModal from "./SendToBoardModal";
+
+// Build a tasks-map from extracted note checklist items. Checked items land as
+// done, and each task keeps a backlink to its source note.
+function buildTasksFromItems(items, noteUid) {
+  const now = Date.now();
+  const out = {};
+  for (const it of items) {
+    const id = generateTaskID();
+    out[id] = {
+      id,
+      value: it.text,
+      images: [],
+      due: null,
+      done: !!it.checked,
+      createdAt: now,
+      updatedAt: now,
+      ...(noteUid ? { noteLinks: [{ noteUid }] } : {}),
+    };
+  }
+  return out;
+}
 
 function SortableCardWrapper({ uid, children }) {
   const {
@@ -67,6 +91,7 @@ function Cards({
   otherBoardsWithMatches = [], totalMatches = 0, activeMatchCount = 0,
 }) {
   const [activeNoteUid, setActiveNoteUid] = useState(null);
+  const [sendToBoard, setSendToBoard] = useState(null); // { items, noteUid } | null
   const { boards, setBoards, defaultCards } = useContext(CardsContext);
   const { settings } = useSettings();
   const board = boards.find((b) => b.id === boardId);
@@ -220,6 +245,64 @@ function Cards({
     },
     [boardId, setBoards]
   );
+
+  // ── Notes ↔ Tasks links ─────────────────────────────────────────────────────
+
+  // Jump from a task's backlink chip to its source note page.
+  const navigateToNote = useCallback((uid) => {
+    setSection?.('notes');
+    setActiveNoteUid(uid);
+  }, [setSection]);
+
+  // Live title lookup for a task's note backlink (stays correct on rename).
+  const getNoteTitle = useCallback(
+    (uid) => board?.cards.find((c) => c.uid === uid)?.title || null,
+    [board]
+  );
+
+  // Append checklist-derived tasks to an existing card by uid.
+  const addTasksToCardUid = useCallback((cardUid, items, noteUid) => {
+    setBoards((prev) => prev.map((b) => {
+      if (b.id !== boardId) return b;
+      return {
+        ...b,
+        cards: b.cards.map((c) =>
+          c.uid === cardUid
+            ? { ...c, tasks: { ...c.tasks, ...buildTasksFromItems(items, noteUid) } }
+            : c
+        ),
+      };
+    }));
+  }, [boardId, setBoards]);
+
+  // Create a new to-do card pre-filled with the checklist-derived tasks.
+  const createCardWithTasks = useCallback((title, items, noteUid) => {
+    setBoards((prev) => prev.map((b) => {
+      if (b.id !== boardId) return b;
+      const newCard = {
+        uid: uuidv4(),
+        type: 'todo',
+        title,
+        color: pickCardColorKey(b.cards.map((c) => c.color)),
+        isVisible: true,
+        tasks: buildTasksFromItems(items, noteUid),
+      };
+      return { ...b, cards: [...b.cards, newCard] };
+    }));
+  }, [boardId, setBoards]);
+
+  // Confirm handler from the picker: add to an existing card or a new one.
+  const confirmSendToBoard = useCallback((choice) => {
+    if (!sendToBoard) return;
+    const { items, noteUid } = sendToBoard;
+    if (choice.mode === 'existing') addTasksToCardUid(choice.cardUid, items, noteUid);
+    else createCardWithTasks(choice.title.trim(), items, noteUid);
+    const n = items.length;
+    toast.success(`Added ${n} task${n === 1 ? '' : 's'} to the board`, {
+      action: { label: 'View', onClick: () => setSection?.('todos') },
+    });
+    setSendToBoard(null);
+  }, [sendToBoard, addTasksToCardUid, createCardWithTasks, setSection]);
 
   // Move a completed task to the Done column (called by Card when autoMoveDone is on)
   const moveTaskToDone = useCallback(
@@ -457,6 +540,7 @@ function Cards({
           onDeleteNote={deleteNoteSubtree}
           updateCardNote={updateCardNote}
           updateCards={updateCards}
+          onSendListToBoard={setSendToBoard}
         />
       ) : (
         <div className="mac-board-scroll">
@@ -522,6 +606,9 @@ function Cards({
                     quickAddSignal={cardIndex === 0 ? quickAddSignal : 0}
                     dragHandleProps={dragHandleProps}
                     onMoveToDone={settings.autoMoveDone ? (taskId, taskData) => moveTaskToDone(card.uid, taskId, taskData) : undefined}
+                    navigateToNote={navigateToNote}
+                    getNoteTitle={getNoteTitle}
+                    notes={notesCards}
                   />
                 )}
               </SortableCardWrapper>
@@ -622,6 +709,15 @@ function Cards({
         </DragOverlay>
       </DndContext>
         </div>
+      )}
+
+      {sendToBoard && (
+        <SendToBoardModal
+          count={sendToBoard.items.length}
+          cards={board.cards.filter((c) => (c.type || 'todo') === 'todo')}
+          onConfirm={confirmSendToBoard}
+          onClose={() => setSendToBoard(null)}
+        />
       )}
     </div>
   );

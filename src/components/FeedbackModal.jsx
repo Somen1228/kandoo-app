@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { VscClose } from 'react-icons/vsc';
+import { VscClose, VscBug, VscLightbulb, VscCommentDiscussion } from 'react-icons/vsc';
 import { toast } from '../utils/toast';
 
 const CATEGORIES = [
-  { id: 'bug',     label: '🐛 Bug Report' },
-  { id: 'feature', label: '✨ Feature Request' },
-  { id: 'general', label: '💬 General Feedback' },
+  { id: 'bug',     label: 'Bug Report',      icon: VscBug },
+  { id: 'feature', label: 'Feature Request', icon: VscLightbulb },
+  { id: 'general', label: 'General Feedback', icon: VscCommentDiscussion },
 ];
 
 export default function FeedbackModal({ isOpen, onClose }) {
@@ -57,7 +57,7 @@ export default function FeedbackModal({ isOpen, onClose }) {
       }}
     >
       <div style={{
-        width: 440,
+        width: 500,
         background: 'var(--theme-bg-modal)',
         border: '1px solid var(--theme-border)',
         borderRadius: 16,
@@ -90,27 +90,35 @@ export default function FeedbackModal({ isOpen, onClose }) {
         {/* Body */}
         <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
           {/* Category pills */}
-          <div style={{ display: 'flex', gap: 8 }}>
-            {CATEGORIES.map(c => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setCategory(c.id)}
-                style={{
-                  flex: 1,
-                  padding: '7px 4px',
-                  borderRadius: 20,
-                  border: `1.5px solid ${category === c.id ? 'var(--theme-accent)' : 'var(--theme-border)'}`,
-                  background: category === c.id ? 'var(--theme-accent)' : 'transparent',
-                  color: category === c.id ? '#fff' : 'var(--theme-text-secondary)',
-                  fontSize: '0.78rem', fontWeight: 600,
-                  cursor: 'pointer', transition: 'all 0.15s',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {c.label}
-              </button>
-            ))}
+          <div style={{ display: 'flex', gap: 8}}>
+            {CATEGORIES.map(c => {
+              const Icon = c.icon;
+              const active = category === c.id;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setCategory(c.id)}
+                  style={{
+                    flex: 1,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                    padding: '7px 10px',
+                    borderRadius: 20,
+                    border: `1.5px solid ${active ? 'var(--theme-accent)' : 'var(--theme-border)'}`,
+                    background: active ? 'var(--theme-accent)' : 'transparent',
+                    color: active ? '#fff' : 'var(--theme-text-secondary)',
+                    fontSize: '0.78rem', fontWeight: 600,
+                    cursor: 'pointer', transition: 'all 0.15s',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={e => { if (!active) e.currentTarget.style.borderColor = 'var(--theme-accent)'; }}
+                  onMouseLeave={e => { if (!active) e.currentTarget.style.borderColor = 'var(--theme-border)'; }}
+                >
+                  <Icon style={{ fontSize: '0.95em', flexShrink: 0 }} />
+                  {c.label}
+                </button>
+              );
+            })}
           </div>
 
           {/* Message */}
@@ -130,7 +138,7 @@ export default function FeedbackModal({ isOpen, onClose }) {
               fontFamily: 'inherit',
               lineHeight: 1.6,
               padding: '10px 12px',
-              resize: 'vertical',
+              resize: 'none',
               outline: 'none',
               transition: 'border-color 0.15s',
             }}

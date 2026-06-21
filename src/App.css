@@ -364,7 +364,20 @@ body {
 
 /* Note canvas — an elevated sheet that remains distinct while respecting the
    active theme. Dark themes get a dark paper surface instead of a white island. */
+.note-canvas {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 2.5rem;
+}
+
 .note-paper {
+  width: min(960px, calc(100% - 3rem));
+  max-width: none;
+  min-height: auto;
+  aspect-ratio: 210 / 297;
+  padding: 3rem 3.25rem 4rem;
   background: var(--theme-bg-card);
   border: 1px solid color-mix(in srgb, var(--theme-border) 82%, var(--theme-text-primary) 8%);
   border-radius: 0.75rem;
@@ -376,4 +389,19 @@ body {
 .note-paper .note-tb-shell {
   --note-toolbar-bg: color-mix(in srgb, var(--theme-bg-input) 82%, var(--theme-bg-card));
   border: 1px solid var(--theme-border);
+}
+
+@media (max-width: 900px) {
+  .note-paper {
+    width: calc(100% - 1.5rem);
+    padding: 2rem 2.25rem 3rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .note-paper {
+    width: calc(100% - 0.75rem);
+    padding: 1.5rem 1.25rem 2.5rem;
+    border-radius: 0.625rem;
+  }
 }

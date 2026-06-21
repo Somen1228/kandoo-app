@@ -47,11 +47,10 @@ export function matchesTask(task, query) {
 
   if (query.terms.length === 0) return true;
 
+  // Match on task text only — ids are internal (hidden UUIDs), not user-facing.
   const text = plainText(task.value).toLowerCase();
-  const id   = (task.id || '').toLowerCase();
   for (const term of query.terms) {
-    const t = term.toLowerCase();
-    if (!text.includes(t) && !id.includes(t)) return false;
+    if (!text.includes(term.toLowerCase())) return false;
   }
   return true;
 }

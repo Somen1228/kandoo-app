@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import { createPortal } from "react-dom";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -14,7 +14,7 @@ import { useSettings } from "../../contexts/SettingsContext";
 import { uploadImage, deleteImage, isStorageUrl } from "../../services/imageStorage";
 import {
   VscEdit, VscCheck, VscTrash, VscSave, VscCopy, VscClose,
-  VscBold, VscItalic, VscCalendar,
+  VscBold, VscItalic, VscCalendar, VscNote, VscLink,
 } from "react-icons/vsc";
 import { IoDuplicateOutline } from "react-icons/io5";
 import { IoImageOutline } from "react-icons/io5";
@@ -27,8 +27,25 @@ import ImageModal from "./ImageModal.jsx";
 import RichEditor from "./RichEditor.jsx";
 import NoteCard from "./NoteCard.jsx";
 import DatePicker from "./DatePicker.jsx";
+import NotePickerModal from "./NotePickerModal.jsx";
+import LinkedNotesPopover from "./LinkedNotesPopover.jsx";
 
 const PROTECTED_COLUMN_TITLES = new Set(["To-do", "In-Progress", "Done"]);
+
+// A task's note links live in `noteLinks` (array). Older tasks used a single
+// `noteLink` object — read both so nothing breaks during the transition.
+function getNoteLinks(task) {
+  if (Array.isArray(task?.noteLinks)) return task.noteLinks;
+  if (task?.noteLink?.noteUid) return [task.noteLink];
+  return [];
+}
+
+// A task has no real content when there's no visible text (zero-width chars
+// don't count) and no images. Used to stop empty tasks being created or saved.
+function isEmptyTaskContent(html, images) {
+  const text = htmlToText(html).replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+  return text.length === 0 && (images?.length ?? 0) === 0;
+}
 
 function CardColorPicker({ x, y, currentColor, isDark, onPick, onClose }) {
   const ref = useRef(null);
@@ -104,9 +121,59 @@ function CardColorPicker({ x, y, currentColor, isDark, onPick, onClose }) {
 
 // Formatting toolbar — delegates to RichEditor's exec API.
 // onMouseDown preventDefault keeps the editor focused while clicking buttons.
-function FormattingToolbar({ editorRef }) {
+// Exposes openLink() so Cmd+K (from the editor) can pop the hyperlink input.
+const TOOLBAR_BTN = {
+  background: 'none', border: 'none', cursor: 'pointer',
+  color: 'var(--theme-text-muted)', padding: '3px 6px',
+  borderRadius: 5, fontSize: '0.85rem',
+  display: 'flex', alignItems: 'center', lineHeight: 1,
+  transition: 'color 0.12s, background 0.12s',
+};
+const FormattingToolbar = forwardRef(function FormattingToolbar({ editorRef, onLinkNote }, ref) {
   const apply = (cmd) => editorRef.current?.exec(cmd);
   const mod = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform) ? '⌘' : 'Ctrl';
+  const [pop, setPop] = useState(null); // { type: 'menu' | 'link', x, y } | null
+  const [url, setUrl] = useState('');
+  const linkBtnRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const openAt = useCallback((type) => {
+    const r = linkBtnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    setPop({ type, x: r.left, y: r.bottom + 4 });
+    if (type === 'link') { setUrl(''); setTimeout(() => inputRef.current?.focus(), 30); }
+  }, []);
+  const openLink = useCallback(() => openAt('link'), [openAt]);
+  const close = useCallback(() => setPop(null), []);
+  useImperativeHandle(ref, () => ({ openLink }), [openLink]);
+
+  const applyLink = () => {
+    const v = url.trim();
+    if (v) {
+      const href = /^https?:\/\//i.test(v) ? v : `https://${v}`;
+      editorRef.current?.insertLink(href);
+    }
+    close();
+  };
+
+  // Close the popover on outside click or scroll.
+  useEffect(() => {
+    if (!pop) return;
+    const onDoc = (e) => {
+      if (e.target.closest?.('[data-fmt-pop]')) return;
+      if (linkBtnRef.current?.contains(e.target)) return;
+      close();
+    };
+    const id = setTimeout(() => {
+      document.addEventListener('mousedown', onDoc);
+      window.addEventListener('scroll', close, true);
+    }, 0);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener('mousedown', onDoc);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [pop, close]);
 
   const fmtBtn = (cmd, icon, label) => (
     <button
@@ -114,17 +181,30 @@ function FormattingToolbar({ editorRef }) {
       title={`${label} (${mod}+${label[0]})`}
       onMouseDown={e => e.preventDefault()}
       onClick={() => apply(cmd)}
-      style={{
-        background: 'none', border: 'none', cursor: 'pointer',
-        color: 'var(--theme-text-muted)', padding: '3px 6px',
-        borderRadius: 5, fontSize: '0.85rem',
-        display: 'flex', alignItems: 'center', lineHeight: 1,
-        transition: 'color 0.12s, background 0.12s',
-      }}
+      style={TOOLBAR_BTN}
       onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-text-primary)'; e.currentTarget.style.background = 'var(--theme-bg-hover)'; }}
       onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-text-muted)'; e.currentTarget.style.background = 'none'; }}
     >
       {icon}
+    </button>
+  );
+
+  const menuItem = (icon, text, kbd, onClick) => (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 9, width: '100%',
+        background: 'none', border: 'none', cursor: 'pointer',
+        color: 'var(--theme-text-primary)', fontSize: '0.82rem', fontFamily: 'inherit',
+        padding: '8px 10px', borderRadius: 7, textAlign: 'left', whiteSpace: 'nowrap',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = 'var(--theme-bg-hover)'; }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
+    >
+      <span style={{ color: 'var(--theme-text-muted)', display: 'flex' }}>{icon}</span>
+      <span style={{ flex: 1 }}>{text}</span>
+      {kbd && <span style={{ color: 'var(--theme-text-muted)', fontSize: '0.72rem' }}>{kbd}</span>}
     </button>
   );
 
@@ -133,9 +213,70 @@ function FormattingToolbar({ editorRef }) {
       {fmtBtn('bold',      <VscBold />,      'Bold')}
       {fmtBtn('italic',    <VscItalic />,    'Italic')}
       {fmtBtn('underline', <RiUnderline />,  'Underline')}
+      <button
+        ref={linkBtnRef}
+        type="button"
+        title={`Link (${mod}+K)`}
+        onMouseDown={e => e.preventDefault()}
+        onClick={() => (pop ? close() : openAt('menu'))}
+        style={TOOLBAR_BTN}
+        onMouseEnter={e => { e.currentTarget.style.color = 'var(--theme-text-primary)'; e.currentTarget.style.background = 'var(--theme-bg-hover)'; }}
+        onMouseLeave={e => { e.currentTarget.style.color = 'var(--theme-text-muted)'; e.currentTarget.style.background = 'none'; }}
+      >
+        <VscLink />
+      </button>
+
+      {pop && createPortal(
+        <div
+          data-fmt-pop
+          onMouseDown={e => { if (pop.type === 'menu') e.preventDefault(); e.stopPropagation(); }}
+          style={{
+            position: 'fixed', top: pop.y, left: pop.x, zIndex: 10200,
+            background: 'var(--theme-bg-modal)',
+            border: '1px solid var(--theme-border)',
+            borderRadius: 10, boxShadow: '0 10px 30px rgba(0,0,0,0.22)',
+            padding: pop.type === 'menu' ? 5 : 7, minWidth: pop.type === 'menu' ? 188 : 256,
+          }}
+        >
+          {pop.type === 'menu' ? (
+            <>
+              {menuItem(<VscLink />, 'Add hyperlink', `${mod}K`, openLink)}
+              {onLinkNote && menuItem(<VscNote />, 'Link a note', null, () => { close(); onLinkNote(); })}
+            </>
+          ) : (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input
+                ref={inputRef}
+                value={url}
+                onChange={e => setUrl(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); applyLink(); } else if (e.key === 'Escape') { e.preventDefault(); close(); } }}
+                placeholder="Paste or type a URL…"
+                style={{
+                  flex: 1, background: 'var(--theme-bg-input)',
+                  border: '1px solid var(--theme-border)', borderRadius: 7,
+                  color: 'var(--theme-text-primary)', fontSize: '0.82rem',
+                  fontFamily: 'inherit', padding: '7px 9px', outline: 'none',
+                }}
+              />
+              <button
+                type="button"
+                onClick={applyLink}
+                style={{
+                  padding: '7px 14px', borderRadius: 7, border: 'none',
+                  background: 'var(--theme-accent)', color: '#fff',
+                  fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                Add
+              </button>
+            </div>
+          )}
+        </div>,
+        document.body
+      )}
     </div>
   );
-}
+});
 
 
 // Sortable wrapper for individual task rows
@@ -166,6 +307,7 @@ function Card({
   updateCardTasks, updateCardNote, updateCards, searchTerm,
   query, filterMode = false, scheduleView = null, currentMatchTaskId = null,
   quickAddSignal = 0, dragHandleProps = {}, onMoveToDone,
+  navigateToNote, getNoteTitle, notes = [],
 }) {
   const isNote = type === 'note';
   const { currentTheme } = useTheme();
@@ -177,6 +319,9 @@ function Card({
   const [isEditingTitle, setIsEditingTitle]   = useState(false);
   const [editingTitleValue, setEditingTitleValue] = useState("");
   const [colorPickerPos, setColorPickerPos]   = useState(null);
+  const [notePicker, setNotePicker] = useState(null); // { kind: 'task'|'new', taskId? } | null
+  const [newTaskNoteLinks, setNewTaskNoteLinks] = useState([]); // pending links for the task being created
+  const [linkedPopover, setLinkedPopover] = useState(null); // { taskId, x, y } | null
   const [taskValue, setTaskValue]             = useState(""); // HTML string
   const [newTaskImages, setNewTaskImages]     = useState([]);
   const [newTaskDue, setNewTaskDue]           = useState(""); // "YYYY-MM-DD" or ""
@@ -196,6 +341,8 @@ function Card({
   const menuTriggerRef = useRef(null);
   const editEditorRef = useRef(null);
   const newEditorRef  = useRef(null);
+  const editToolbarRef = useRef(null);
+  const newToolbarRef  = useRef(null);
   const editFileInputRef = useRef(null);
   const newFileInputRef  = useRef(null);
 
@@ -258,13 +405,43 @@ function Card({
 
   const duplicateTask = (task) => {
     const now = Date.now();
-    const newTask = { id: generateTaskID(title), value: task.value, images: task.images || [], due: task.due || null, createdAt: now, updatedAt: now };
+    const newTask = { id: generateTaskID(), value: task.value, images: task.images || [], due: task.due || null, createdAt: now, updatedAt: now };
     updateCardTasks(index, { ...tasks, [newTask.id]: newTask });
   };
+
+  // Write a task's note links, migrating away from the legacy single field.
+  const writeTaskLinks = (taskId, links) => {
+    const t = tasks[taskId];
+    if (!t) return;
+    const next = { ...t, updatedAt: Date.now() };
+    if (links.length) next.noteLinks = links;
+    else delete next.noteLinks;
+    delete next.noteLink;
+    updateCardTasks(index, { ...tasks, [taskId]: next });
+  };
+
+  // Add the note if not linked, remove it if already linked.
+  const toggleTaskNoteLink = (taskId, noteUid) => {
+    const links = getNoteLinks(tasks[taskId]);
+    const exists = links.some((l) => l.noteUid === noteUid);
+    writeTaskLinks(taskId, exists
+      ? links.filter((l) => l.noteUid !== noteUid)
+      : [...links, { noteUid }]);
+  };
+
+  const removeTaskNoteLink = (taskId, noteUid) =>
+    writeTaskLinks(taskId, getNoteLinks(tasks[taskId]).filter((l) => l.noteUid !== noteUid));
+
+  // Pending note links for the not-yet-created task (attached in addTask).
+  const toggleNewTaskNoteLink = (noteUid) =>
+    setNewTaskNoteLinks((prev) => prev.some((l) => l.noteUid === noteUid)
+      ? prev.filter((l) => l.noteUid !== noteUid)
+      : [...prev, { noteUid }]);
 
   const openTaskContextMenu = (e, task) => {
     e.preventDefault();
     e.stopPropagation();
+    const linkedCount = getNoteLinks(task).length;
     setCtxMenu({
       x: e.clientX, y: e.clientY,
       items: [
@@ -272,6 +449,8 @@ function Card({
         { label: task.done ? "Mark as undone" : "Mark as done", icon: <VscCheck />, onClick: () => toggleDoneTask(task.id) },
         { label: "Copy text",   icon: <VscCopy />,          onClick: () => copyTaskText(task.value) },
         { label: "Duplicate",   icon: <IoDuplicateOutline />, onClick: () => duplicateTask(task) },
+        { divider: true },
+        { label: linkedCount ? `Linked notes (${linkedCount})…` : "Link a note…", icon: <VscLink />, onClick: () => setNotePicker({ kind: 'task', taskId: task.id }) },
         { divider: true },
         { label: "Delete task", icon: <VscTrash />, danger: true, onClick: () => deleteTask(task.id) },
       ],
@@ -316,7 +495,7 @@ function Card({
               const text = await navigator.clipboard.readText();
               if (text.trim()) {
                 const now = Date.now();
-                const newTask = { id: generateTaskID(title), value: text.trim(), images: [], createdAt: now, updatedAt: now };
+                const newTask = { id: generateTaskID(), value: text.trim(), images: [], createdAt: now, updatedAt: now };
                 updateCardTasks(index, { ...tasks, [newTask.id]: newTask });
                 toast.success("Task created from clipboard");
               } else {
@@ -365,13 +544,17 @@ function Card({
   const addTask = (e) => {
     e?.preventDefault?.();
     const clean = sanitizeHtml(taskValue);
-    const hasText = htmlToText(clean).length > 0;
-    if (!hasText && newTaskImages.length === 0) { setToggleAddTask(false); return; }
+    if (isEmptyTaskContent(clean, newTaskImages)) { setToggleAddTask(false); return; }
     const now = Date.now();
-    const newTask = { id: generateTaskID(title), value: clean, images: newTaskImages, due: newTaskDue || null, createdAt: now, updatedAt: now };
+    const newTask = {
+      id: generateTaskID(), value: clean, images: newTaskImages,
+      due: newTaskDue || null, createdAt: now, updatedAt: now,
+      ...(newTaskNoteLinks.length ? { noteLinks: newTaskNoteLinks } : {}),
+    };
     updateCardTasks(index, { ...tasks, [newTask.id]: newTask });
     setTaskValue("");
     setNewTaskImages([]);
+    setNewTaskNoteLinks([]);
     setNewTaskDue(settings.quickAddDueToday ? toDueString(new Date()) : "");
     newEditorRef.current?.setHtml('');
     newEditorRef.current?.focus();
@@ -382,7 +565,7 @@ function Card({
     const now = Date.now();
     const newTasks = { ...tasks };
     lines.forEach(line => {
-      const task = { id: generateTaskID(title), value: line, images: [], due: newTaskDue || null, createdAt: now, updatedAt: now };
+      const task = { id: generateTaskID(), value: line, images: [], due: newTaskDue || null, createdAt: now, updatedAt: now };
       newTasks[task.id] = task;
     });
     updateCardTasks(index, newTasks);
@@ -430,6 +613,13 @@ function Card({
 
   const saveEditedTask = (taskId) => {
     const clean = sanitizeHtml(editingTaskValue);
+    // Emptied out → treat as a delete (routed through deleteTask so the user's
+    // confirm/undo preference still applies) rather than saving a blank task.
+    if (isEmptyTaskContent(clean, editingTaskImages)) {
+      cancelEditingTask();
+      deleteTask(taskId);
+      return;
+    }
     updateCardTasks(index, {
       ...tasks,
       [taskId]: { ...tasks[taskId], value: clean, images: editingTaskImages, due: editingTaskDue || null, updatedAt: Date.now() },
@@ -696,13 +886,18 @@ function Card({
                         margin: '2px 0',
                       }}
                     >
-                      <FormattingToolbar editorRef={editEditorRef} />
+                      <FormattingToolbar
+                        ref={editToolbarRef}
+                        editorRef={editEditorRef}
+                        onLinkNote={() => setNotePicker({ kind: 'task', taskId: task.id })}
+                      />
                       <RichEditor
                         ref={editEditorRef}
                         initialHtml={editingTaskValue}
                         onChange={setEditingTaskValue}
                         onSave={() => saveEditedTask(task.id)}
                         onCancel={cancelEditingTask}
+                        onRequestLink={() => editToolbarRef.current?.openLink()}
                         autoFocus
                         placeholder="Edit task…"
                         className=""
@@ -833,15 +1028,49 @@ function Card({
 
                       <div className="mac-task__footer">
                         <div className="mac-task__meta">
-                          <span className="mac-task__id">
-                            {renderTaskValue(task.id, query?.terms ?? searchTerm)}
-                          </span>
                           {task.due && (
                             <span className="mac-chip" data-tone={dueTone(task)}>
                               <VscCalendar style={{ fontSize: '0.85em' }} />
                               {formatDueShort(task.due)}
                             </span>
                           )}
+                          {(() => {
+                            const links = getNoteLinks(task);
+                            if (!links.length) return null;
+                            const first = links[0];
+                            const extra = links.length - 1;
+                            return (
+                              <>
+                                <button
+                                  type="button"
+                                  className="mac-note-chip"
+                                  title={`Open note: ${getNoteTitle?.(first.noteUid) || 'note'}`}
+                                  onPointerDown={e => e.stopPropagation()}
+                                  onClick={e => { e.stopPropagation(); navigateToNote?.(first.noteUid); }}
+                                >
+                                  <VscNote style={{ fontSize: '0.9em', flexShrink: 0 }} />
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {getNoteTitle?.(first.noteUid) || 'Note'}
+                                  </span>
+                                </button>
+                                {extra > 0 && (
+                                  <button
+                                    type="button"
+                                    className="mac-note-chip mac-note-chip--more"
+                                    title={`${extra} more linked note${extra === 1 ? '' : 's'}`}
+                                    onPointerDown={e => e.stopPropagation()}
+                                    onClick={e => {
+                                      e.stopPropagation();
+                                      const r = e.currentTarget.getBoundingClientRect();
+                                      setLinkedPopover({ taskId: task.id, x: r.left, y: r.bottom + 4 });
+                                    }}
+                                  >
+                                    +{extra}
+                                  </button>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                         <div className="mac-task__actions">
                           <button
@@ -897,7 +1126,11 @@ function Card({
           }}
         >
           {/* Formatting toolbar */}
-          <FormattingToolbar editorRef={newEditorRef} />
+          <FormattingToolbar
+            ref={newToolbarRef}
+            editorRef={newEditorRef}
+            onLinkNote={() => setNotePicker({ kind: 'new' })}
+          />
 
           {/* Text editor */}
           <RichEditor
@@ -905,7 +1138,8 @@ function Card({
             initialHtml=""
             onChange={setTaskValue}
             onSave={() => addTask()}
-            onCancel={() => { setToggleAddTask(false); setTaskValue(''); setNewTaskImages([]); }}
+            onCancel={() => { setToggleAddTask(false); setTaskValue(''); setNewTaskImages([]); setNewTaskNoteLinks([]); }}
+            onRequestLink={() => newToolbarRef.current?.openLink()}
             onMultilinePaste={addMultipleTasks}
             autoFocus
             placeholder="New task…"
@@ -944,6 +1178,29 @@ function Card({
                     <VscClose />
                   </button>
                 </div>
+              ))}
+            </div>
+          )}
+
+          {/* Pending linked notes */}
+          {newTaskNoteLinks.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 12px 8px' }}>
+              {newTaskNoteLinks.map((l) => (
+                <span key={l.noteUid} className="mac-note-chip" style={{ cursor: 'default' }}>
+                  <VscNote style={{ fontSize: '0.9em', flexShrink: 0 }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {getNoteTitle?.(l.noteUid) || 'Note'}
+                  </span>
+                  <span
+                    role="button"
+                    title="Remove"
+                    onPointerDown={e => e.stopPropagation()}
+                    onClick={() => toggleNewTaskNoteLink(l.noteUid)}
+                    style={{ display: 'inline-flex', cursor: 'pointer', marginLeft: 2 }}
+                  >
+                    <VscClose style={{ fontSize: '0.85em' }} />
+                  </span>
+                </span>
               ))}
             </div>
           )}
@@ -988,7 +1245,7 @@ function Card({
             <button
               type="button"
               onPointerDown={e => e.stopPropagation()}
-              onClick={() => { setToggleAddTask(false); setTaskValue(''); setNewTaskImages([]); }}
+              onClick={() => { setToggleAddTask(false); setTaskValue(''); setNewTaskImages([]); setNewTaskNoteLinks([]); }}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
                 color: 'var(--theme-text-muted)', fontSize: '0.75rem',
@@ -1081,6 +1338,38 @@ function Card({
           images={viewingImages.images}
           initialIndex={viewingImages.index}
           onClose={() => setViewingImages(null)}
+        />,
+        document.body
+      )}
+
+      {notePicker && createPortal(
+        <NotePickerModal
+          notes={notes}
+          linkedUids={notePicker.kind === 'new'
+            ? newTaskNoteLinks.map((l) => l.noteUid)
+            : getNoteLinks(tasks[notePicker.taskId]).map((l) => l.noteUid)}
+          onToggle={(uid) => notePicker.kind === 'new'
+            ? toggleNewTaskNoteLink(uid)
+            : toggleTaskNoteLink(notePicker.taskId, uid)}
+          onClose={() => setNotePicker(null)}
+        />,
+        document.body
+      )}
+
+      {linkedPopover && createPortal(
+        <LinkedNotesPopover
+          x={linkedPopover.x}
+          y={linkedPopover.y}
+          links={getNoteLinks(tasks[linkedPopover.taskId])}
+          getNoteTitle={getNoteTitle}
+          onNavigate={(uid) => { navigateToNote?.(uid); setLinkedPopover(null); }}
+          onRemove={(uid) => {
+            removeTaskNoteLink(linkedPopover.taskId, uid);
+            const remaining = getNoteLinks(tasks[linkedPopover.taskId]).filter((l) => l.noteUid !== uid);
+            if (remaining.length <= 1) setLinkedPopover(null);
+          }}
+          onManage={() => { const tid = linkedPopover.taskId; setLinkedPopover(null); setNotePicker({ kind: 'task', taskId: tid }); }}
+          onClose={() => setLinkedPopover(null)}
         />,
         document.body
       )}

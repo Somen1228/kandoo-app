@@ -120,7 +120,7 @@ function PageTitle({ value, onChange }) {
 }
 
 // ── Active-page canvas ──────────────────────────────────────────────────────
-function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateChild, onNavigate }) {
+function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateChild, onNavigate, onSendListToBoard }) {
   const { settings } = useSettings();
   const [paperless, setPaperless] = useState(settings.noteDefaultView === 'wide');
   const togglePaperless = () => setPaperless((p) => !p);
@@ -145,7 +145,6 @@ function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateC
     <div
       key={card.uid}
       className={paperless ? 'note-canvas' : 'note-canvas note-paper'}
-      style={{ maxWidth: paperless ? '100%' : 860, margin: '0 auto', padding: paperless ? '1.25rem 1rem 2.5rem' : '2rem 2.25rem 2.5rem' }}
     >
       <PageTitle value={card.title} onChange={handleTitle} />
 
@@ -175,6 +174,7 @@ function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateC
           notes={notes}
           onCreatePage={() => ({ uid: onCreateChild(card.uid, false), title: 'New page' })}
           onNavigatePage={onNavigate}
+          onSendListToBoard={(items) => onSendListToBoard?.({ items, noteUid: card.uid })}
           placeholder="Type ‘/’ for commands, or just start writing. Markdown shortcuts and drag-and-drop images work too."
         />
       </Suspense>
@@ -183,7 +183,7 @@ function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateC
 }
 
 // ── Main view (tree + canvas) ───────────────────────────────────────────────
-function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onDeleteNote, updateCardNote, updateCards }) {
+function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onDeleteNote, updateCardNote, updateCards, onSendListToBoard }) {
   const activeCard = notes.find((n) => n.uid === activeUid) || null;
   const activeIndex = activeCard ? allCards.findIndex((c) => c.uid === activeCard.uid) : -1;
   const [collapsed, setCollapsed] = useState(() => new Set());
@@ -340,6 +340,7 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
             updateCards={updateCards}
             onCreateChild={onCreateNote}
             onNavigate={onSelectNote}
+            onSendListToBoard={onSendListToBoard}
           />
         ) : (
           <div className="notes-canvas-empty">Creating a new page…</div>
