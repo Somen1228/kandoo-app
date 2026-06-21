@@ -1119,11 +1119,18 @@ html.is-panel-window #root {
   margin-bottom: 8px;
   overflow: hidden;
   border: 1px solid var(--border-subtle);
-  border-radius: 9px;
-  background: var(--note-toolbar-bg);
-  box-shadow: var(--shadow-xs);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent 42%),
+    var(--note-toolbar-bg);
+  box-shadow: var(--shadow-xs), inset 0 1px 0 color-mix(in srgb, #fff 42%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
+}
+.note-tb-shell.is-menu-open {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border-subtle));
+  box-shadow: var(--shadow-sm), inset 0 1px 0 color-mix(in srgb, #fff 42%, transparent);
 }
 .note-tb {
   display: flex;
@@ -1144,7 +1151,7 @@ html.is-panel-window #root {
 .note-tb__overflow {
   position: absolute;
   top: 0;
-  bottom: 0;
+  height: 40px;
   z-index: 8;
   width: 38px;
   display: flex;
@@ -1192,21 +1199,224 @@ html.is-panel-window #root {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
 }
-.note-tb__select {
+.note-tb__menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   height: 28px;
   border: 1px solid var(--border-subtle);
-  background: var(--theme-bg-input);
+  background: color-mix(in srgb, var(--theme-bg-input) 88%, transparent);
   color: var(--text-primary);
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   font-size: 0.78rem;
-  padding: 0 6px;
+  padding: 0 8px 0 10px;
   cursor: pointer;
   font-family: var(--font-ui);
   flex: 0 0 auto;
+  transition: background var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast);
 }
-.note-tb__select--style { width: 104px; }
-.note-tb__select--font { width: 132px; }
-.note-tb__select--sm { width: 58px; }
+.note-tb__menu-trigger > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-tb__menu-trigger > svg {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform var(--motion-fast), color var(--motion-fast);
+}
+.note-tb__menu-trigger:hover {
+  background: var(--bg-hover);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border-subtle));
+}
+.note-tb__menu-trigger.is-open {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 11%, var(--theme-bg-input));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.note-tb__menu-trigger.is-open > svg {
+  color: var(--accent);
+  transform: rotate(180deg);
+}
+.note-tb__menu-trigger--style { width: 104px; }
+.note-tb__menu-trigger--font { width: 132px; }
+.note-tb__menu-trigger--size { width: 68px; }
+
+/* Branded vertical dropdowns replace the browser-native select menus. */
+.note-tb-panel {
+  position: fixed;
+  z-index: var(--z-popover);
+  padding: 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border-subtle));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  box-shadow: var(--shadow-pop), inset 0 1px 0 color-mix(in srgb, #fff 35%, transparent);
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  animation: note-tb-panel-in var(--motion-base) var(--ease-out);
+}
+@keyframes note-tb-panel-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.note-tb-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 29px;
+  padding: 0 5px;
+  color: var(--text-muted);
+}
+.note-tb-panel__head > span {
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+.note-tb-panel__head > small {
+  font-size: 0.64rem;
+}
+.note-tb-panel__search {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 2px 7px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  background: var(--theme-bg-input);
+  color: var(--text-muted);
+}
+.note-tb-panel__search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.note-tb-panel__search input {
+  min-width: 0;
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.75rem;
+}
+.note-tb-panel__search button {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+}
+.note-tb-panel__options {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 286px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+.note-tb-panel[data-kind="font"] .note-tb-panel__options {
+  max-height: 264px;
+}
+.note-tb-panel__empty {
+  padding: 22px 12px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+.note-tb-panel__option {
+  position: relative;
+  min-width: 0;
+  min-height: 39px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--motion-fast) var(--ease-out), background var(--motion-fast), border-color var(--motion-fast);
+}
+.note-tb-panel__option:hover {
+  transform: translateX(2px);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border-subtle));
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.note-tb-panel__option.is-active {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-surface));
+  color: var(--text-primary);
+}
+.note-tb-panel__sample {
+  width: 29px;
+  height: 29px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-hover));
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.note-tb-panel__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.note-tb-panel__copy strong {
+  overflow: hidden;
+  color: inherit;
+  font-size: 0.75rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-tb-panel__copy small {
+  color: var(--text-muted);
+  font-size: 0.62rem;
+}
+.note-tb-panel__check {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+.note-tb-panel[data-kind="size"] .note-tb-panel__options {
+  max-height: 286px;
+}
+.note-tb-panel[data-kind="size"] .note-tb-panel__option {
+  min-height: 38px;
+  justify-content: flex-start;
+  padding: 5px 12px;
+  text-align: left;
+}
+.note-tb-panel[data-kind="size"] .note-tb-panel__copy {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 5px;
+}
+.note-tb-panel[data-kind="size"] .note-tb-panel__copy strong {
+  font-size: 0.82rem;
+}
+.note-tb-panel[data-kind="size"] .note-tb-panel__copy small {
+  font-size: 0.68rem;
+}
+.note-tb-panel[data-kind="size"] .note-tb-panel__check {
+  position: static;
+  font-size: 0.82rem;
+}
 .note-tb__sep {
   width: 1px;
   flex: 0 0 1px;

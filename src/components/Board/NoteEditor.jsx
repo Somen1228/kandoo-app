@@ -29,7 +29,7 @@ import { useSettings } from '../../contexts/SettingsContext';
 import {
   VscBold, VscItalic, VscListUnordered, VscListOrdered, VscCode, VscQuote,
   VscLink, VscHorizontalRule, VscClearAll, VscChecklist, VscTable,
-  VscChevronLeft, VscChevronRight,
+  VscChevronDown, VscChevronLeft, VscChevronRight, VscCheck, VscSearch,
 } from 'react-icons/vsc';
 import {
   RiUnderline, RiStrikethrough, RiFontColor, RiMarkPenLine,
@@ -71,6 +71,12 @@ const FONT_FAMILIES = [
   { label: 'Mono', value: '"SF Mono", ui-monospace, monospace' },
 ];
 const FONT_SIZES = ['', '12px', '13px', '14px', '16px', '18px', '20px', '24px', '30px'];
+const TEXT_STYLES = [
+  { label: 'Normal', value: 'p', hint: 'Paragraph' },
+  { label: 'Heading 1', value: 'h1', hint: 'Large section' },
+  { label: 'Heading 2', value: 'h2', hint: 'Medium section' },
+  { label: 'Heading 3', value: 'h3', hint: 'Small section' },
+];
 
 // Collect every item of the list (bullet, ordered, or checklist) that encloses
 // a clicked row. Uses each item's own first-line text and, for checklists, its
@@ -380,6 +386,8 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
 // ── Toolbar ─────────────────────────────────────────────────────────────────
 function Toolbar({ editor, onImage, onLink, onTable }) {
   const [openPalette, setOpenPalette] = useState(null);
+  const [openMenu, setOpenMenu] = useState(null);
+  const [menuAnchor, setMenuAnchor] = useState(null);
   const [toolbarOverflow, setToolbarOverflow] = useState({ left: false, right: false });
   const toolbarRef = useRef(null);
 
@@ -428,9 +436,57 @@ function Toolbar({ editor, onImage, onLink, onTable }) {
 
   const fontFamily = editor.getAttributes('textStyle').fontFamily || '';
   const fontSize = editor.getAttributes('textStyle').fontSize || '';
+  const styleLabel = TEXT_STYLES.find((option) => option.value === styleValue)?.label || 'Normal';
+  const fontLabel = FONT_FAMILIES.find((option) => option.value === fontFamily)?.label || 'Default font';
+  const sizeLabel = fontSize ? `${parseInt(fontSize, 10)} px` : 'Size';
+
+  const menuConfig = openMenu === 'style'
+    ? { title: 'Text style', kind: 'style', value: styleValue, options: TEXT_STYLES }
+    : openMenu === 'font'
+      ? { title: 'Font family', kind: 'font', value: fontFamily, options: FONT_FAMILIES }
+      : openMenu === 'size'
+        ? {
+            title: 'Font size', kind: 'size', value: fontSize,
+            options: FONT_SIZES.map((value) => ({
+              value,
+              label: value ? parseInt(value, 10) : 'Auto',
+              hint: value ? 'px' : 'Theme',
+            })),
+          }
+        : null;
+
+  const applyMenuValue = (kind, value) => {
+    if (kind === 'style') applyStyle(value);
+    if (kind === 'font') {
+      if (value) editor.chain().focus().setFontFamily(value).run();
+      else editor.chain().focus().unsetFontFamily().run();
+    }
+    if (kind === 'size') {
+      if (value) editor.chain().focus().setFontSize(value).run();
+      else editor.chain().focus().unsetFontSize().run();
+    }
+    setOpenMenu(null);
+    setMenuAnchor(null);
+  };
+
+  const toggleMenu = (kind, event) => {
+    if (openMenu === kind) {
+      setOpenMenu(null);
+      setMenuAnchor(null);
+      return;
+    }
+    setOpenPalette(null);
+    setMenuAnchor(event.currentTarget);
+    setOpenMenu(kind);
+  };
+
+  const closeMenu = () => {
+    setOpenMenu(null);
+    setMenuAnchor(null);
+  };
 
   return (
-    <div className="note-tb-shell">
+    <div className={`note-tb-shell${openMenu ? ' is-menu-open' : ''}`}>
       {toolbarOverflow.left && (
         <button type="button" className="note-tb__overflow note-tb__overflow--left"
           title="More formatting options to the left" aria-label="Scroll toolbar left"
@@ -441,29 +497,17 @@ function Toolbar({ editor, onImage, onLink, onTable }) {
       <div ref={toolbarRef} className="note-tb" onMouseDown={(e) => {
         if (!e.target.closest('select, input')) e.preventDefault();
       }}>
-      <select className="note-tb__select note-tb__select--style" value={styleValue} onChange={(e) => applyStyle(e.target.value)} title="Paragraph style">
-        <option value="p">Normal</option>
-        <option value="h1">Heading 1</option>
-        <option value="h2">Heading 2</option>
-        <option value="h3">Heading 3</option>
-      </select>
+      <ToolbarMenuTrigger id="style" label={styleLabel} title="Paragraph style"
+        open={openMenu === 'style'} width="style"
+        onClick={(event) => toggleMenu('style', event)} />
 
-      <select className="note-tb__select note-tb__select--font" value={fontFamily}
-        onChange={(e) => e.target.value
-          ? editor.chain().focus().setFontFamily(e.target.value).run()
-          : editor.chain().focus().unsetFontFamily().run()}
-        title="Font">
-        {FONT_FAMILIES.map((f) => <option key={f.label} value={f.value}>{f.label}</option>)}
-      </select>
+      <ToolbarMenuTrigger id="font" label={fontLabel} title="Font family"
+        open={openMenu === 'font'} width="font"
+        onClick={(event) => toggleMenu('font', event)} />
 
-      <select className="note-tb__select note-tb__select--sm" value={fontSize}
-        onChange={(e) => e.target.value
-          ? editor.chain().focus().setFontSize(e.target.value).run()
-          : editor.chain().focus().unsetFontSize().run()}
-        title="Font size">
-        <option value="">Size</option>
-        {FONT_SIZES.filter(Boolean).map((s) => <option key={s} value={s}>{parseInt(s, 10)}</option>)}
-      </select>
+      <ToolbarMenuTrigger id="size" label={sizeLabel} title="Font size"
+        open={openMenu === 'size'} width="size"
+        onClick={(event) => toggleMenu('size', event)} />
 
       <Sep />
       <TBtn editor={editor} run="toggleBold" active="bold" title="Bold (⌘B)"><VscBold /></TBtn>
@@ -525,7 +569,133 @@ function Toolbar({ editor, onImage, onLink, onTable }) {
           <VscChevronRight />
         </button>
       )}
+      {menuConfig && menuAnchor && (
+        <ToolbarMenuPanel key={menuConfig.kind} config={menuConfig}
+          anchorElement={menuAnchor} onClose={closeMenu}
+          onSelect={(value) => applyMenuValue(menuConfig.kind, value)} />
+      )}
     </div>
+  );
+}
+
+function ToolbarMenuTrigger({ id, label, title, open, width, onClick }) {
+  return (
+    <button type="button"
+      className={`note-tb__menu-trigger note-tb__menu-trigger--${width}${open ? ' is-open' : ''}`}
+      title={title} aria-haspopup="listbox" aria-expanded={open}
+      aria-controls={`note-toolbar-menu-${id}`} onClick={onClick}>
+      <span>{label}</span>
+      <VscChevronDown aria-hidden="true" />
+    </button>
+  );
+}
+
+function ToolbarMenuPanel({ config, anchorElement, onSelect, onClose }) {
+  const [query, setQuery] = useState('');
+  const menuRef = useRef(null);
+  const menuWidth = config.kind === 'font' ? 272 : config.kind === 'style' ? 236 : 216;
+  const anchorRect = anchorElement.getBoundingClientRect();
+  const margin = 8;
+  const [position, setPosition] = useState({
+    top: anchorRect.bottom + 7,
+    left: Math.min(window.innerWidth - menuWidth - margin, Math.max(margin, anchorRect.left)),
+    width: menuWidth,
+  });
+  const hasFontSearch = config.kind === 'font' && config.options.length > 6;
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleOptions = hasFontSearch && normalizedQuery
+    ? config.options.filter((option) => option.label.toLowerCase().includes(normalizedQuery))
+    : config.options;
+
+  useEffect(() => setQuery(''), [config.kind]);
+
+  useEffect(() => {
+    const menu = menuRef.current;
+    if (!menu) return undefined;
+    const rect = anchorElement.getBoundingClientRect();
+    const height = menu.getBoundingClientRect().height;
+    const below = rect.bottom + 7;
+    const top = below + height <= window.innerHeight - margin
+      ? below
+      : Math.max(margin, rect.top - height - 7);
+    setPosition({
+      top,
+      left: Math.min(window.innerWidth - menuWidth - margin, Math.max(margin, rect.left)),
+      width: menuWidth,
+    });
+
+    const closeOutside = (event) => {
+      if (menu.contains(event.target) || anchorElement.contains(event.target)) return;
+      onClose();
+    };
+    const closeOnEscape = (event) => { if (event.key === 'Escape') onClose(); };
+    const closeOnResize = () => onClose();
+    const closeOnExternalScroll = (event) => {
+      // The option list owns its scrolling. Only close when an ancestor/page
+      // scroll moves the toolbar away from the anchored dropdown.
+      if (menu.contains(event.target)) return;
+      onClose();
+    };
+    document.addEventListener('mousedown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    window.addEventListener('resize', closeOnResize);
+    window.addEventListener('scroll', closeOnExternalScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+      window.removeEventListener('resize', closeOnResize);
+      window.removeEventListener('scroll', closeOnExternalScroll, true);
+    };
+  }, [anchorElement, menuWidth, onClose]);
+
+  return createPortal(
+    <div ref={menuRef} id={`note-toolbar-menu-${config.kind}`}
+      className="note-tb-panel" data-kind={config.kind}
+      style={position}
+      role="listbox" aria-label={config.title}
+      onMouseDown={(event) => {
+        if (!event.target.closest('input')) event.preventDefault();
+      }}>
+      <div className="note-tb-panel__head">
+        <span>{config.title}</span>
+        <small>{hasFontSearch ? `${config.options.length} fonts` : 'Choose an option'}</small>
+      </div>
+      {hasFontSearch && (
+        <label className="note-tb-panel__search">
+          <VscSearch aria-hidden="true" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search fonts…" aria-label="Search fonts" />
+          {query && <button type="button" onClick={() => setQuery('')} aria-label="Clear font search">×</button>}
+        </label>
+      )}
+      <div className="note-tb-panel__options">
+        {visibleOptions.map((option) => {
+          const active = option.value === config.value;
+          const fontStyle = config.kind === 'font'
+            ? { fontFamily: option.value || 'var(--font-ui)' }
+            : undefined;
+          return (
+            <button key={option.value || 'default'} type="button"
+              className={`note-tb-panel__option${active ? ' is-active' : ''}`}
+              role="option" aria-selected={active}
+              onClick={() => onSelect(option.value)}>
+              {config.kind === 'font' && (
+                <span className="note-tb-panel__sample" style={fontStyle}>Aa</span>
+              )}
+              <span className="note-tb-panel__copy">
+                <strong style={fontStyle}>{option.label}</strong>
+                {option.hint && <small>{option.hint}</small>}
+              </span>
+              {active && <VscCheck className="note-tb-panel__check" aria-hidden="true" />}
+            </button>
+          );
+        })}
+        {visibleOptions.length === 0 && (
+          <div className="note-tb-panel__empty">No fonts match “{query.trim()}”.</div>
+        )}
+      </div>
+    </div>,
+    document.body
   );
 }
 

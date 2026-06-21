@@ -145,7 +145,6 @@ function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateC
     <div
       key={card.uid}
       className={paperless ? 'note-canvas' : 'note-canvas note-paper'}
-      style={{ maxWidth: paperless ? '100%' : 860, margin: '0 auto', padding: paperless ? '1.25rem 1rem 2.5rem' : '2rem 2.25rem 2.5rem' }}
     >
       <PageTitle value={card.title} onChange={handleTitle} />
 
