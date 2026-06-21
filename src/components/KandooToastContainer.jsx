@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { _subscribeToasts } from '../utils/toast';
-import smilingImg from '../assets/kandoo-smiling.png';
-import headImg    from '../assets/kandoo-head.png';
+import { mascotForToast } from '../assets/kandoo/mascots';
 
 const DURATIONS = {
   success: 3500,
@@ -65,7 +64,7 @@ function ToastItem({ item, onRemove }) {
 
   const duration  = item.duration ?? DURATIONS[item.type] ?? 3500;
   const isLoading = item.type === 'loading';
-  const img  = ['success', 'info', 'default'].includes(item.type) ? smilingImg : headImg;
+  const img  = mascotForToast(item.type);
   const dot  = DOTS[item.type];
   const dotColor = dot || 'var(--theme-accent)';
 

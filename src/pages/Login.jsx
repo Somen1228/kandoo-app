@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import KandooLoader from '../components/KandooLoader';
-import kandooLogo from '../assets/kandoo-head.png';
+import { kandooMascots } from '../assets/kandoo/mascots';
 import './Login.css';
 
 const GoogleIcon = () => (
@@ -67,7 +67,7 @@ function ForgotPassword({ onBack }) {
   return (
     <form onSubmit={submit} className="login-form">
       <p style={{ margin: '0 0 4px', color: 'var(--theme-text-secondary)', fontSize: '0.84rem' }}>
-        Enter your email and we'll send a reset link.
+        Enter your email and we’ll send a reset link.
       </p>
       {error && <div className="login-alert">{friendlyError(error)}</div>}
       <label>Email
@@ -116,7 +116,7 @@ export default function Login() {
       {submitting && <KandooLoader fullscreen message={isSignUp ? 'Creating your workspace…' : 'Signing you in…'} />}
       <section className="login-card" aria-labelledby="login-title">
         <div className="login-brand">
-          <img src={kandooLogo} alt="" />
+          <img src={kandooMascots.calm} alt="" />
           <h1 id="login-title">Kandoo</h1>
           <p>Your projects, tasks, and notes—available everywhere.</p>
         </div>

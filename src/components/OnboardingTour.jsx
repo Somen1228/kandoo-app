@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import kandooSmiling from '../assets/kandoo-smiling.png';
+import { kandooMascots } from '../assets/kandoo/mascots';
 
 const TOUR_AUTO_KEY = 'kandoo-tour-auto';
 const A = 'var(--accent, #6c63ff)';
@@ -17,7 +17,7 @@ function MascotIcon() {
         style={{ position: 'absolute', inset: 10, borderRadius: '50%', background: A, filter: 'blur(18px)', zIndex: 0 }}
       />
       <motion.img
-        src={kandooSmiling} alt=""
+        src={kandooMascots.success} alt=""
         animate={{ y: [0, -7, 0] }}
         transition={{ duration: 2.3, repeat: Infinity, ease: 'easeInOut' }}
         style={{ position: 'relative', zIndex: 1, width: 72, height: 72, objectFit: 'contain' }}

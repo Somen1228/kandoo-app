@@ -1,0 +1,77 @@
+{
+  "fill-specializations" : [
+    {
+      "value" : {
+        "linear-gradient" : [
+          "srgb:0.11765,0.22745,0.37255,1.00000",
+          "srgb:0.17647,0.30980,0.47843,1.00000"
+        ]
+      }
+    },
+    {
+      "appearance" : "dark",
+      "value" : {
+        "linear-gradient" : [
+          "srgb:0.05098,0.09020,0.14902,1.00000",
+          "srgb:0.08627,0.15294,0.24706,1.00000"
+        ]
+      }
+    },
+    {
+      "appearance" : "tinted",
+      "value" : "automatic"
+    }
+  ],
+  "groups" : [
+    {
+      "blur-material" : 0.16,
+      "layers" : [
+        {
+          "image-name" : "02-head.svg",
+          "name" : "Head",
+          "position" : { "scale" : 0.92, "translation-in-points" : [ 0, 4 ] }
+        }
+      ],
+      "lighting" : "individual",
+      "shadow" : { "kind" : "neutral", "opacity" : 0.32 },
+      "specular" : true,
+      "translucency" : { "enabled" : false, "value" : 0.0 },
+      "translucency-specializations" : [
+        { "appearance" : "tinted", "value" : { "enabled" : true, "value" : 0.18 } }
+      ]
+    },
+    {
+      "blur-material" : 0.12,
+      "layers" : [
+        {
+          "image-name" : "03-facial-patches.svg",
+          "name" : "Facial patches",
+          "position" : { "scale" : 0.92, "translation-in-points" : [ 0, 4 ] }
+        }
+      ],
+      "lighting" : "individual",
+      "shadow" : { "kind" : "layer-color", "opacity" : 0.18 },
+      "specular" : true,
+      "translucency" : { "enabled" : false, "value" : 0.0 },
+      "translucency-specializations" : [
+        { "appearance" : "tinted", "value" : { "enabled" : true, "value" : 0.28 } }
+      ]
+    },
+    {
+      "layers" : [
+        {
+          "image-name" : "04-features.svg",
+          "name" : "Facial features",
+          "position" : { "scale" : 0.92, "translation-in-points" : [ 0, 4 ] }
+        }
+      ],
+      "lighting" : "individual",
+      "shadow" : { "kind" : "neutral", "opacity" : 0.12 },
+      "specular" : true,
+      "translucency" : { "enabled" : false, "value" : 0.0 }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [ "macOS" ]
+  }
+}

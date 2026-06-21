@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import kandooLogo from "../assets/kandoo-head.png";
-import kandooLogoSmiling from "../assets/kandoo-smiling.png";
+import { motion } from "framer-motion";
+import { kandooMascots } from "../assets/kandoo/mascots";
 
 const RIPPLE_COUNT = 3;
 
@@ -31,7 +29,7 @@ function Ripple() {
   );
 }
 
-function OrbitDot({ angle, radius, delay }) {
+function OrbitDot({ radius, delay }) {
   return (
     <motion.div
       animate={{ rotate: 360 }}
@@ -62,13 +60,6 @@ function OrbitDot({ angle, radius, delay }) {
 }
 
 function SlothCore({ size }) {
-  const [smiling, setSmiling] = useState(false);
-
-  useEffect(() => {
-    const id = setInterval(() => setSmiling(s => !s), 1100);
-    return () => clearInterval(id);
-  }, []);
-
   const orbitRadius = size * 0.68;
 
   return (
@@ -132,43 +123,20 @@ function SlothCore({ size }) {
         transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
         style={{ position: "relative", width: size, height: size, zIndex: 1 }}
       >
-        <AnimatePresence mode="wait">
-          {!smiling ? (
-            <motion.img
-              key="neutral"
-              src={kandooLogo}
-              alt=""
-              draggable={false}
-              initial={{ opacity: 1 }}
-              exit={{ opacity: 0, scale: 0.88, rotate: -6 }}
-              transition={{ duration: 0.18 }}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "contain",
-                userSelect: "none",
-                filter: "drop-shadow(0 6px 18px rgba(0,0,0,0.18))",
-              }}
-            />
-          ) : (
-            <motion.img
-              key="smile"
-              src={kandooLogoSmiling}
-              alt=""
-              draggable={false}
-              initial={{ opacity: 0, scale: 0.88, rotate: 6 }}
-              animate={{ opacity: 1, scale: 1, rotate: 0 }}
-              transition={{ duration: 0.22, ease: [0.34, 1.2, 0.64, 1] }}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "contain",
-                userSelect: "none",
-                filter: "drop-shadow(0 6px 18px rgba(0,0,0,0.18))",
-              }}
-            />
-          )}
-        </AnimatePresence>
+        <motion.img
+          src={kandooMascots.loading}
+          alt=""
+          draggable={false}
+          animate={{ rotate: [-1.5, 1.5, -1.5], scale: [1, 1.025, 1] }}
+          transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+            userSelect: "none",
+            filter: "drop-shadow(0 6px 18px rgba(0,0,0,0.18))",
+          }}
+        />
       </motion.div>
 
       {/* squash shadow */}

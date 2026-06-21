@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import kandooLogo from "../../assets/kandoo-head.png";
-import kandooLogoSmiling from "../../assets/kandoo-smiling.png";
+import { motion } from "framer-motion";
+import { kandooMascots } from "../../assets/kandoo/mascots";
 
 const CARD_CONFIGS = [
   { tasks: [72, 45, 88], delay: 0 },
@@ -98,14 +96,6 @@ function SkeletonCard({ tasks, delay, rotateY = 0 }) {
 }
 
 function SlothMascot() {
-  const [smiling, setSmiling] = useState(false);
-
-  // swap to smiling face once cards have appeared
-  useEffect(() => {
-    const t = setTimeout(() => setSmiling(true), 900);
-    return () => clearTimeout(t);
-  }, []);
-
   return (
     <motion.div
       initial={{ opacity: 0, y: -20, scale: 0.8 }}
@@ -132,31 +122,14 @@ function SlothMascot() {
         transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
         style={{ position: "relative", zIndex: 1, width: 64, height: 64 }}
       >
-        <AnimatePresence mode="wait">
-          {!smiling ? (
-            <motion.img
-              key="neutral"
-              src={kandooLogo}
-              alt=""
-              draggable={false}
-              initial={{ opacity: 1 }}
-              exit={{ opacity: 0, scale: 0.9, rotate: -5 }}
-              transition={{ duration: 0.25 }}
-              style={{ width: "100%", height: "100%", objectFit: "contain", userSelect: "none" }}
-            />
-          ) : (
-            <motion.img
-              key="smile"
-              src={kandooLogoSmiling}
-              alt=""
-              draggable={false}
-              initial={{ opacity: 0, scale: 0.9, rotate: 5 }}
-              animate={{ opacity: 1, scale: 1, rotate: 0 }}
-              transition={{ duration: 0.3, ease: [0.34, 1.2, 0.64, 1] }}
-              style={{ width: "100%", height: "100%", objectFit: "contain", userSelect: "none" }}
-            />
-          )}
-        </AnimatePresence>
+        <motion.img
+          src={kandooMascots.loading}
+          alt=""
+          draggable={false}
+          animate={{ rotate: [-2, 2, -2], scale: [1, 1.03, 1] }}
+          transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+          style={{ width: "100%", height: "100%", objectFit: "contain", userSelect: "none" }}
+        />
       </motion.div>
     </motion.div>
   );

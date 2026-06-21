@@ -5,7 +5,7 @@ import {
   VscFilter, VscFilterFilled, VscChevronDown,
   VscArchive, VscQuestion,
   VscAccount, VscInbox, VscNotebook, VscLayoutSidebarLeft, VscClose,
-  VscSettingsGear, VscSignIn, VscSignOut, VscCloud, VscSync, VscWarning,
+  VscSettingsGear, VscSignIn, VscSignOut, VscCloud,
 } from "react-icons/vsc";
 import { toast } from '../utils/toast';
 import { CgRename } from "react-icons/cg";
@@ -19,8 +19,7 @@ import Cards from "../components/Board/Cards";
 import { CardsContext } from "../contexts/CardsContext";
 import { useAuth } from "../contexts/AuthContext";
 import { useTheme } from "../contexts/ThemeContext";
-import kandooLogo from "../assets/kandoo-head.png";
-import kandooLogoSmiling from "../assets/kandoo-smiling.png";
+import { kandooMascots, mascotForSync } from "../assets/kandoo/mascots";
 import WarningModal from "../components/Board/WarningModal";
 import BoardSkeleton from "../components/Board/BoardSkeleton";
 import SettingsModal from "../components/Settings/SettingsModal";
@@ -393,11 +392,7 @@ function Board() {
               : `${localStorageLabel}${savedAtLabel} · Cloud offline`
         : `${localStorageLabel}${savedAtLabel}`;
 
-  const SyncStatusIcon = syncState === "syncing" || syncState === "connecting"
-    ? VscSync
-    : syncState === "offline" || syncState === "conflict"
-      ? VscWarning
-      : VscCloud;
+  const syncMascot = mascotForSync(syncState, saveState);
 
   return (
     <div className={`mac-shell${isDesktopApp ? " is-desktop-window" : ""}`}>
@@ -410,7 +405,7 @@ function Board() {
               <>
                 <img
                   className="mac-sidebar__brand-logo"
-                  src={isLogoHovered ? kandooLogoSmiling : kandooLogo}
+                  src={isLogoHovered ? kandooMascots.success : kandooMascots.calm}
                   alt="Kandoo"
                   onMouseEnter={() => setIsLogoHovered(true)}
                   onMouseLeave={() => setIsLogoHovered(false)}
@@ -525,12 +520,12 @@ function Board() {
                 title="Open Account & Sync"
                 aria-label={`Account and sync: ${storageLabel}`}
               >
-                <SyncStatusIcon />
+                <img src={syncMascot} alt="" draggable={false} />
               </button>
             ) : (
               <img
                 className="mac-sidebar__logo"
-                src={isLogoHovered ? kandooLogoSmiling : kandooLogo}
+                src={isLogoHovered ? kandooMascots.success : kandooMascots.offline}
                 alt="Kandoo"
                 onMouseEnter={() => setIsLogoHovered(true)}
                 onMouseLeave={() => setIsLogoHovered(false)}
