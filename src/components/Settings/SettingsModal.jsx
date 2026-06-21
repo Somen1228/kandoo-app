@@ -9,7 +9,7 @@ import { THEME_TOKENS } from '../../themes/themes';
 import '../ThemeSettings.css';
 import {
   VscAccount, VscColorMode, VscEdit, VscSettingsGear, VscDatabase, VscClose, VscCopy,
-  VscQuestion, VscCloud, VscDesktopDownload,
+  VscCloud, VscDesktopDownload,
 } from 'react-icons/vsc';
 import AvatarCropper from '../AvatarCropper';
 
@@ -185,7 +185,7 @@ function ConflictTooltip({ onOpenHelp }) {
               What is a sync conflict?
             </p>
             <p style={{ margin: '0 0 0.625rem', fontSize: '0.75rem', lineHeight: 1.55, color: 'var(--theme-text-secondary)' }}>
-              This happens when you edit your workspace on two devices while one was offline. Both versions have changes the other doesn't know about.
+              This happens when you edit your workspace on two devices while one was offline. Both versions have changes the other doesn’t know about.
             </p>
             {onOpenHelp && (
               <button
@@ -258,7 +258,7 @@ function DiffSummary({ localBoards, cloudBoards }) {
           <span style={{ fontSize: '0.85rem', flexShrink: 0 }}>⚡</span>
           <span>
             <strong style={{ color: 'var(--theme-text-primary)' }}>{diff.sharedEditedTasks} task{diff.sharedEditedTasks !== 1 ? 's' : ''}</strong>
-            {' '}edited on both — you'll choose per task if you merge
+            {' '}edited on both — you’ll choose per task if you merge
           </span>
         </div>
       )}
@@ -329,7 +329,7 @@ function AccountPanel({ onOpenHelp }) {
   );
 
   const savePassword = () => {
-    if (formData.newPassword !== formData.confirmPassword) { toast.error('Passwords do not match'); return; }
+    if (formData.newPassword !== formData.confirmPassword) { toast.warning('Passwords do not match'); return; }
     runAction(
       () => changePassword(formData.currentPassword, formData.newPassword),
       () => { setShowPasswordForm(false); setFormData(f => ({ ...f, currentPassword: '', newPassword: '', confirmPassword: '' })); toast.success('Password updated'); }
@@ -497,7 +497,7 @@ function AccountPanel({ onOpenHelp }) {
               )}
               {isGoogleUser && (
                 <p style={{ margin: '0 0 8px', fontSize: '0.75rem', color: 'var(--theme-text-muted)' }}>
-                  You'll be asked to sign in with Google to confirm.
+                  You’ll be asked to sign in with Google to confirm.
                 </p>
               )}
               <div style={{ display: 'flex', gap: 6 }}>

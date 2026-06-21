@@ -1,7 +1,7 @@
 /* eslint-disable react/no-unescaped-entities */
 import { useState, useRef, useEffect } from 'react';
 import {
-  VscClose, VscRocket, VscPreview, VscEdit, VscChecklist, VscBold,
+  VscClose, VscRocket, VscPreview, VscEdit, VscChecklist,
   VscSearch, VscDiscard, VscArchive, VscMortarBoard, VscNote, VscSave,
   VscSettingsGear, VscLayoutSidebarLeft, VscCalendar, VscDebugStart,
 } from 'react-icons/vsc';
@@ -300,6 +300,14 @@ const SECTIONS = [
 
         <SubH>Paper vs Wide layout</SubH>
         <P>Toggle between <strong>Paper</strong> (centred, themed page feel) and <strong>Wide</strong> (full-width canvas) using the toggle next to "Edited X ago". Preference is saved per device. Default controlled in <strong>Settings → Editor</strong>.</P>
+
+        <SubH>Export a note</SubH>
+        <P>Use the <strong>Export</strong> button beside the Paper/Wide control to download the active page separately from the board backup.</P>
+        <Steps items={[
+          <>Editable documents: <strong>Microsoft Word (.docx)</strong>, <strong>OpenDocument (.odt)</strong>, and <strong>Rich Text (.rtf)</strong>.</>,
+          <>Sharing and publishing: <strong>PDF</strong>, zipped <strong>HTML</strong>, and <strong>EPUB</strong>.</>,
+          <>Portable source formats: <strong>Plain Text</strong> and <strong>Markdown</strong>.</>,
+        ]} />
 
         <SubH>Inline images</SubH>
         <P>Paste an image, drag-drop a file, or use <Kbd>/image</Kbd> to insert at the cursor position. Images are stored as compressed base64 inside the note.</P>

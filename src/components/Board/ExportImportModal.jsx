@@ -43,7 +43,7 @@ function ExportImportModal({ boards, activeBoardId, isOpen, onClose, onImport })
     const today = new Date().toISOString().split('T')[0];
     const targets = scope === 'current' ? (activeBoard ? [activeBoard] : []) : boards;
     if (targets.length === 0) {
-      toast.error(scope === 'current' ? 'No active board to export' : 'No boards to export');
+      toast.warning(scope === 'current' ? 'No active board to export' : 'No boards to export');
       return;
     }
     const base = scope === 'current'
@@ -72,7 +72,7 @@ function ExportImportModal({ boards, activeBoardId, isOpen, onClose, onImport })
     e.target.value = ''; // allow re-selecting same file
     if (!file) return;
     if (file.size > 50 * 1024 * 1024) {
-      toast.error('File is too large (max 50 MB)');
+      toast.warning('File is too large (max 50 MB)');
       return;
     }
     try {

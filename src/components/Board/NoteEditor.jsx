@@ -197,7 +197,7 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
       label: 'Send list to board…',
       onClick: () => {
         const list = extractListItems(editor, li);
-        if (!list.length) { toast.error('This list is empty'); return; }
+        if (!list.length) { toast.warning('This list is empty'); return; }
         onSendListToBoard?.(list);
       },
     });
@@ -925,7 +925,7 @@ function LinkDialog({ editor, open, onClose }) {
   const apply = (event) => {
     event.preventDefault();
     const href = normalizeLink(url);
-    if (!href) { toast.error('Enter a link URL'); return; }
+    if (!href) { toast.warning('Enter a link URL'); return; }
 
     const chain = editor.chain().focus();
     if (selectionEmpty && !hasLink) {

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import KandooLoader from './KandooLoader';
-import kandooLogo from '../assets/kandoo-head.png';
+import { kandooMascots } from '../assets/kandoo/mascots';
 
 function EmailVerificationGate() {
   const { user, sendVerificationEmail, reloadUser, logout } = useAuth();
@@ -29,7 +29,7 @@ function EmailVerificationGate() {
       <div className="login-drag-region" data-tauri-drag-region />
       <section className="login-card" style={{ textAlign: 'center' }}>
         <div className="login-brand">
-          <img src={kandooLogo} alt="" />
+          <img src={kandooMascots.calm} alt="" />
           <h1>Verify your email</h1>
           <p>We sent a link to <strong>{user?.email}</strong>. Click it to activate your account.</p>
         </div>

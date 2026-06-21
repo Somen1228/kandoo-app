@@ -3,6 +3,7 @@ import { VscAdd, VscTrash, VscChevronRight, VscFile, VscChromeMaximize, VscChrom
 import { markdownToHtml, isHtml, htmlToText } from '../../utils/htmlEditor';
 import { useSettings } from '../../contexts/SettingsContext';
 import ContextMenu from '../ContextMenu';
+import NoteExportMenu from './NoteExportMenu';
 
 // TipTap pulls in ProseMirror + lowlight — load it only when Notes is opened.
 const NoteEditor = lazy(() => import('./NoteEditor'));
@@ -148,21 +149,19 @@ function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateC
     >
       <PageTitle value={card.title} onChange={handleTitle} />
 
-      <div style={{ fontSize: '0.7rem', color: 'var(--theme-text-muted)', marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="note-canvas__meta">
         <span>
           {safeNote.updatedAt && `Edited ${relativeTime(safeNote.updatedAt)}`}
           {charCount > 0 && <span> · {charCount} character{charCount === 1 ? '' : 's'}</span>}
         </span>
-        <button
-          type="button"
-          onClick={togglePaperless}
-          title={paperless ? 'Switch to paper view' : 'Switch to wide view'}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'transparent', border: '1px solid var(--theme-border)', borderRadius: 999, color: 'var(--theme-text-muted)', cursor: 'pointer', fontSize: '0.7rem', padding: '2px 8px' }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--theme-text-primary)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--theme-text-muted)'; }}
-        >
-          {paperless ? <><VscChromeRestore /> Paper</> : <><VscChromeMaximize /> Wide</>}
-        </button>
+        <div className="note-canvas__actions">
+          <NoteExportMenu title={card.title?.trim() || 'Untitled'} html={initialContent} />
+          <button type="button" className="note-view-toggle"
+            onClick={togglePaperless}
+            title={paperless ? 'Switch to paper view' : 'Switch to wide view'}>
+            {paperless ? <><VscChromeRestore /> Paper</> : <><VscChromeMaximize /> Wide</>}
+          </button>
+        </div>
       </div>
 
       <Suspense fallback={<div style={{ padding: '2rem 0', color: 'var(--theme-text-muted)', fontSize: '0.85rem' }}>Loading editor…</div>}>

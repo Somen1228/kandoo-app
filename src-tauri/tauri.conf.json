@@ -57,7 +57,7 @@
       "signingIdentity": "-",
       "hardenedRuntime": false
     },
-    "icon": ["icons/icon-v2.icns"]
+    "icon": ["icons/kandoo-legacy.icns"]
   },
   "plugins": {
     "sql": {

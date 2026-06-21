@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title">
+  <title id="title">Kandoo sloth outline</title>
+  <g fill="none" stroke="currentColor" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M512 898C304 898 162 784 162 585c0-161 94-281 235-325 25-72 77-130 133-151 24-9 39 15 23 38l-29 42c39-28 83-37 111-21 23 13 18 39-7 60l-47 38c166 30 281 155 281 319 0 199-142 313-350 313Z"/>
+    <path d="M248 571c35-34 76-53 122-53s87 19 122 53M532 571c35-34 76-53 122-53s87 19 122 53" opacity=".7"/>
+    <path d="M326 593c19 24 48 24 67 0M631 593c19 24 48 24 67 0"/>
+    <path d="M479 666c20-18 46-18 66 0M449 725c37 42 89 42 126 0"/>
+  </g>
+</svg>
