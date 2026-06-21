@@ -29,6 +29,7 @@ import NoteCard from "./NoteCard.jsx";
 import DatePicker from "./DatePicker.jsx";
 import NotePickerModal from "./NotePickerModal.jsx";
 import LinkedNotesPopover from "./LinkedNotesPopover.jsx";
+import PinIcon from "../icons/PinIcon.jsx";
 
 const PROTECTED_COLUMN_TITLES = new Set(["To-do", "In-Progress", "Done"]);
 
@@ -834,7 +835,7 @@ function Card({
           )}
           {isPinned && (
             <span className="card-pin-icon" title="Pinned card" aria-label="Pinned card">
-              <VscPinned />
+              <PinIcon />
             </span>
           )}
           <div className="w-4 h-5 text-sm rounded-sm text-center"

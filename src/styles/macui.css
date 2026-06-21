@@ -722,9 +722,24 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
+/* Quiet pin glyph in the header of a pinned card (uses our own PinIcon). */
+.card-pin-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 7px;
+  font-size: 0.95rem;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+/* Pinned cards sit quietly elevated: a refined accent hairline (crisp, no blur)
+   and a clean neutral lift — present but never flashy. */
 .card.is-pinned {
-  border-color: color-mix(in srgb, var(--card-hue, var(--accent)) 52%, var(--theme-border));
-  box-shadow: var(--shadow-md), 0 0 0 1px color-mix(in srgb, var(--card-hue, var(--accent)) 16%, transparent);
+  border-color: color-mix(in srgb, var(--card-hue, var(--accent)) 50%, var(--theme-border));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--card-hue, var(--accent)) 24%, transparent),
+    var(--shadow-md);
 }
 .card-title {
   padding: 7px 12px;
@@ -732,15 +747,6 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   letter-spacing: -0.005em;
   border-top-left-radius: var(--radius-lg);
   border-top-right-radius: var(--radius-lg);
-}
-.card-pin-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 7px;
-  font-size: 0.92rem;
-  opacity: 0.8;
-  flex-shrink: 0;
 }
 .card .task-list {
   background: transparent;
