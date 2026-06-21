@@ -366,10 +366,14 @@ body {
    active theme. Dark themes get a dark paper surface instead of a white island. */
 .note-canvas {
   box-sizing: border-box;
-  width: 100%;
-  max-width: 100%;
+  width: 98%;
+  max-width: 98%;
+  min-height: 150%;
   margin: 0 auto;
   padding: 1.25rem 1rem 2.5rem;
+  background: var(--theme-bg-card);
+  border: 1px solid color-mix(in srgb, var(--theme-border) 82%, var(--theme-text-primary) 8%);
+  border-radius: 0.75rem;
 }
 
 .note-paper {
