@@ -92,7 +92,7 @@ const SECTIONS = [
           <>The sidebar is always visible. Drag its right edge to resize (210–360 px). Kandoo remembers your preferred width.</>,
           <>Click the collapse arrow at the top to hide it entirely — drag the edge back out to restore.</>,
           <>At the top: your boards list. Below: <strong>Notes</strong>. Below that: <strong>smart schedule sections</strong> (Today, Upcoming, Overdue).</>,
-          <>The Kandoo logo lives at the sidebar footer. Hover it to see it smile.</>,
+          <>The sidebar footer shows the latest save or sync status and provides quick access to Settings.</>,
         ]} />
 
         <SubH>Smart schedule sections</SubH>

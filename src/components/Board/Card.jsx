@@ -29,6 +29,7 @@ import NoteCard from "./NoteCard.jsx";
 import DatePicker from "./DatePicker.jsx";
 import NotePickerModal from "./NotePickerModal.jsx";
 import LinkedNotesPopover from "./LinkedNotesPopover.jsx";
+import PasteSplitModal from "./PasteSplitModal.jsx";
 import PinIcon from "../icons/PinIcon.jsx";
 
 const PROTECTED_COLUMN_TITLES = new Set(["To-do", "In-Progress", "Done"]);
@@ -325,6 +326,7 @@ function Card({
   const [notePicker, setNotePicker] = useState(null); // { kind: 'task'|'new', taskId? } | null
   const [newTaskNoteLinks, setNewTaskNoteLinks] = useState([]); // pending links for the task being created
   const [linkedPopover, setLinkedPopover] = useState(null); // { taskId, x, y } | null
+  const [pasteSplit, setPasteSplit] = useState(null); // { lines, text } | null
   const [taskValue, setTaskValue]             = useState(""); // HTML string
   const [newTaskImages, setNewTaskImages]     = useState([]);
   const [newTaskDue, setNewTaskDue]           = useState(""); // "YYYY-MM-DD" or ""
@@ -1166,7 +1168,7 @@ function Card({
             onSave={() => addTask()}
             onCancel={() => { setToggleAddTask(false); setTaskValue(''); setNewTaskImages([]); setNewTaskNoteLinks([]); }}
             onRequestLink={() => newToolbarRef.current?.openLink()}
-            onMultilinePaste={addMultipleTasks}
+            onMultilinePaste={(lines, text) => setPasteSplit({ lines, text })}
             autoFocus
             placeholder="New task…"
             className=""
@@ -1364,6 +1366,16 @@ function Card({
           images={viewingImages.images}
           initialIndex={viewingImages.index}
           onClose={() => setViewingImages(null)}
+        />,
+        document.body
+      )}
+
+      {pasteSplit && createPortal(
+        <PasteSplitModal
+          count={pasteSplit.lines.length}
+          onSeparate={() => { addMultipleTasks(pasteSplit.lines); setPasteSplit(null); }}
+          onSingle={() => { newEditorRef.current?.insertText(pasteSplit.lines.join('\n')); setPasteSplit(null); }}
+          onClose={() => setPasteSplit(null)}
         />,
         document.body
       )}

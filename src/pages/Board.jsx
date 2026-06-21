@@ -28,7 +28,7 @@ import Cards from "../components/Board/Cards";
 import { CardsContext } from "../contexts/CardsContext";
 import { useAuth } from "../contexts/AuthContext";
 import { useTheme } from "../contexts/ThemeContext";
-import { kandooMascots, mascotForSync } from "../assets/kandoo/mascots";
+import { kandooMascots } from "../assets/kandoo/mascots";
 import WarningModal from "../components/Board/WarningModal";
 import BoardSkeleton from "../components/Board/BoardSkeleton";
 import SettingsModal from "../components/Settings/SettingsModal";
@@ -440,8 +440,6 @@ function Board() {
               : `${localStorageLabel}${savedAtLabel} · Cloud offline`
         : `${localStorageLabel}${savedAtLabel}`;
 
-  const syncMascot = mascotForSync(syncState, saveState);
-
   return (
     <div className={`mac-shell${isDesktopApp ? " is-desktop-window" : ""}`}>
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
@@ -574,24 +572,6 @@ function Board() {
 
           <div className="mac-sidebar__footer" data-state={saveState === "error" ? "error" : undefined}
             title={saveState === "error" ? "Kandoo could not save the latest changes" : storageLabel}>
-            {user ? (
-              <button
-                className={`mac-sidebar__sync-status is-${syncState}`}
-                onClick={() => openSettings("account")}
-                title="Open Account & Sync"
-                aria-label={`Account and sync: ${storageLabel}`}
-              >
-                <img src={syncMascot} alt="" draggable={false} />
-              </button>
-            ) : (
-              <img
-                className="mac-sidebar__logo"
-                src={isLogoHovered ? kandooMascots.success : kandooMascots.offline}
-                alt="Kandoo"
-                onMouseEnter={() => setIsLogoHovered(true)}
-                onMouseLeave={() => setIsLogoHovered(false)}
-              />
-            )}
             <span className="mac-sidebar__save-label">{storageLabel}</span>
             <button className="mac-sidebar__settings" onClick={() => openSettings("appearance")} title="Settings" aria-label="Open settings">
               <VscSettingsGear />
