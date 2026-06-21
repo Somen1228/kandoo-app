@@ -135,6 +135,8 @@ const SECTIONS = [
         <P>Right-click a sidebar entry → <strong>Delete board</strong>. Disabled if it's your only board.</P>
         <SubH>Switch</SubH>
         <P>Click any board in the sidebar. The active board is highlighted with the accent colour.</P>
+        <SubH>Reorder</SubH>
+        <P>Drag a board up or down in the Projects section. Its new position is saved with the workspace.</P>
       </>
     ),
   },
@@ -157,6 +159,8 @@ const SECTIONS = [
         <P>Right-click header → <strong>Change colour</strong>. Pick a preset swatch or click the rainbow circle for a custom hex. Title text auto-contrasts.</P>
         <SubH>Delete & reorder</SubH>
         <P>Right-click → <strong>Delete card</strong>. Drag the header sideways to reorder columns.</P>
+        <SubH>Pin cards</SubH>
+        <P>Right-click a card header → <strong>Pin card to top</strong>. You can pin up to three cards per board; pinned cards stay before unpinned cards and can still be reordered within the pinned group.</P>
       </>
     ),
   },
@@ -400,6 +404,8 @@ const SECTIONS = [
       <>
         <H2>Drag & drop</H2>
         <P>Powered by @dnd-kit — supports mouse, touch, and keyboard.</P>
+        <SubH>Boards</SubH>
+        <P>Drag a project in the sidebar up or down to change its saved order.</P>
         <SubH>Columns</SubH>
         <P>Grab a column by its title bar and drag sideways to reorder.</P>
         <SubH>Tasks</SubH>

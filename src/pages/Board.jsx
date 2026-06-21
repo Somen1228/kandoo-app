@@ -15,6 +15,15 @@ import { v4 as uuidv4 } from "uuid";
 import { useHotkeys } from "react-hotkeys-hook";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  DndContext, KeyboardSensor, PointerSensor, closestCenter,
+  useSensor, useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext, arrayMove, sortableKeyboardCoordinates,
+  useSortable, verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import Cards from "../components/Board/Cards";
 import { CardsContext } from "../contexts/CardsContext";
 import { useAuth } from "../contexts/AuthContext";
@@ -33,6 +42,30 @@ import OnboardingTour from "../components/OnboardingTour";
 
 const SIDEBAR_MIN = 210;
 const SIDEBAR_MAX = 360;
+
+function SortableBoardNavItem({ id, disabled = false, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    disabled,
+    data: { type: "sidebar-board" },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className="mac-board-sortable"
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.55 : 1,
+        position: "relative",
+        zIndex: isDragging ? 2 : "auto",
+      }}
+    >
+      {children({ ...attributes, ...listeners })}
+    </div>
+  );
+}
 
 // Smart sidebar sections — colour dots + labels, counts come from the board.
 const SCHEDULE_SECTIONS = [
@@ -71,6 +104,11 @@ function Board() {
   const [filterMode, setFilterMode]               = useState(false);
   const [currentMatchIdx, setCurrentMatchIdx]     = useState(0);
   const [showCrossBoardDropdown, setShowCrossBoardDropdown] = useState(false);
+  const suppressBoardClickRef = useRef(false);
+  const boardSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 7 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   // ── Shell state ─────────────────────────────────────────────────────────
   const [section, setSection] = useState("todos");          // 'todos' | 'notes'
@@ -336,6 +374,16 @@ function Board() {
     setScheduleView(null);
   };
 
+  const handleBoardDragEnd = ({ active, over }) => {
+    window.setTimeout(() => { suppressBoardClickRef.current = false; }, 0);
+    if (!over || active.id === over.id) return;
+    setBoards((current) => {
+      const from = current.findIndex((board) => board.id === active.id);
+      const to = current.findIndex((board) => board.id === over.id);
+      return from < 0 || to < 0 ? current : arrayMove(current, from, to);
+    });
+  };
+
   const openSettings = (tab = "appearance") => { setSettingsTab(tab); setShowSettings(true); };
 
   const signOut = async () => {
@@ -422,9 +470,18 @@ function Board() {
                 <span>Projects</span>
                 <button className="mac-sidebar__add" onClick={addBoard} title="New project" aria-label="New project">+</button>
               </div>
+              <DndContext
+                sensors={boardSensors}
+                collisionDetection={closestCenter}
+                onDragStart={() => { suppressBoardClickRef.current = true; }}
+                onDragCancel={() => { window.setTimeout(() => { suppressBoardClickRef.current = false; }, 0); }}
+                onDragEnd={handleBoardDragEnd}
+              >
+                <SortableContext items={boards.map((board) => board.id)} strategy={verticalListSortingStrategy}>
               {boards.map((board) => (
-                editingBoardId === board.id ? (
-                  <div key={board.id} style={{ padding: "2px 10px", position: "relative" }}>
+                <SortableBoardNavItem key={board.id} id={board.id} disabled={editingBoardId === board.id}>
+                  {(dragProps) => editingBoardId === board.id ? (
+                  <div style={{ padding: "2px 10px", position: "relative" }}>
                     <input
                       type="text"
                       value={newBoardTitle}
@@ -452,19 +509,23 @@ function Board() {
                   </div>
                 ) : (
                   <button
-                    key={board.id}
                     className={`mac-nav-item${board.id === activeBoard ? " is-active" : ""}`}
-                    onClick={() => selectBoard(board.id)}
+                    onClick={() => { if (!suppressBoardClickRef.current) selectBoard(board.id); }}
                     onDoubleClick={() => handleTitleClick(board.id, board.title)}
                     onContextMenu={(e) => openBoardContextMenu(e, board)}
+                    title="Drag to reorder · double-click to rename"
+                    {...dragProps}
                   >
                     <span className="mac-nav-item__label">{board.title}</span>
                     {boardTaskCount(board) > 0 && (
                       <span className="mac-nav-item__count">{boardTaskCount(board)}</span>
                     )}
                   </button>
-                )
+                )}
+                </SortableBoardNavItem>
               ))}
+                </SortableContext>
+              </DndContext>
             </div>
 
             {/* Smart sections */}

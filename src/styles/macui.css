@@ -339,6 +339,13 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   background: color-mix(in srgb, var(--accent) 20%, transparent);
   color: var(--accent);
 }
+.mac-board-sortable {
+  width: 100%;
+  touch-action: none;
+}
+.mac-board-sortable .mac-nav-item:active {
+  cursor: grabbing;
+}
 .mac-nav-item__dot {
   width: 7px;
   height: 7px;
@@ -715,12 +722,25 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
+.card.is-pinned {
+  border-color: color-mix(in srgb, var(--card-hue, var(--accent)) 52%, var(--theme-border));
+  box-shadow: var(--shadow-md), 0 0 0 1px color-mix(in srgb, var(--card-hue, var(--accent)) 16%, transparent);
+}
 .card-title {
   padding: 7px 12px;
   font-weight: 600;
   letter-spacing: -0.005em;
   border-top-left-radius: var(--radius-lg);
   border-top-right-radius: var(--radius-lg);
+}
+.card-pin-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 7px;
+  font-size: 0.92rem;
+  opacity: 0.8;
+  flex-shrink: 0;
 }
 .card .task-list {
   background: transparent;
