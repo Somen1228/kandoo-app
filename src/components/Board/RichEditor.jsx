@@ -101,6 +101,41 @@ const RichEditor = forwardRef(function RichEditor({
       updateEmptyState();
       onChange?.(el.innerHTML);
     },
+    // Insert (possibly multiline) text at the caret. Used to keep a multiline
+    // paste as one task. Uses the Range API directly because focus may have just
+    // returned from a modal, leaving execCommand('insertText') with no caret.
+    insertText: (text) => {
+      const el = editorRef.current;
+      if (!el || !text) return;
+      el.focus();
+      const sel = window.getSelection();
+      // Ensure a caret exists inside the editor (focus alone may not place one).
+      if (!sel.rangeCount || !el.contains(sel.anchorNode)) {
+        const r = document.createRange();
+        r.selectNodeContents(el);
+        r.collapse(false); // end
+        sel.removeAllRanges();
+        sel.addRange(r);
+      }
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      // Build a fragment with <br> between lines so multiline text is preserved.
+      const frag = document.createDocumentFragment();
+      text.split('\n').forEach((line, i) => {
+        if (i > 0) frag.appendChild(document.createElement('br'));
+        frag.appendChild(document.createTextNode(line));
+      });
+      const lastNode = frag.lastChild;
+      range.insertNode(frag);
+      if (lastNode) {
+        range.setStartAfter(lastNode);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      updateEmptyState();
+      onChange?.(el.innerHTML);
+    },
     // Apply a hyperlink to the last editor selection (or insert one if collapsed).
     insertLink: (url) => {
       const el = editorRef.current;
@@ -229,11 +264,12 @@ const RichEditor = forwardRef(function RichEditor({
     if (!text) return; // let browser handle non-text payloads
     e.preventDefault();
 
-    // Multiline paste → hand each non-empty line to the parent as separate tasks
+    // Multiline paste → let the parent decide (ask the user) whether to split
+    // into separate tasks or keep it as one. Pass the raw text for the latter.
     if (onMultilinePaste) {
       const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
       if (lines.length > 1) {
-        onMultilinePaste(lines);
+        onMultilinePaste(lines, text);
         return;
       }
     }

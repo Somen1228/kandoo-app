@@ -30,6 +30,8 @@ export default function NotePickerModal({ notes, linkedUids = [], onToggle, onCl
     <div
       ref={overlayRef}
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
+      // Keep the new-task form's outside-click handler from firing underneath.
+      onMouseDown={(e) => e.stopPropagation()}
       style={{
         position: 'fixed', inset: 0, zIndex: 3000,
         display: 'flex', alignItems: 'center', justifyContent: 'center',

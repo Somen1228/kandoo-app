@@ -39,6 +39,20 @@ import { VscHistory, VscClose } from "react-icons/vsc";
 import ResetWarningModal from "./ResetWarningModal";
 import SendToBoardModal from "./SendToBoardModal";
 
+const MAX_PINNED_CARDS = 3;
+
+// Notes and todo cards share one persisted array. Reorder only todo-card slots
+// so pinning a Kanban column never disturbs the Notes page hierarchy.
+function pinnedCardsFirst(cards) {
+  const orderedTodos = cards
+    .filter((card) => (card.type || 'todo') === 'todo')
+    .sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)));
+  let todoIndex = 0;
+  return cards.map((card) =>
+    (card.type || 'todo') === 'todo' ? orderedTodos[todoIndex++] : card
+  );
+}
+
 // Build a tasks-map from extracted note checklist items. Checked items land as
 // done, and each task keeps a backlink to its source note.
 function buildTasksFromItems(items, noteUid) {
@@ -95,6 +109,10 @@ function Cards({
   const { boards, setBoards, defaultCards } = useContext(CardsContext);
   const { settings } = useSettings();
   const board = boards.find((b) => b.id === boardId);
+  const pinnedCardCount = useMemo(
+    () => (board?.cards || []).filter((card) => (card.type || 'todo') === 'todo' && card.pinned).length,
+    [board?.cards]
+  );
 
   // Notes-section helpers
   const notesCards = useMemo(
@@ -245,6 +263,27 @@ function Cards({
     },
     [boardId, setBoards]
   );
+
+  const toggleCardPin = useCallback((cardUid) => {
+    setBoards((prev) => prev.map((b) => {
+      if (b.id !== boardId) return b;
+      const target = b.cards.find((card) => card.uid === cardUid);
+      if (!target || (target.type || 'todo') !== 'todo') return b;
+      const pinnedCount = b.cards.filter((card) => (card.type || 'todo') === 'todo' && card.pinned).length;
+      if (!target.pinned && pinnedCount >= MAX_PINNED_CARDS) return b;
+
+      const updatedCards = b.cards.map((card) => {
+        if (card.uid !== cardUid) return card;
+        if (card.pinned) {
+          const next = { ...card };
+          delete next.pinned;
+          return next;
+        }
+        return { ...card, pinned: true };
+      });
+      return { ...b, cards: pinnedCardsFirst(updatedCards) };
+    }));
+  }, [boardId, setBoards]);
 
   // ── Notes ↔ Tasks links ─────────────────────────────────────────────────────
 
@@ -433,7 +472,7 @@ function Cards({
             const oldIdx = b.cards.findIndex((c) => c.uid === active.id);
             const newIdx = b.cards.findIndex((c) => c.uid === over.id);
             if (oldIdx < 0 || newIdx < 0 || oldIdx === newIdx) return b;
-            return { ...b, cards: arrayMove(b.cards, oldIdx, newIdx) };
+            return { ...b, cards: pinnedCardsFirst(arrayMove(b.cards, oldIdx, newIdx)) };
           })
         );
       } else if (captured.type === "task") {
@@ -592,6 +631,10 @@ function Cards({
                     type={card.type || 'todo'}
                     title={card.title}
                     color={card.color}
+                    isPinned={Boolean(card.pinned)}
+                    pinnedCardCount={pinnedCardCount}
+                    maxPinnedCards={MAX_PINNED_CARDS}
+                    onTogglePin={toggleCardPin}
                     isVisible={card.isVisible}
                     tasks={card.tasks}
                     note={card.note}

@@ -14,7 +14,7 @@ import { useSettings } from "../../contexts/SettingsContext";
 import { uploadImage, deleteImage, isStorageUrl } from "../../services/imageStorage";
 import {
   VscEdit, VscCheck, VscTrash, VscSave, VscCopy, VscClose,
-  VscBold, VscItalic, VscCalendar, VscNote, VscLink,
+  VscBold, VscItalic, VscCalendar, VscNote, VscLink, VscPin, VscPinned,
 } from "react-icons/vsc";
 import { IoDuplicateOutline } from "react-icons/io5";
 import { IoImageOutline } from "react-icons/io5";
@@ -29,6 +29,8 @@ import NoteCard from "./NoteCard.jsx";
 import DatePicker from "./DatePicker.jsx";
 import NotePickerModal from "./NotePickerModal.jsx";
 import LinkedNotesPopover from "./LinkedNotesPopover.jsx";
+import PasteSplitModal from "./PasteSplitModal.jsx";
+import PinIcon from "../icons/PinIcon.jsx";
 
 const PROTECTED_COLUMN_TITLES = new Set(["To-do", "In-Progress", "Done"]);
 
@@ -303,7 +305,9 @@ function SortableTask({ task, cardUid, isEditing, className, style, onContextMen
 }
 
 function Card({
-  index, uid, type = 'todo', title, color, isVisible, tasks, note,
+  index, uid, type = 'todo', title, color, isPinned = false,
+  pinnedCardCount = 0, maxPinnedCards = 3, onTogglePin,
+  isVisible, tasks, note,
   updateCardTasks, updateCardNote, updateCards, searchTerm,
   query, filterMode = false, scheduleView = null, currentMatchTaskId = null,
   quickAddSignal = 0, dragHandleProps = {}, onMoveToDone,
@@ -322,6 +326,7 @@ function Card({
   const [notePicker, setNotePicker] = useState(null); // { kind: 'task'|'new', taskId? } | null
   const [newTaskNoteLinks, setNewTaskNoteLinks] = useState([]); // pending links for the task being created
   const [linkedPopover, setLinkedPopover] = useState(null); // { taskId, x, y } | null
+  const [pasteSplit, setPasteSplit] = useState(null); // { lines, text } | null
   const [taskValue, setTaskValue]             = useState(""); // HTML string
   const [newTaskImages, setNewTaskImages]     = useState([]);
   const [newTaskDue, setNewTaskDue]           = useState(""); // "YYYY-MM-DD" or ""
@@ -396,6 +401,16 @@ function Card({
     );
   };
 
+  const toggleCardPinned = () => {
+    setToggleMenu(false);
+    if (!isPinned && pinnedCardCount >= maxPinnedCards) {
+      toast.warning(`You can pin up to ${maxPinnedCards} cards per board.`);
+      return;
+    }
+    onTogglePin?.(uid);
+    toast.success(isPinned ? "Card unpinned" : "Card pinned to the top");
+  };
+
   const openColorPickerFromDropdown = () => {
     const rect = menuTriggerRef.current?.getBoundingClientRect();
     if (rect) setColorPickerPos({ x: rect.right - 220, y: rect.bottom + 6 });
@@ -465,6 +480,7 @@ function Card({
     const items = [
       { label: "Rename card",   icon: <VscEdit />,              onClick: startEditingTitle },
       { label: "Change colour", icon: <IoColorPaletteOutline />, onClick: () => setColorPickerPos({ x: clickX, y: clickY }) },
+      { label: isPinned ? "Unpin card" : "Pin card to top", icon: isPinned ? <VscPinned /> : <VscPin />, onClick: toggleCardPinned },
     ];
     if (isNote) {
       items.push({ divider: true });
@@ -719,7 +735,7 @@ function Card({
 
   return (
     <div
-      className={`card transition-all duration-300 ease-in-out transform ${
+      className={`card${isPinned ? " is-pinned" : ""} transition-all duration-300 ease-in-out transform ${
         isMounted ? "opacity-100 translate-x-0" : "opacity-0 translate-x-4"
       } shadow-lg relative`}
       style={{
@@ -749,6 +765,13 @@ function Card({
             onMouseLeave={e => e.target.style.background = 'transparent'}
             onClick={openColorPickerFromDropdown}>
             Change Colour
+          </p>
+          <p className="p-2 w-full cursor-pointer text-sm"
+            style={{ color: 'var(--theme-text-primary)' }}
+            onMouseEnter={e => e.target.style.background = 'var(--theme-bg-hover)'}
+            onMouseLeave={e => e.target.style.background = 'transparent'}
+            onClick={toggleCardPinned}>
+            {isPinned ? 'Unpin Card' : 'Pin to Top'}
           </p>
           {!isProtectedColumn && (
             <p className="p-2 w-full cursor-pointer text-sm"
@@ -811,6 +834,11 @@ function Card({
             >
               {renderTaskValue(title, query?.terms ?? searchTerm)}
             </h5>
+          )}
+          {isPinned && (
+            <span className="card-pin-icon" title="Pinned card" aria-label="Pinned card">
+              <PinIcon />
+            </span>
           )}
           <div className="w-4 h-5 text-sm rounded-sm text-center"
             style={{ color: 'inherit', background: cardColor.headerBadge }}>
@@ -1140,7 +1168,7 @@ function Card({
             onSave={() => addTask()}
             onCancel={() => { setToggleAddTask(false); setTaskValue(''); setNewTaskImages([]); setNewTaskNoteLinks([]); }}
             onRequestLink={() => newToolbarRef.current?.openLink()}
-            onMultilinePaste={addMultipleTasks}
+            onMultilinePaste={(lines, text) => setPasteSplit({ lines, text })}
             autoFocus
             placeholder="New task…"
             className=""
@@ -1338,6 +1366,16 @@ function Card({
           images={viewingImages.images}
           initialIndex={viewingImages.index}
           onClose={() => setViewingImages(null)}
+        />,
+        document.body
+      )}
+
+      {pasteSplit && createPortal(
+        <PasteSplitModal
+          count={pasteSplit.lines.length}
+          onSeparate={() => { addMultipleTasks(pasteSplit.lines); setPasteSplit(null); }}
+          onSingle={() => { newEditorRef.current?.insertText(pasteSplit.lines.join('\n')); setPasteSplit(null); }}
+          onClose={() => setPasteSplit(null)}
         />,
         document.body
       )}

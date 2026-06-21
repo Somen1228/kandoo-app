@@ -224,8 +224,8 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   padding-left: 14px;
 }
 .mac-sidebar__brand img {
-  width: 52px;
-  height: 52px;
+  width: 42px;
+  height: 42px;
   object-fit: contain;
 }
 .mac-sidebar__brand-logo {
@@ -339,6 +339,13 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   background: color-mix(in srgb, var(--accent) 20%, transparent);
   color: var(--accent);
 }
+.mac-board-sortable {
+  width: 100%;
+  touch-action: none;
+}
+.mac-board-sortable .mac-nav-item:active {
+  cursor: grabbing;
+}
 .mac-nav-item__dot {
   width: 7px;
   height: 7px;
@@ -360,63 +367,12 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
 .mac-sidebar__footer[data-state="error"] {
   color: var(--danger);
 }
-.mac-sidebar__logo {
-  width: 32px;
-  height: 32px;
-  object-fit: contain;
-  flex-shrink: 0;
-  transition: transform var(--motion-fast) var(--ease-out);
-}
 .mac-sidebar__save-label {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.mac-sidebar__sync-status {
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border-subtle));
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
-  font-size: 1rem;
-  cursor: pointer;
-  transition: background var(--motion-fast), color var(--motion-fast), transform var(--motion-fast);
-}
-.mac-sidebar__sync-status:hover {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  transform: translateY(-1px);
-}
-.mac-sidebar__sync-status img {
-  width: 27px;
-  height: 27px;
-  object-fit: contain;
-  user-select: none;
-  filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--theme-shadow) 55%, transparent));
-}
-.mac-sidebar__sync-status.is-offline,
-.mac-sidebar__sync-status.is-conflict {
-  color: var(--theme-warning);
-  border-color: color-mix(in srgb, var(--theme-warning) 28%, var(--border-subtle));
-  background: color-mix(in srgb, var(--theme-warning) 10%, transparent);
-}
-.mac-sidebar__sync-status.is-syncing img,
-.mac-sidebar__sync-status.is-connecting img {
-  animation: mac-sync-breathe 1.25s ease-in-out infinite;
-}
-@keyframes mac-sync-breathe {
-  0%, 100% { transform: translateY(1px) scale(0.94); }
-  50% { transform: translateY(-1px) scale(1.05); }
-}
-.mac-sidebar__footer .mac-sidebar__logo:hover {
-  transform: scale(1.08);
 }
 .mac-sidebar__settings {
   border: none;
@@ -715,6 +671,25 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
+/* Quiet pin glyph in the header of a pinned card (uses our own PinIcon). */
+.card-pin-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 7px;
+  font-size: 0.95rem;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+/* Pinned cards sit quietly elevated: a refined accent hairline (crisp, no blur)
+   and a clean neutral lift — present but never flashy. */
+.card.is-pinned {
+  border-color: color-mix(in srgb, var(--card-hue, var(--accent)) 50%, var(--theme-border));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--card-hue, var(--accent)) 24%, transparent),
+    var(--shadow-md);
+}
 .card-title {
   padding: 7px 12px;
   font-weight: 600;
@@ -803,38 +778,44 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
 .mac-task__footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
   margin-top: 8px;
   min-height: 22px;
 }
+/* Flex-grow so the chips stay left and the actions are always pushed to the
+   far right with a clear gap between the two groups (never touching). */
 .mac-task__meta {
   display: flex;
   align-items: center;
   gap: 7px;
+  flex: 1;
   min-width: 0;
 }
-/* Backlink chip on a task that was created from a note checklist. */
+/* Note backlink chip. Quiet/neutral at rest (so it doesn't out-shout the task
+   actions) and reveals the accent on hover, signalling it's a link. */
 .mac-note-chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   max-width: 11rem;
+  min-width: 0;
   padding: 1px 7px 1px 5px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
+  border: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  color: var(--text-secondary);
   font-size: 0.66rem;
   font-weight: 600;
   font-family: var(--font-ui);
   cursor: pointer;
   transition: background var(--motion-fast) var(--ease-out),
-    border-color var(--motion-fast) var(--ease-out);
+    border-color var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out);
 }
 .mac-note-chip:hover {
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--theme-border));
 }
 .mac-task__actions {
   display: flex;
