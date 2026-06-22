@@ -35,7 +35,11 @@ function ContextMenu({ x, y, items, onClose }) {
     const handleKey = (e) => {
       if (e.key === 'Escape') onClose();
     };
-    const handleScroll = () => onClose();
+    const handleScroll = (event) => {
+      // Keep the menu open while its own overflow area is being scrolled.
+      if (menuRef.current?.contains(event.target)) return;
+      onClose();
+    };
     document.addEventListener('mousedown', handleDown);
     document.addEventListener('keydown', handleKey);
     window.addEventListener('scroll', handleScroll, true);
@@ -57,6 +61,9 @@ function ContextMenu({ x, y, items, onClose }) {
         border: '1px solid var(--theme-border)',
         boxShadow: '0 8px 24px var(--theme-shadow)',
         animation: 'ctxFadeIn 0.12s ease-out',
+        maxHeight: 'calc(100vh - 16px)',
+        overflowY: 'auto',
+        overscrollBehavior: 'contain',
       }}
       role="menu"
     >

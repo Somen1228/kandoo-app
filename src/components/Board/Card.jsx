@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import { createPortal } from "react-dom";
-import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, useSortable, verticalListSortingStrategy, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { toast } from '../../utils/toast';
 import { generateTaskID } from "../../utils/taskIdGenerator";
@@ -311,7 +311,7 @@ function Card({
   updateCardTasks, updateCardNote, updateCards, searchTerm,
   query, filterMode = false, scheduleView = null, currentMatchTaskId = null,
   quickAddSignal = 0, dragHandleProps = {}, onMoveToDone,
-  navigateToNote, getNoteTitle, notes = [],
+  navigateToNote, getNoteTitle, notes = [], layout = 'grid',
 }) {
   const isNote = type === 'note';
   const { currentTheme } = useTheme();
@@ -319,7 +319,6 @@ function Card({
   const [uploading, setUploading]             = useState(false);
   const [isMounted, setIsMounted]             = useState(false);
   const [toggleAddTask, setToggleAddTask]     = useState(false);
-  const [toggleMenu, setToggleMenu]           = useState(false);
   const [isEditingTitle, setIsEditingTitle]   = useState(false);
   const [editingTitleValue, setEditingTitleValue] = useState("");
   const [colorPickerPos, setColorPickerPos]   = useState(null);
@@ -342,7 +341,6 @@ function Card({
   const [viewingImages, setViewingImages]     = useState(null); // { images, index }
 
   const inputRef      = useRef(null);
-  const menuRef       = useRef(null);
   const menuTriggerRef = useRef(null);
   const editEditorRef = useRef(null);
   const newEditorRef  = useRef(null);
@@ -402,20 +400,13 @@ function Card({
   };
 
   const toggleCardPinned = () => {
-    setToggleMenu(false);
+    setCtxMenu(null);
     if (!isPinned && pinnedCardCount >= maxPinnedCards) {
       toast.warning(`You can pin up to ${maxPinnedCards} cards per board.`);
       return;
     }
     onTogglePin?.(uid);
     toast.success(isPinned ? "Card unpinned" : "Card pinned to the top");
-  };
-
-  const openColorPickerFromDropdown = () => {
-    const rect = menuTriggerRef.current?.getBoundingClientRect();
-    if (rect) setColorPickerPos({ x: rect.right - 220, y: rect.bottom + 6 });
-    else setColorPickerPos({ x: 100, y: 100 });
-    setToggleMenu(false);
   };
 
   const duplicateTask = (task) => {
@@ -472,11 +463,7 @@ function Card({
     });
   };
 
-  const openCardContextMenu = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const clickX = e.clientX;
-    const clickY = e.clientY;
+  const buildCardMenuItems = (clickX, clickY) => {
     const items = [
       { label: "Rename card",   icon: <VscEdit />,              onClick: startEditingTitle },
       { label: "Change colour", icon: <IoColorPaletteOutline />, onClick: () => setColorPickerPos({ x: clickX, y: clickY }) },
@@ -493,7 +480,36 @@ function Card({
     if (!isProtectedColumn) {
       items.push({ label: "Delete card", icon: <VscTrash />, danger: true, onClick: handleDeleteCard });
     }
-    setCtxMenu({ x: e.clientX, y: e.clientY, items });
+    return items;
+  };
+
+  const openCardContextMenu = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({
+      kind: 'card-context',
+      x: e.clientX,
+      y: e.clientY,
+      items: buildCardMenuItems(e.clientX, e.clientY),
+    });
+  };
+
+  const toggleCardOptionsMenu = (e) => {
+    e.stopPropagation();
+    if (ctxMenu?.kind === 'card-options') {
+      setCtxMenu(null);
+      return;
+    }
+    const rect = menuTriggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = Math.max(8, rect.right - 176);
+    const y = rect.bottom + 5;
+    setCtxMenu({
+      kind: 'card-options',
+      x,
+      y,
+      items: buildCardMenuItems(x, y),
+    });
   };
 
   const openCreateTaskContextMenu = (e) => {
@@ -539,17 +555,6 @@ function Card({
   useEffect(() => {
     const handler = (e) => {
       if (inputRef.current && !inputRef.current.contains(e.target)) setToggleAddTask(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  useEffect(() => {
-    const handler = (e) => {
-      if (
-        menuRef.current && !menuRef.current.contains(e.target) &&
-        menuTriggerRef.current && !menuTriggerRef.current.contains(e.target)
-      ) setToggleMenu(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -646,10 +651,10 @@ function Card({
     setEditingTaskDue("");
   };
 
-  const handleDeleteCard = () => { setToggleMenu(false); setToDelete("card");  setShowDeleteWarning(true); };
-  const deleteAllTasks   = () => { setToggleMenu(false); setToDelete("tasks"); Object.keys(tasks).length > 0 ? setShowDeleteWarning(true) : setDefaultModal(true); };
+  const handleDeleteCard = () => { setCtxMenu(null); setToDelete("card");  setShowDeleteWarning(true); };
+  const deleteAllTasks   = () => { setCtxMenu(null); setToDelete("tasks"); Object.keys(tasks).length > 0 ? setShowDeleteWarning(true) : setDefaultModal(true); };
   const clearNote        = () => {
-    setToggleMenu(false);
+    setCtxMenu(null);
     updateCardNote?.(index, { content: '', images: [] });
     toast.success('Note cleared');
   };
@@ -735,71 +740,30 @@ function Card({
 
   return (
     <div
-      className={`card${isPinned ? " is-pinned" : ""} transition-all duration-300 ease-in-out transform ${
+      className={`card card--${layout}${isPinned ? " is-pinned" : ""} transition-all duration-300 ease-in-out transform ${
         isMounted ? "opacity-100 translate-x-0" : "opacity-0 translate-x-4"
       } shadow-lg relative`}
       style={{
-        background: cardColor.body,
+        background: layout === 'lanes'
+          ? 'color-mix(in srgb, var(--theme-bg-secondary) 82%, var(--theme-bg-card))'
+          : cardColor.body,
         '--card-hue': cardColor.accent,
         '--card-tile-sheen': cardColor.tileSheen,
         '--card-tile-border': cardColor.tileBorder,
         '--card-tile-shadow': cardColor.tileShadow,
       }}
     >
-      {toggleMenu && (
-        <div
-          ref={menuRef}
-          className="title-option-menu absolute h-auto w-32 drop-shadow-md top-6 right-2 z-30 flex flex-col items-start justify-around rounded-lg"
-          style={{ background: 'var(--theme-bg-modal)', border: '1px solid var(--theme-border)' }}
-        >
-          <p className="p-2 w-full cursor-pointer rounded-t-lg text-sm"
-            style={{ color: 'var(--theme-text-primary)' }}
-            onMouseEnter={e => e.target.style.background = 'var(--theme-bg-hover)'}
-            onMouseLeave={e => e.target.style.background = 'transparent'}
-            onClick={() => { setToggleMenu(false); startEditingTitle(); }}>
-            Rename Card
-          </p>
-          <p className="p-2 w-full cursor-pointer text-sm"
-            style={{ color: 'var(--theme-text-primary)' }}
-            onMouseEnter={e => e.target.style.background = 'var(--theme-bg-hover)'}
-            onMouseLeave={e => e.target.style.background = 'transparent'}
-            onClick={openColorPickerFromDropdown}>
-            Change Colour
-          </p>
-          <p className="p-2 w-full cursor-pointer text-sm"
-            style={{ color: 'var(--theme-text-primary)' }}
-            onMouseEnter={e => e.target.style.background = 'var(--theme-bg-hover)'}
-            onMouseLeave={e => e.target.style.background = 'transparent'}
-            onClick={toggleCardPinned}>
-            {isPinned ? 'Unpin Card' : 'Pin to Top'}
-          </p>
-          {!isProtectedColumn && (
-            <p className="p-2 w-full cursor-pointer text-sm"
-              style={{ color: 'var(--theme-text-primary)' }}
-              onMouseEnter={e => e.target.style.background = 'var(--theme-bg-hover)'}
-              onMouseLeave={e => e.target.style.background = 'transparent'}
-              onClick={handleDeleteCard}>
-              Delete Card
-            </p>
-          )}
-          <p className="p-2 w-full cursor-pointer rounded-b-lg text-sm"
-            style={{ color: 'var(--theme-text-primary)' }}
-            onMouseEnter={e => e.target.style.background = 'var(--theme-bg-hover)'}
-            onMouseLeave={e => e.target.style.background = 'transparent'}
-            onClick={isNote ? clearNote : deleteAllTasks}>
-            {isNote ? 'Clear Note' : 'Delete All Tasks'}
-          </p>
-        </div>
-      )}
-
       {/* Card header — drag handle */}
       <div
         className="card-title flex justify-between items-center text-sm"
-        style={{ backgroundColor: cardColor.header, color: cardColor.headerText, cursor: 'grab' }}
+        style={layout === 'lanes'
+          ? { backgroundColor: 'transparent', color: 'var(--theme-text-primary)', cursor: 'grab' }
+          : { backgroundColor: cardColor.header, color: cardColor.headerText, cursor: 'grab' }}
         onContextMenu={openCardContextMenu}
         {...dragHandleProps}
       >
         <div className="h-full flex justify-between items-center">
+          {layout === 'lanes' && <span className="lane-card-color-dot" aria-hidden="true" />}
           {isEditingTitle ? (
             <input
               type="text"
@@ -815,7 +779,7 @@ function Card({
               onPointerDown={e => e.stopPropagation()}
               className="font-semibold px-2 bg-transparent border-b focus:outline-none"
               style={{
-                color: cardColor.headerText,
+                color: layout === 'lanes' ? 'var(--theme-text-primary)' : cardColor.headerText,
                 borderColor: 'currentColor',
                 width: `${Math.max(editingTitleValue.length + 2, 6)}ch`,
                 minWidth: '4rem',
@@ -841,14 +805,32 @@ function Card({
             </span>
           )}
           <div className="w-4 h-5 text-sm rounded-sm text-center"
-            style={{ color: 'inherit', background: cardColor.headerBadge }}>
+            style={{
+              color: 'inherit',
+              background: layout === 'lanes'
+                ? 'color-mix(in srgb, var(--card-hue) 12%, var(--theme-bg-hover))'
+                : cardColor.headerBadge,
+            }}>
             {Object.keys(tasks).length}
           </div>
-        </div>
+          </div>
+        {layout === 'lanes' && !isNote && !toggleAddTask && (
+          <button
+            type="button"
+            className="lane-card-add"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              setToggleAddTask(true);
+            }}
+          >
+            + Add
+          </button>
+        )}
         <div
           ref={menuTriggerRef}
           className="card-option-div h-7 w-9 pr-1 flex justify-center items-center cursor-pointer opacity-0"
-          onClick={e => { e.stopPropagation(); setToggleMenu(prev => !prev); }}
+          onClick={toggleCardOptionsMenu}
           onPointerDown={e => e.stopPropagation()}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" viewBox="0 0 30 30" fill="currentColor">
@@ -870,8 +852,11 @@ function Card({
       <>
       {/* Task list */}
       <div className="task-list max-h-[30rem] overflow-y-auto">
-        <SortableContext items={Object.keys(tasks)} strategy={verticalListSortingStrategy}>
-          <ul>
+        <SortableContext
+          items={Object.keys(tasks)}
+          strategy={layout === 'lanes' ? horizontalListSortingStrategy : verticalListSortingStrategy}
+        >
+          <ul className={layout === 'lanes' ? 'lane-task-row' : undefined}>
             {(() => {
               const allTasks = Object.values(tasks);
               const cardTitleMatches = query && !query.isEmpty && matchesCardTitle({ title }, query);
@@ -1040,7 +1025,7 @@ function Card({
 
                       {/* Image thumbnails in display mode */}
                       {task.images?.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px', justifyContent: 'flex-start' }}>
+                        <div className="mac-task__attachments" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px', justifyContent: 'flex-start' }}>
                           {task.images.map((src, i) => (
                             <img
                               key={i}
@@ -1135,6 +1120,14 @@ function Card({
                 </SortableTask>
               ));
             })()}
+            {layout === 'lanes' && !toggleAddTask && !filterMode && !scheduleView && (
+              <li className="lane-task-add-tile">
+                <button type="button" onClick={() => setToggleAddTask(true)} aria-label={`Add task to ${title}`}>
+                  <span aria-hidden="true">+</span>
+                  <small>Add task</small>
+                </button>
+              </li>
+            )}
           </ul>
         </SortableContext>
       </div>
@@ -1144,6 +1137,7 @@ function Card({
         <form
           onSubmit={addTask}
           ref={inputRef}
+          className={layout === 'lanes' ? 'lane-task-form' : undefined}
           style={{
             margin: '4px 8px 8px',
             background: 'var(--theme-bg-card)',
@@ -1300,7 +1294,7 @@ function Card({
             </button>
           </div>
         </form>
-      ) : (
+      ) : layout === 'lanes' ? null : (
         <div
           onClick={() => setToggleAddTask(prev => !prev)}
           onContextMenu={openCreateTaskContextMenu}

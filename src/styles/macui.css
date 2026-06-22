@@ -601,6 +601,49 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   background: var(--bg-hover);
   color: var(--text-secondary);
 }
+.mac-board-head__view-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.board-layout-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--theme-bg-secondary);
+}
+.board-layout-switcher__btn {
+  width: 29px;
+  height: 27px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background var(--motion-fast), color var(--motion-fast), box-shadow var(--motion-fast);
+}
+.board-layout-switcher__btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.board-layout-switcher__btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 48%, transparent);
+  outline-offset: 1px;
+}
+.board-layout-switcher__btn.is-active {
+  background: var(--bg-surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-xs);
+}
 
 /* ── Board wrapper fills the remaining height under the toolbar ─────────── */
 .mac-board {
@@ -705,6 +748,194 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   gap: var(--board-gap);
   padding: 12px 4px 4px;
   align-items: start;
+}
+.board-layout {
+  box-sizing: border-box;
+}
+.board-layout--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  width: 100%;
+}
+.board-layout--columns {
+  display: flex;
+  flex-flow: row nowrap;
+  width: max-content;
+  min-width: 100%;
+  align-items: flex-start;
+}
+.board-layout--lanes {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 18px;
+  padding-right: 4px;
+}
+.board-card-shell {
+  min-width: 0;
+}
+.board-card-shell--columns {
+  width: 18rem;
+  flex: 0 0 18rem;
+}
+.board-card-shell--columns .card {
+  width: 100%;
+  min-width: 0;
+}
+.board-card-shell--lanes {
+  width: 100%;
+}
+.board-layout--columns > .add-btn {
+  flex: 0 0 18rem;
+}
+.board-layout--lanes > .add-btn {
+  width: 100%;
+  min-width: 0;
+  height: 74px;
+  margin: 0;
+  align-self: stretch;
+}
+
+/* Lane layout — columns become stacked horizontal swimlanes. The Card and Task
+   components remain unchanged functionally; only their flow and sizing change. */
+.card--lanes {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  border-radius: 18px;
+}
+.card--lanes .card-title {
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--theme-border) 72%, transparent);
+}
+.lane-card-color-dot {
+  width: 10px;
+  height: 10px;
+  margin-right: 2px;
+  flex: 0 0 auto;
+  border-radius: 3px;
+  background: var(--card-hue, var(--accent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 18%, transparent);
+}
+.lane-card-add {
+  margin-left: auto;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  opacity: 0.72;
+  white-space: nowrap;
+  transition: opacity var(--motion-fast), background var(--motion-fast);
+}
+.lane-card-add:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  opacity: 1;
+}
+.card--lanes .task-list {
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px 12px 7px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--theme-scroll-thumb) 56%, transparent) transparent;
+}
+.card--lanes .task-list::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.card--lanes .task-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.card--lanes .task-list::-webkit-scrollbar-thumb {
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--theme-scroll-thumb) 52%, transparent);
+  box-shadow: none;
+}
+.card--lanes .task-list::-webkit-scrollbar-thumb:hover {
+  border: none;
+  background: color-mix(in srgb, var(--theme-scroll-thumb) 78%, transparent);
+  box-shadow: none;
+}
+.lane-task-row {
+  min-width: max-content;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding-bottom: 2px;
+}
+.card--lanes .mac-task {
+  width: 300px;
+  min-height: 116px;
+  margin: 0;
+  flex: 0 0 300px;
+  border-left: 4px solid var(--card-hue, var(--accent));
+}
+.card--lanes .mac-task.is-editing {
+  width: 380px;
+  flex-basis: 380px;
+}
+.card--lanes .mac-task__footer {
+  margin-top: auto;
+  padding-top: 8px;
+}
+.card--lanes .mac-task__attachments {
+  margin-top: auto !important;
+  padding-top: 8px;
+}
+.card--lanes .mac-task__attachments + .mac-task__footer {
+  margin-top: 0;
+  padding-top: 6px;
+}
+.card--lanes .mac-col-empty {
+  width: 260px;
+  min-height: 116px;
+  margin: 0;
+  flex: 0 0 260px;
+}
+.lane-task-add-tile {
+  width: 118px;
+  min-height: 116px;
+  flex: 0 0 118px;
+}
+.lane-task-add-tile button {
+  width: 100%;
+  height: 100%;
+  min-height: 116px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px dashed var(--theme-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--theme-bg-card) 36%, transparent);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
+}
+.lane-task-add-tile button:hover {
+  background: color-mix(in srgb, var(--accent) 7%, var(--theme-bg-card));
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--theme-border));
+  color: var(--accent);
+}
+.lane-task-add-tile button > span {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+.lane-task-add-tile button > small {
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+.card--lanes .lane-task-form {
+  margin: 4px 12px 12px !important;
 }
 
 /* Empty column state */
@@ -2008,6 +2239,10 @@ html.is-panel-window #root {
   color: var(--accent);
   font-weight: 600;
 }
+.notes-tree__row.is-root .notes-tree__caret {
+  position: relative;
+  margin-right: -4px;
+}
 .notes-tree__caret {
   border: none;
   background: transparent;
@@ -2021,6 +2256,26 @@ html.is-panel-window #root {
   font-size: 0.85rem;
 }
 .notes-tree__icon { flex-shrink: 0; font-size: 0.9rem; opacity: 0.8; }
+.notes-tree__icon-button {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-accent);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background var(--motion-fast), transform var(--motion-fast);
+}
+.notes-tree__icon-button:hover {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  transform: scale(1.05);
+}
 .notes-tree__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .notes-tree__rename {
   flex: 1;
@@ -2081,6 +2336,141 @@ html.is-panel-window #root {
 
 /* Notebook (top-level) icon picks up the accent to read as a container. */
 .notes-tree__icon--book { color: var(--theme-accent); }
+
+/* Notebook icon and colour picker */
+.notebook-icon-picker {
+  position: fixed;
+  z-index: 2100;
+  width: min(304px, calc(100vw - 16px));
+  max-height: min(430px, calc(100vh - 16px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 10px;
+  border: 1px solid var(--theme-border);
+  border-radius: 14px;
+  background: var(--theme-bg-modal);
+  color: var(--theme-text-primary);
+  box-shadow: 0 14px 38px color-mix(in srgb, #000 24%, transparent);
+  animation: notebookIconPickerIn 0.12s ease-out;
+}
+@keyframes notebookIconPickerIn {
+  from { opacity: 0; transform: translateY(-3px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.notebook-icon-picker__preview {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 2px 2px 10px;
+}
+.notebook-icon-picker__preview-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--notebook-picker-color) 13%, transparent);
+  font-size: 1.25rem;
+}
+.notebook-icon-picker__preview > div {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.notebook-icon-picker__preview strong {
+  overflow: hidden;
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notebook-icon-picker__preview small { color: var(--text-muted); font-size: 0.68rem; }
+.notebook-icon-picker__reset {
+  border: 0;
+  border-radius: 6px;
+  padding: 5px 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+.notebook-icon-picker__reset:hover { background: var(--bg-hover); color: var(--text-primary); }
+.notebook-icon-picker__search input {
+  width: 100%;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  padding: 7px 9px;
+  outline: none;
+  background: var(--theme-bg-input);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+}
+.notebook-icon-picker__search input:focus {
+  border-color: var(--theme-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-accent) 14%, transparent);
+}
+.notebook-icon-picker__section { padding-top: 10px; }
+.notebook-icon-picker__label {
+  display: block;
+  margin: 0 2px 6px;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.notebook-icon-picker__colours { display: flex; align-items: center; gap: 7px; }
+.notebook-icon-picker__colours button {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  padding: 0;
+  border: 2px solid var(--theme-bg-modal);
+  border-radius: 999px;
+  outline: 1px solid color-mix(in srgb, var(--notebook-swatch) 34%, var(--theme-border));
+  background: var(--notebook-swatch);
+  cursor: pointer;
+}
+.notebook-icon-picker__colours button.is-selected {
+  outline: 2px solid var(--notebook-swatch);
+  outline-offset: 2px;
+}
+.notebook-icon-picker__scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.notebook-icon-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.notebook-icon-picker__grid button {
+  aspect-ratio: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--notebook-picker-color);
+  font-size: 1.05rem;
+  cursor: pointer;
+}
+.notebook-icon-picker__grid button:hover { background: var(--bg-hover); }
+.notebook-icon-picker__grid button.is-selected {
+  border-color: color-mix(in srgb, var(--notebook-picker-color) 38%, var(--theme-border));
+  background: color-mix(in srgb, var(--notebook-picker-color) 12%, transparent);
+}
+.notebook-icon-picker__empty { padding: 14px 4px; color: var(--text-muted); font-size: 0.75rem; }
 
 .note-canvas__meta {
   min-height: 29px;

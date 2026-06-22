@@ -137,6 +137,14 @@ const SECTIONS = [
         <P>Click any board in the sidebar. The active board is highlighted with the accent colour.</P>
         <SubH>Reorder</SubH>
         <P>Drag a board up or down in the Projects section. Its new position is saved with the workspace.</P>
+        <SubH>Board layouts</SubH>
+        <P>Use the three layout buttons at the far right of the Tasks / Notes row:</P>
+        <Steps items={[
+          <><strong>Grid</strong> — cards fill the available width and wrap onto additional rows.</>,
+          <><strong>Columns</strong> — cards stay in one horizontal row; new cards are added on the right.</>,
+          <><strong>Lanes</strong> — cards stack vertically while their tasks flow horizontally inside each lane.</>,
+        ]} />
+        <Tip>Settings → Behavior → Remember board layout controls whether each board remembers its own layout or every board shares one global layout.</Tip>
       </>
     ),
   },
@@ -158,7 +166,7 @@ const SECTIONS = [
         <SubH>Change colour</SubH>
         <P>Right-click header → <strong>Change colour</strong>. Pick a preset swatch or click the rainbow circle for a custom hex. Title text auto-contrasts.</P>
         <SubH>Delete & reorder</SubH>
-        <P>Right-click → <strong>Delete card</strong>. Drag the header sideways to reorder columns.</P>
+        <P>Right-click → <strong>Delete card</strong>. Drag the header to reorder: freely in Grid, sideways in Columns, or vertically in Lanes.</P>
         <SubH>Pin cards</SubH>
         <P>Right-click a card header → <strong>Pin card to top</strong>. You can pin up to three cards per board; pinned cards stay before unpinned cards and can still be reordered within the pinned group.</P>
       </>
@@ -208,7 +216,7 @@ const SECTIONS = [
         <P>Right-click any task for: <strong>Copy text</strong>, <strong>Duplicate</strong>, <strong>Delete</strong>.</P>
 
         <SubH>Reorder & move</SubH>
-        <P>Drag a task up/down to reorder, or across to another column. Tasks animate out of the way live.</P>
+        <P>Drag a task to reorder or move it to another card. Tasks sort vertically in Grid / Columns and horizontally inside Lanes while preserving all existing actions and content.</P>
       </>
     ),
   },
@@ -263,11 +271,12 @@ const SECTIONS = [
         <P>A fully-featured note-taking workspace built into Kandoo — nested pages, slash commands, rich formatting, code blocks, tables, and inline images, all in one place.</P>
 
         <SubH>Open Notes</SubH>
-        <P>Click <strong>Notes</strong> in the sidebar. A two-pane view opens: the <strong>Pages tree</strong> on the left and the <strong>writing canvas</strong> on the right.</P>
+        <P>Click <strong>Notes</strong> in the sidebar. A two-pane view opens: the <strong>Notebooks tree</strong> on the left and the <strong>writing canvas</strong> on the right.</P>
 
-        <SubH>Pages tree</SubH>
+        <SubH>Notebooks tree</SubH>
         <Steps items={[
-          <>Click <strong>+</strong> at the top of the tree to create a top-level page.</>,
+          <>Click <strong>+</strong> at the top of the tree to create an <strong>Untitled</strong> notebook.</>,
+          <>Click a top-level notebook icon to choose its icon and colour.</>,
           <>Hover any page and click its <strong>+</strong> to nest a sub-page inside it.</>,
           <>Click the arrow beside a page to expand/collapse its children.</>,
           <>Click a page title to rename it inline.</>,
@@ -351,6 +360,7 @@ const SECTIONS = [
         <Steps items={[
           <><strong>Task delete mode</strong> — Undo toast (default) or Confirm dialog.</>,
           <><strong>Quick-add sets due = today</strong> — tasks added from the tray widget automatically get today's date.</>,
+          <><strong>Remember board layout</strong> — keep a separate Grid / Columns / Lanes choice per board, or use one layout across all boards.</>,
           <><strong>Keyboard shortcuts</strong> — full reference table built in.</>,
         ]} />
 

@@ -1,6 +1,9 @@
 import { Suspense, lazy, useEffect, useRef, useState, useMemo, Fragment } from 'react';
-import { VscAdd, VscTrash, VscChevronRight, VscChromeMaximize, VscChromeRestore, VscArrowLeft, VscArrowRight } from 'react-icons/vsc';
-import { IoBookOutline, IoDocumentTextOutline, IoArrowUndoOutline, IoArrowRedoOutline } from 'react-icons/io5';
+import { createPortal } from 'react-dom';
+import {
+  VscAdd, VscTrash, VscChevronRight, VscChromeMaximize, VscChromeRestore,
+  VscArrowLeft, VscArrowRight, VscBook, VscFile, VscDiscard, VscRedo,
+} from 'react-icons/vsc';
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { restrictToFirstScrollableAncestor } from '@dnd-kit/modifiers';
@@ -135,6 +138,246 @@ const NOTES_TREE_WIDTH_KEY = 'kandoo-notes-tree-width';
 const NOTES_TREE_MIN = 180;
 const NOTES_TREE_MAX = 420;
 const NOTES_CANVAS_MIN = 420;
+const NOTEBOOK_ICON_RECENTS_KEY = 'kandoo-recent-notebook-icons';
+const DEFAULT_NOTEBOOK_ICON_KEY = 'LuBookOpen';
+
+// Expose the complete Lucide outline family instead of maintaining a small,
+// arbitrary subset. A consistent outline family keeps the tree visually calm,
+// while search makes the large catalogue practical to use.
+const iconLabel = (exportName) => exportName
+  .replace(/^Lu/, '')
+  .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+  .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2');
+
+let notebookIconModuleCache = null;
+let notebookIconCatalogCache = null;
+let notebookIconLoadPromise = null;
+
+const buildNotebookIconCatalog = (module) => Object.entries(module)
+  .filter(([name]) => name.startsWith('Lu'))
+  .map(([key, Icon]) => ({ key, label: iconLabel(key), Icon }))
+  .sort((a, b) => a.label.localeCompare(b.label));
+
+const loadNotebookIconLibrary = () => {
+  if (notebookIconModuleCache) {
+    return Promise.resolve({ module: notebookIconModuleCache, catalog: notebookIconCatalogCache });
+  }
+  if (!notebookIconLoadPromise) {
+    notebookIconLoadPromise = import('react-icons/lu').then((module) => {
+      notebookIconModuleCache = module;
+      notebookIconCatalogCache = buildNotebookIconCatalog(module);
+      return { module, catalog: notebookIconCatalogCache };
+    });
+  }
+  return notebookIconLoadPromise;
+};
+
+// Preserve selections made by the earlier curated picker.
+const LEGACY_NOTEBOOK_ICON_KEYS = {
+  book: 'LuBookOpen', IoBookOutline: 'LuBookOpen',
+  library: 'LuLibrary', IoLibraryOutline: 'LuLibrary',
+  briefcase: 'LuBriefcase', IoBriefcaseOutline: 'LuBriefcase',
+  school: 'LuSchool', IoSchoolOutline: 'LuSchool',
+  bulb: 'LuLightbulb', IoBulbOutline: 'LuLightbulb',
+  rocket: 'LuRocket', IoRocketOutline: 'LuRocket',
+  heart: 'LuHeart', IoHeartOutline: 'LuHeart',
+  home: 'LuHome', IoHomeOutline: 'LuHome',
+  calendar: 'LuCalendarDays', IoCalendarOutline: 'LuCalendarDays',
+  code: 'LuCode', IoCodeSlashOutline: 'LuCode',
+  layers: 'LuLayers', IoLayersOutline: 'LuLayers',
+  people: 'LuUsers', IoPeopleOutline: 'LuUsers',
+  planet: 'LuGlobe2', IoPlanetOutline: 'LuGlobe2',
+};
+
+const NOTEBOOK_ICON_COLORS = [
+  { key: 'accent', label: 'Theme colour', value: 'var(--theme-accent)' },
+  { key: 'blue', label: 'Blue', value: '#4f86df' },
+  { key: 'purple', label: 'Purple', value: '#8067c8' },
+  { key: 'pink', label: 'Pink', value: '#c85f91' },
+  { key: 'red', label: 'Red', value: '#d76558' },
+  { key: 'orange', label: 'Orange', value: '#c9822f' },
+  { key: 'green', label: 'Green', value: '#4f9b67' },
+  { key: 'teal', label: 'Teal', value: '#318f89' },
+  { key: 'slate', label: 'Slate', value: '#68778c' },
+];
+
+const normalizeNotebookIconKey = (key) => LEGACY_NOTEBOOK_ICON_KEYS[key] || key || DEFAULT_NOTEBOOK_ICON_KEY;
+const getNotebookIconColor = (key) => NOTEBOOK_ICON_COLORS.find((item) => item.key === key)?.value || NOTEBOOK_ICON_COLORS[0].value;
+
+function NotebookIcon({ iconKey, colorKey }) {
+  const normalizedKey = normalizeNotebookIconKey(iconKey);
+  const [Icon, setIcon] = useState(() => notebookIconModuleCache?.[normalizedKey] || VscBook);
+
+  useEffect(() => {
+    let active = true;
+    if (notebookIconModuleCache?.[normalizedKey]) {
+      setIcon(() => notebookIconModuleCache[normalizedKey]);
+      return undefined;
+    }
+    if (normalizedKey === DEFAULT_NOTEBOOK_ICON_KEY) {
+      setIcon(() => VscBook);
+      return undefined;
+    }
+    loadNotebookIconLibrary().then(({ module }) => {
+      if (active) setIcon(() => module[normalizedKey] || VscBook);
+    });
+    return () => { active = false; };
+  }, [normalizedKey]);
+
+  return <Icon style={{ color: getNotebookIconColor(colorKey) }} />;
+}
+
+function readRecentNotebookIcons() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(NOTEBOOK_ICON_RECENTS_KEY) || '[]');
+    return Array.isArray(saved)
+      ? saved.map(normalizeNotebookIconKey).filter((key) => /^Lu[A-Z]/.test(key)).slice(0, 5)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function NotebookIconPicker({ note, anchor, onUpdate, onClose }) {
+  const pickerRef = useRef(null);
+  const [query, setQuery] = useState('');
+  const [recent, setRecent] = useState(readRecentNotebookIcons);
+  const [icons, setIcons] = useState(() => notebookIconCatalogCache || []);
+  const [position, setPosition] = useState({ left: anchor.x, top: anchor.y });
+  const selectedIcon = normalizeNotebookIconKey(note.notebookIcon);
+  const selectedColor = note.notebookIconColor || 'accent';
+
+  useEffect(() => {
+    const picker = pickerRef.current;
+    if (!picker) return;
+    const rect = picker.getBoundingClientRect();
+    const pad = 8;
+    setPosition({
+      left: Math.max(pad, Math.min(anchor.x, window.innerWidth - rect.width - pad)),
+      top: Math.max(pad, Math.min(anchor.y, window.innerHeight - rect.height - pad)),
+    });
+  }, [anchor, icons.length]);
+
+  useEffect(() => {
+    let active = true;
+    loadNotebookIconLibrary().then(({ catalog }) => {
+      if (active) setIcons(catalog);
+    });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    const handlePointer = (event) => {
+      if (!pickerRef.current?.contains(event.target)) onClose();
+    };
+    const handleKey = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('mousedown', handlePointer);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handlePointer);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [onClose]);
+
+  const chooseIcon = (key) => {
+    onUpdate({ notebookIcon: key });
+    setRecent((previous) => {
+      const next = [key, ...previous.filter((item) => item !== key)].slice(0, 5);
+      try { localStorage.setItem(NOTEBOOK_ICON_RECENTS_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+      return next;
+    });
+  };
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredIcons = icons.filter((item) =>
+    !normalizedQuery || item.label.toLowerCase().includes(normalizedQuery) || item.key.toLowerCase().includes(normalizedQuery)
+  );
+  const recentIcons = recent.map((key) => icons.find((item) => item.key === key)).filter(Boolean);
+
+  return createPortal(
+    <div
+      ref={pickerRef}
+      className="notebook-icon-picker"
+      style={{ left: position.left, top: position.top, '--notebook-picker-color': getNotebookIconColor(selectedColor) }}
+      role="dialog"
+      aria-label="Choose notebook icon and colour"
+    >
+      <div className="notebook-icon-picker__preview">
+        <span className="notebook-icon-picker__preview-icon">
+          <NotebookIcon iconKey={selectedIcon} colorKey={selectedColor} />
+        </span>
+        <div>
+          <strong>{note.title?.trim() || 'Untitled'}</strong>
+          <small>Notebook icon</small>
+        </div>
+        <button
+          type="button"
+          className="notebook-icon-picker__reset"
+          onClick={() => onUpdate({ notebookIcon: null, notebookIconColor: null })}
+        >
+          Reset
+        </button>
+      </div>
+
+      <label className="notebook-icon-picker__search">
+        <span className="sr-only">Search icons</span>
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search icons…" autoFocus />
+      </label>
+
+      <div className="notebook-icon-picker__section">
+        <span className="notebook-icon-picker__label">Colour</span>
+        <div className="notebook-icon-picker__colours">
+          {NOTEBOOK_ICON_COLORS.map((color) => (
+            <button
+              key={color.key}
+              type="button"
+              className={selectedColor === color.key ? 'is-selected' : ''}
+              style={{ '--notebook-swatch': color.value }}
+              title={color.label}
+              aria-label={color.label}
+              aria-pressed={selectedColor === color.key}
+              onClick={() => onUpdate({ notebookIconColor: color.key })}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="notebook-icon-picker__scroll">
+        {!normalizedQuery && recentIcons.length > 0 && (
+          <div className="notebook-icon-picker__section">
+            <span className="notebook-icon-picker__label">Recent</span>
+            <div className="notebook-icon-picker__grid">
+              {recentIcons.map(({ key, label, Icon }) => (
+                <button key={key} type="button" className={selectedIcon === key ? 'is-selected' : ''}
+                  onClick={() => chooseIcon(key)} title={label} aria-label={label} aria-pressed={selectedIcon === key}>
+                  <Icon />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="notebook-icon-picker__section">
+          <span className="notebook-icon-picker__label">Icons · {filteredIcons.length}</span>
+          {icons.length === 0 ? (
+            <div className="notebook-icon-picker__empty">Loading icon library…</div>
+          ) : filteredIcons.length > 0 ? (
+            <div className="notebook-icon-picker__grid">
+              {filteredIcons.map(({ key, label, Icon }) => (
+                <button key={key} type="button" className={selectedIcon === key ? 'is-selected' : ''}
+                  onClick={() => chooseIcon(key)} title={label} aria-label={label} aria-pressed={selectedIcon === key}>
+                  <Icon />
+                </button>
+              ))}
+            </div>
+          ) : <div className="notebook-icon-picker__empty">No matching icons</div>}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 const clampNotesTreeWidth = (value, max = NOTES_TREE_MAX) =>
   Math.min(max, Math.max(NOTES_TREE_MIN, value));
@@ -175,7 +418,7 @@ function noteMetrics(html) {
 }
 
 // ── Sortable tree row (drag to reorder / reparent) ──────────────────────────
-function SortableNoteRow({ item, activeUid, isDropInto, isDropOutOf, isCollapsed, editingUid, onSelect, onToggle, onCreate, onDelete, onOpenMenu, onStartRename, onRename }) {
+function SortableNoteRow({ item, activeUid, isDropInto, isDropOutOf, isCollapsed, editingUid, onSelect, onToggle, onCreate, onDelete, onOpenMenu, onOpenIconPicker, onStartRename, onRename }) {
   const { uid, depth, hasKids, note } = item;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: uid });
   // Vertical-only drag (locked by the modifier); only the dragged row moves, so
@@ -190,7 +433,7 @@ function SortableNoteRow({ item, activeUid, isDropInto, isDropOutOf, isCollapsed
   return (
     <div
       ref={setNodeRef}
-      className={`notes-tree__row${uid === activeUid ? ' is-active' : ''}${isDragging ? ' is-dragging' : ''}${isDropInto ? ' is-drop-into' : ''}${isDropOutOf ? ' is-drop-outof' : ''}`}
+      className={`notes-tree__row${depth === 0 ? ' is-root' : ''}${uid === activeUid ? ' is-active' : ''}${isDragging ? ' is-dragging' : ''}${isDropInto ? ' is-drop-into' : ''}${isDropOutOf ? ' is-drop-outof' : ''}`}
       style={style}
       onClick={() => onSelect(uid)}
       onContextMenu={(event) => onOpenMenu(event, note, hasKids, isCollapsed)}
@@ -208,9 +451,18 @@ function SortableNoteRow({ item, activeUid, isDropInto, isDropOutOf, isCollapsed
       >
         <VscChevronRight style={{ transform: isCollapsed ? 'none' : 'rotate(90deg)', transition: 'transform 0.12s' }} />
       </button>
-      {depth === 0
-        ? <IoBookOutline className="notes-tree__icon notes-tree__icon--book" />
-        : <IoDocumentTextOutline className="notes-tree__icon" />}
+      {depth === 0 ? (
+        <button
+          type="button"
+          className="notes-tree__icon-button notes-tree__icon--book"
+          onClick={(event) => { event.stopPropagation(); onOpenIconPicker(event, note); }}
+          onPointerDown={(event) => event.stopPropagation()}
+          title="Change notebook icon"
+          aria-label={`Change icon for ${note.title?.trim() || 'Untitled'}`}
+        >
+          <NotebookIcon iconKey={note.notebookIcon} colorKey={note.notebookIconColor} />
+        </button>
+      ) : <VscFile className="notes-tree__icon" />}
       {editingUid === uid ? (
         <input
           className="notes-tree__rename"
@@ -351,7 +603,7 @@ function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateC
           onChange={handleContent}
           paperless={paperless}
           notes={notes}
-          onCreatePage={() => ({ uid: onCreateChild(card.uid, false), title: 'New page' })}
+          onCreatePage={() => ({ uid: onCreateChild(card.uid, false), title: 'Untitled' })}
           onNavigatePage={onNavigate}
           onSendListToBoard={(items) => onSendListToBoard?.({ items, noteUid: card.uid })}
           placeholder="Type ‘/’ for commands, or just start writing. Markdown shortcuts and drag-and-drop images work too."
@@ -367,12 +619,28 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
   const activeIndex = activeCard ? allCards.findIndex((c) => c.uid === activeCard.uid) : -1;
   const [collapsed, setCollapsed] = useState(() => new Set());
   const [pageContextMenu, setPageContextMenu] = useState(null);
+  const [iconPicker, setIconPicker] = useState(null); // { uid, anchor: { x, y } }
   const [editingUid, setEditingUid] = useState(null);
 
   const renameNote = (uid, title) => {
     const t = (title || '').trim();
     if (t) updateCards((cards) => cards.map((c) => (c.uid === uid ? { ...c, title: t } : c)));
     setEditingUid(null);
+  };
+
+  const updateNotebookAppearance = (uid, patch) => {
+    updateCards((cards) => cards.map((card) => (card.uid === uid ? { ...card, ...patch } : card)));
+  };
+
+  const openNotebookIconPicker = (event, note) => {
+    if (note.parentUid) return;
+    const rect = event.currentTarget?.getBoundingClientRect?.();
+    setIconPicker({
+      uid: note.uid,
+      anchor: rect
+        ? { x: rect.left, y: rect.bottom + 6 }
+        : { x: event.clientX, y: event.clientY },
+    });
   };
 
   // ── Tree drag-and-drop (vertical-locked; hover top/middle/bottom of a row to
@@ -699,6 +967,12 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
       { label: 'Rename', onClick: () => setEditingUid(note.uid) },
       { label: 'New sub-page', onClick: () => { onToggle(note.uid, true); onCreateNote(note.uid, true); } },
     ];
+    if (!note.parentUid) {
+      items.splice(2, 0, {
+        label: 'Change icon and colour…',
+        onClick: () => setIconPicker({ uid: note.uid, anchor: { x: event.clientX, y: event.clientY } }),
+      });
+    }
     if (hasKids) {
       items.push({ label: isCollapsed ? 'Expand sub-pages' : 'Collapse sub-pages', onClick: () => onToggle(note.uid) });
     }
@@ -711,11 +985,11 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
     <div ref={layoutRef} className="notes-layout">
       <aside className="notes-tree-panel" style={{ width: treeWidth }}>
         <div className="notes-tree__head">
-          <span>Pages</span>
+          <span>Notebooks</span>
           <div className="notes-tree__head-actions">
-            <button type="button" onClick={undoMove} disabled={!history.canUndo} title="Undo move (⌘Z)" aria-label="Undo move"><IoArrowUndoOutline /></button>
-            <button type="button" onClick={redoMove} disabled={!history.canRedo} title="Redo move (⌘⇧Z)" aria-label="Redo move"><IoArrowRedoOutline /></button>
-            <button type="button" onClick={() => onCreateNote(null, true)} title="New page" aria-label="New page"><VscAdd /></button>
+            <button type="button" onClick={undoMove} disabled={!history.canUndo} title="Undo move (⌘Z)" aria-label="Undo move"><VscDiscard /></button>
+            <button type="button" onClick={redoMove} disabled={!history.canRedo} title="Redo move (⌘⇧Z)" aria-label="Redo move"><VscRedo /></button>
+            <button type="button" onClick={() => onCreateNote(null, true)} title="New notebook" aria-label="New notebook"><VscAdd /></button>
           </div>
         </div>
         <div className="notes-tree__scroll">
@@ -754,6 +1028,7 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
                       onCreate={onCreateNote}
                       onDelete={onDeleteNote}
                       onOpenMenu={openPageContextMenu}
+                      onOpenIconPicker={openNotebookIconPicker}
                       onStartRename={setEditingUid}
                       onRename={renameNote}
                     />
@@ -807,6 +1082,17 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
         <ContextMenu x={pageContextMenu.x} y={pageContextMenu.y}
           items={pageContextMenu.items} onClose={() => setPageContextMenu(null)} />
       )}
+      {iconPicker && (() => {
+        const notebook = notes.find((note) => note.uid === iconPicker.uid && !note.parentUid);
+        return notebook ? (
+          <NotebookIconPicker
+            note={notebook}
+            anchor={iconPicker.anchor}
+            onUpdate={(patch) => updateNotebookAppearance(notebook.uid, patch)}
+            onClose={() => setIconPicker(null)}
+          />
+        ) : null;
+      })()}
       {pendingMove && (
         <MoveNoteConfirmModal
           title={pendingMove.draggedTitle}
