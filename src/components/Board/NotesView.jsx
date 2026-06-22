@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useRef, useState, useMemo, Fragment } from 'react';
-import { VscAdd, VscTrash, VscChevronRight, VscChromeMaximize, VscChromeRestore, VscArrowLeft, VscArrowRight, VscLayoutSidebarLeft } from 'react-icons/vsc';
+import { VscAdd, VscTrash, VscChevronRight, VscChromeMaximize, VscChromeRestore, VscArrowLeft, VscArrowRight } from 'react-icons/vsc';
 import { IoBookOutline, IoDocumentTextOutline, IoArrowUndoOutline, IoArrowRedoOutline } from 'react-icons/io5';
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -132,7 +132,6 @@ import MoveNoteConfirmModal from './MoveNoteConfirmModal';
 const NoteEditor = lazy(() => import('./NoteEditor'));
 
 const NOTES_TREE_WIDTH_KEY = 'kandoo-notes-tree-width';
-const NOTES_TREE_COLLAPSED_KEY = 'kandoo-notes-tree-collapsed';
 const NOTES_TREE_MIN = 180;
 const NOTES_TREE_MAX = 420;
 const NOTES_CANVAS_MIN = 420;
@@ -286,7 +285,7 @@ function PageTitle({ value, onChange }) {
 }
 
 // ── Active-page canvas ──────────────────────────────────────────────────────
-function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateChild, onNavigate, onSendListToBoard, onBack, onForward, canBack, canForward, treeCollapsed, onToggleTree }) {
+function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateChild, onNavigate, onSendListToBoard, onBack, onForward, canBack, canForward }) {
   const { settings } = useSettings();
   const [paperless, setPaperless] = useState(settings.noteDefaultView === 'wide');
   const togglePaperless = () => setPaperless((p) => !p);
@@ -313,10 +312,6 @@ function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateC
       className={paperless ? 'note-canvas' : 'note-canvas note-paper'}
     >
       <div className="note-canvas__nav">
-        <button type="button" className={`note-nav-btn note-nav-btn--toggle${treeCollapsed ? ' is-active' : ''}`} onClick={onToggleTree} title={treeCollapsed ? 'Show pages' : 'Hide pages'} aria-label="Toggle pages sidebar" aria-pressed={!treeCollapsed}>
-          <VscLayoutSidebarLeft />
-        </button>
-        <span className="note-canvas__nav-sep" />
         <button type="button" className="note-nav-btn" onClick={onBack} disabled={!canBack} title="Back" aria-label="Back">
           <VscArrowLeft />
         </button>
@@ -574,12 +569,6 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
 
   const [treeWidth, setTreeWidth] = useState(initialNotesTreeWidth);
   const [isTreeResizing, setIsTreeResizing] = useState(false);
-  const [treeCollapsed, setTreeCollapsed] = useState(() => {
-    try { return localStorage.getItem(NOTES_TREE_COLLAPSED_KEY) === '1'; } catch { return false; }
-  });
-  useEffect(() => {
-    try { localStorage.setItem(NOTES_TREE_COLLAPSED_KEY, treeCollapsed ? '1' : '0'); } catch { /* storage unavailable */ }
-  }, [treeCollapsed]);
   const layoutRef = useRef(null);
   const resizeCleanupRef = useRef(null);
 
@@ -720,8 +709,7 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
 
   return (
     <div ref={layoutRef} className="notes-layout">
-      <aside className={`notes-tree-panel${treeCollapsed ? ' is-collapsed' : ''}`} style={{ width: treeCollapsed ? 0 : treeWidth, transition: isTreeResizing ? 'none' : undefined }}>
-        <div className="notes-tree-panel__inner" style={{ width: treeWidth, minWidth: treeWidth }}>
+      <aside className="notes-tree-panel" style={{ width: treeWidth }}>
         <div className="notes-tree__head">
           <span>Pages</span>
           <div className="notes-tree__head-actions">
@@ -778,25 +766,22 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
             </DndContext>
           )}
         </div>
-        </div>
       </aside>
 
-      {!treeCollapsed && (
-        <div
-          className={`notes-tree-resizer${isTreeResizing ? ' is-resizing' : ''}`}
-          role="separator"
-          aria-label="Resize notes sidebar"
-          aria-orientation="vertical"
-          aria-valuemin={NOTES_TREE_MIN}
-          aria-valuemax={NOTES_TREE_MAX}
-          aria-valuenow={Math.round(treeWidth)}
-          aria-controls="notes-canvas-pane"
-          tabIndex={0}
-          title="Drag to resize the notes sidebar"
-          onPointerDown={startTreeResize}
-          onKeyDown={resizeTreeWithKeyboard}
-        />
-      )}
+      <div
+        className={`notes-tree-resizer${isTreeResizing ? ' is-resizing' : ''}`}
+        role="separator"
+        aria-label="Resize notes sidebar"
+        aria-orientation="vertical"
+        aria-valuemin={NOTES_TREE_MIN}
+        aria-valuemax={NOTES_TREE_MAX}
+        aria-valuenow={Math.round(treeWidth)}
+        aria-controls="notes-canvas-pane"
+        tabIndex={0}
+        title="Drag to resize the notes sidebar"
+        onPointerDown={startTreeResize}
+        onKeyDown={resizeTreeWithKeyboard}
+      />
 
       <div id="notes-canvas-pane" className="notes-canvas-wrap">
         {activeCard && activeIndex >= 0 ? (
@@ -813,8 +798,6 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
             onForward={goForward}
             canBack={navState.canBack}
             canForward={navState.canForward}
-            treeCollapsed={treeCollapsed}
-            onToggleTree={() => setTreeCollapsed((c) => !c)}
           />
         ) : (
           <div className="notes-canvas-empty">Creating a new page…</div>

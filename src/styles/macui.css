@@ -554,9 +554,6 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   padding: 16px 24px 6px;
   flex-shrink: 0;
 }
-/* In Notes, the tabs head shares the flush-left edge of the Pages sidebar
-   below it (the sidebar starts at the content edge, not inset). */
-.mac-board-head.is-notes { padding-left: 0; }
 .mac-board-head__meta {
   font-size: 0.78rem;
   color: var(--text-muted);
@@ -569,7 +566,6 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   background: var(--theme-bg-secondary);
   border: 1px solid var(--border-subtle);
   gap: 2px;
-  margin: 0 0 0 10px;
 }
 .mac-segmented__btn {
   display: inline-flex;
@@ -1910,14 +1906,9 @@ html.is-panel-window #root {
   width: 232px;
   min-width: 0;
   flex: 0 0 auto;
-  background: color-mix(in srgb, var(--bg-sidebar) 55%, var(--bg-app));
-  overflow: hidden;
-  transition: width var(--motion-slow) var(--ease-in-out);
-}
-.notes-tree-panel__inner {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  background: color-mix(in srgb, var(--bg-sidebar) 55%, var(--bg-app));
 }
 .notes-tree-resizer {
   position: relative;
@@ -2059,15 +2050,7 @@ html.is-panel-window #root {
   background: color-mix(in srgb, var(--text-muted) 18%, transparent);
   color: var(--text-primary);
 }
-/* The canvas is a "desk" surface; the page sits on it as an elevated sheet so
-   the centered paper reads as intentional rather than floating on a blank void. */
-.notes-canvas-wrap {
-  flex: 1;
-  overflow-y: auto;
-  min-width: 0;
-  background: var(--bg-app);
-  padding: 12px 0 28px;
-}
+.notes-canvas-wrap { flex: 1; overflow-y: auto; min-width: 0; }
 .notes-canvas-empty { padding: 3rem; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
 
 /* Back / forward page navigation */
@@ -2095,18 +2078,6 @@ html.is-panel-window #root {
   color: var(--text-primary);
 }
 .note-nav-btn:disabled { opacity: 0.38; cursor: default; }
-/* Pages-sidebar toggle, sitting just before the back/forward pair. */
-.note-nav-btn--toggle.is-active {
-  background: color-mix(in srgb, var(--theme-accent) 14%, transparent);
-  border-color: color-mix(in srgb, var(--theme-accent) 35%, var(--theme-border));
-  color: var(--theme-accent);
-}
-.note-canvas__nav-sep {
-  width: 1px;
-  align-self: stretch;
-  margin: 2px 3px;
-  background: var(--theme-border);
-}
 
 /* Notebook (top-level) icon picks up the accent to read as a container. */
 .notes-tree__icon--book { color: var(--theme-accent); }
@@ -2257,7 +2228,6 @@ html.is-panel-window #root {
 [data-density="compact"] .mac-nav-item { padding: 5px 10px; }
 [data-density="compact"] .mac-task { padding: 7px 9px; margin-top: 6px; }
 [data-density="compact"] .mac-board-head { padding: 10px 24px 4px; }
-[data-density="compact"] .mac-board-head.is-notes { padding-left: 0; }
 [data-density="compact"] .mac-board-scroll { padding: 6px 18px 22px; }
 
 /* App-level reduce motion (in addition to the OS preference) */

@@ -518,7 +518,7 @@ function Cards({
   return (
     <div className="mac-board">
       {/* Board header — segmented control + metadata */}
-      <div className={`mac-board-head${section === 'notes' ? ' is-notes' : ''}`}>
+      <div className="mac-board-head">
         <div className="mac-segmented" role="tablist" aria-label="Board section">
           <button
             role="tab"
