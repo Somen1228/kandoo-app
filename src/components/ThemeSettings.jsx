@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { THEME_TOKENS } from '../themes/themes';
+import { getThemeIcon } from '../themes/themeIcons';
 import './ThemeSettings.css';
 
 // Mini UI preview inside each theme card — matches the screenshot aesthetic
@@ -21,6 +22,7 @@ function ThemePreview({ colors }) {
 }
 
 function ThemeCard({ theme, isActive, onClick, onExport, onDelete, showActions }) {
+  const Icon = getThemeIcon(theme.icon);
   return (
     <div
       className={`ts-theme-card ${isActive ? 'active' : ''}`}
@@ -36,6 +38,9 @@ function ThemeCard({ theme, isActive, onClick, onExport, onDelete, showActions }
           borderTop: `1px solid ${theme.colors.border}`,
         }}
       >
+        <span className="ts-theme-icon" aria-hidden="true" style={{ color: theme.colors.accent }}>
+          <Icon />
+        </span>
         <span className="ts-theme-name" style={{ color: theme.colors.textPrimary }}>
           {theme.name}
         </span>

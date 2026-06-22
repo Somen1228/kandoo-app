@@ -1,4 +1,4 @@
-import { useState, useContext, useRef, useEffect, useMemo } from "react";
+import { useState, useContext, useRef, useEffect, useMemo, useCallback } from "react";
 import { parseQuery, searchBoards } from "../utils/search";
 import { classifyTask } from "../utils/dueDate";
 import {
@@ -13,6 +13,7 @@ import { AiOutlineDelete } from "react-icons/ai";
 import { IoColorFilterOutline } from "react-icons/io5";
 import { v4 as uuidv4 } from "uuid";
 import { useHotkeys } from "react-hotkeys-hook";
+import { useLeaderChords, LEADER_LABEL } from "../hooks/useLeaderChords";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
@@ -234,18 +235,43 @@ function Board() {
   }, [boards, activeBoard]);
 
   // ===== Keyboard shortcuts =====
-  useHotkeys("mod+k, /", (e) => {
-    e.preventDefault();
+  const focusSearch = useCallback(() => {
     searchInputRef.current?.focus();
     searchInputRef.current?.select();
-  }, { enableOnFormTags: ["input", "textarea"], preventDefault: true });
+  }, []);
 
-  useHotkeys("t", () => {
+  const cycleTheme = useCallback(() => {
     if (!allThemes.length) return;
     const idx = allThemes.findIndex((t) => t.id === currentThemeId);
     const next = allThemes[(idx + 1) % allThemes.length];
     setTheme(next.id);
+  }, [allThemes, currentThemeId, setTheme]);
+
+  const quickAddTask = useCallback(() => {
+    setSection("todos");
+    setQuickAddSignal((s) => s + 1);
+  }, []);
+
+  // Command chord (⌘/Ctrl + J, then a key). The modifier leader lets these fire
+  // from anywhere — including while a text input or the note editor is focused —
+  // which the bare single-key shortcuts below can't safely do.
+  const chordArmed = useLeaderChords({
+    f: focusSearch,
+    n: quickAddTask,
+    t: cycleTheme,
+    b: () => setIsSidebarCollapsed((c) => !c),
+    s: () => setSection((sec) => (sec === "notes" ? "todos" : "notes")),
+    h: () => setShowHelpModal(true),
+    k: () => setShowShortcutsHelp(true),
+    "?": () => setShowShortcutsHelp(true),
   });
+
+  useHotkeys("mod+k, /", (e) => {
+    e.preventDefault();
+    focusSearch();
+  }, { enableOnFormTags: ["input", "textarea"], preventDefault: true });
+
+  useHotkeys("t", cycleTheme);
 
   useHotkeys("?", () => setShowShortcutsHelp(true));
   useHotkeys("shift+/", () => setShowShortcutsHelp(true));
@@ -262,8 +288,7 @@ function Board() {
   // N (or Cmd/Ctrl+N) adds a quick task to the active board's first card
   useHotkeys("n, mod+n", (e) => {
     e.preventDefault();
-    setSection("todos");
-    setQuickAddSignal((s) => s + 1);
+    quickAddTask();
   }, { preventDefault: true });
 
   // Cmd/Ctrl+B toggles the sidebar
@@ -828,7 +853,68 @@ function Board() {
       {ctxMenu && (
         <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />
       )}
+      {chordArmed && <ChordHint />}
     </div>
+  );
+}
+
+// Floating hint shown while the command chord (⌘/Ctrl J) is armed, listing the
+// keys that complete it. Mirrors the command map wired in Board.
+const CHORD_KEYS = [
+  ['F', 'Find'],
+  ['N', 'New task'],
+  ['T', 'Theme'],
+  ['B', 'Sidebar'],
+  ['S', 'Section'],
+  ['H', 'Help'],
+  ['K', 'Keys'],
+];
+
+function ChordHint() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+        zIndex: 4000, display: 'flex', alignItems: 'center', gap: 12,
+        padding: '10px 16px', borderRadius: 12,
+        background: 'color-mix(in srgb, var(--theme-bg-modal) 90%, transparent)',
+        border: '1px solid var(--theme-border)',
+        boxShadow: '0 12px 32px rgba(0,0,0,0.22)',
+        backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+        fontSize: '0.82rem', color: 'var(--theme-text-secondary)',
+        pointerEvents: 'none', userSelect: 'none',
+      }}
+    >
+      <ChordKey>{LEADER_LABEL}</ChordKey>
+      <span style={{ color: 'var(--theme-text-muted)' }}>then…</span>
+      <span style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {CHORD_KEYS.map(([key, label]) => (
+          <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <ChordKey>{key}</ChordKey>
+            <span>{label}</span>
+          </span>
+        ))}
+      </span>
+    </div>
+  );
+}
+
+function ChordKey({ children }) {
+  return (
+    <kbd
+      style={{
+        display: 'inline-block', minWidth: '1.4rem', textAlign: 'center',
+        padding: '2px 6px', borderRadius: 6,
+        background: 'var(--theme-bg-hover)', color: 'var(--theme-text-primary)',
+        border: '1px solid var(--theme-border)', boxShadow: '0 1px 0 var(--theme-shadow)',
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+        fontSize: '0.72rem', fontWeight: 600,
+      }}
+    >
+      {children}
+    </kbd>
   );
 }
 

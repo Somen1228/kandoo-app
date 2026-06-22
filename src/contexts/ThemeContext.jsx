@@ -126,7 +126,7 @@ export const ThemeProvider = ({ children }) => {
     const exists = allThemes.find((t) => t.id === id);
     if (exists && id !== currentThemeId) {
       setCurrentThemeId(id);
-      toast.success(`Theme: ${exists.emoji ? exists.emoji + ' ' : ''}${exists.name}`);
+      toast.success(`Theme: ${exists.name}`);
     }
   };
 

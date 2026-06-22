@@ -42,7 +42,8 @@ import { renderTaskValue } from "../../utils/richText";
 import Modal from "./Modal";
 import { CardsContext } from "../../contexts/CardsContext";
 import { useSettings } from "../../contexts/SettingsContext";
-import { VscHistory, VscClose, VscLayout, VscLayoutPanelRight, VscListFlat } from "react-icons/vsc";
+import { VscHistory, VscClose } from "react-icons/vsc";
+import { RiLayoutGridFill, RiLayoutColumnFill, RiLayoutRowFill } from "react-icons/ri";
 import ResetWarningModal from "./ResetWarningModal";
 import SendToBoardModal from "./SendToBoardModal";
 
@@ -53,9 +54,9 @@ const normalizeBoardLayout = (layout) => BOARD_LAYOUTS.has(layout) ? layout : 'g
 
 function BoardLayoutSwitcher({ value, onChange }) {
   const options = [
-    { value: 'grid', label: 'Grid layout', icon: <VscLayout /> },
-    { value: 'columns', label: 'Column layout', icon: <VscLayoutPanelRight /> },
-    { value: 'lanes', label: 'Lane layout', icon: <VscListFlat /> },
+    { value: 'grid', label: 'Grid layout', icon: <RiLayoutGridFill /> },
+    { value: 'columns', label: 'Column layout', icon: <RiLayoutColumnFill /> },
+    { value: 'lanes', label: 'Lane layout', icon: <RiLayoutRowFill /> },
   ];
 
   return (
@@ -480,7 +481,7 @@ function Cards({
         overData?.type === "task"
           ? overData.cardUid
           : overData?.type === "card"
-          ? over.id
+          ? (overData.cardUid ?? over.id)
           : null;
 
       if (!overCardUid || activeCardUid === overCardUid) return;
@@ -532,7 +533,7 @@ function Cards({
         const overCardUid = overData?.type === 'task'
           ? overData.cardUid
           : overData?.type === 'card'
-            ? over.id
+            ? (overData.cardUid ?? over.id)
             : null;
         if (!overCardUid) return;
         setBoards((prev) =>

@@ -555,14 +555,37 @@ const SECTIONS = [
     content: (
       <>
         <H2>Keyboard shortcuts</H2>
-        <P>Quick reference — these work anywhere on the board:</P>
+        <P>
+          <strong>Command chord</strong> — press <Kbd>⌘ / Ctrl</Kbd> + <Kbd>J</Kbd>, then a letter.
+          Because it starts with a modifier, the chord fires <strong>from anywhere</strong>, even
+          while you're typing in a task or the note editor. A hint strip shows the keys once armed.
+        </P>
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '0.5rem', fontSize: '0.88rem' }}>
+          <tbody>
+            {[
+              ['Focus search',                           <><Kbd>⌘J</Kbd> then <Kbd>F</Kbd></>],
+              ['Quick-add task',                         <><Kbd>⌘J</Kbd> then <Kbd>N</Kbd></>],
+              ['Cycle theme',                            <><Kbd>⌘J</Kbd> then <Kbd>T</Kbd></>],
+              ['Toggle sidebar',                         <><Kbd>⌘J</Kbd> then <Kbd>B</Kbd></>],
+              ['Switch Tasks / Notes',                   <><Kbd>⌘J</Kbd> then <Kbd>S</Kbd></>],
+              ['Open this Help guide',                   <><Kbd>⌘J</Kbd> then <Kbd>H</Kbd></>],
+              ['Show shortcuts panel',                   <><Kbd>⌘J</Kbd> then <Kbd>K</Kbd></>],
+            ].map(([label, keys], i) => (
+              <tr key={`chord-${i}`} style={{ borderBottom: '1px solid var(--theme-border)' }}>
+                <td style={{ padding: '8px 0', color: 'var(--theme-text-secondary)' }}>{label}</td>
+                <td style={{ padding: '8px 0', textAlign: 'right' }}>{keys}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <P>Other shortcuts:</P>
         <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '0.5rem', fontSize: '0.88rem' }}>
           <tbody>
             {[
               ['Open this Help guide',                   <><Kbd>⌘ / Ctrl</Kbd> + <Kbd>Shift</Kbd> + <Kbd>1</Kbd></>],
               ['Focus search',                           <><Kbd>⌘ / Ctrl</Kbd> + <Kbd>K</Kbd> or <Kbd>/</Kbd></>],
-              ['Quick-add task',                         <Kbd key="n">N</Kbd>],
-              ['Cycle theme',                            <Kbd key="t">T</Kbd>],
+              ['Quick-add task (on the board)',          <Kbd key="n">N</Kbd>],
+              ['Cycle theme (on the board)',             <Kbd key="t">T</Kbd>],
               ['Undo',                                   <><Kbd>⌘ / Ctrl</Kbd> + <Kbd>Z</Kbd></>],
               ['Redo',                                   <><Kbd>⌘ / Ctrl</Kbd> + <Kbd>Shift</Kbd> + <Kbd>Z</Kbd></>],
               ['Bold (while editing)',                   <><Kbd>⌘ / Ctrl</Kbd> + <Kbd>B</Kbd></>],

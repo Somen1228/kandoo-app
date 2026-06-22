@@ -101,13 +101,18 @@
 
 /* ── Card footer (name row) ── */
 .ts-theme-footer {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center; gap: 8px;
   padding: 10px 14px;
+}
+.ts-theme-icon {
+  display: inline-flex; align-items: center;
+  font-size: 0.95rem; flex: 0 0 auto;
 }
 .ts-theme-name {
   font-size: 0.8125rem; font-weight: 600;
 }
 .ts-check {
+  margin-left: auto;
   font-size: 0.875rem; font-weight: 700;
 }
 

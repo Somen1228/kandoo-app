@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import { createPortal } from "react-dom";
 import { SortableContext, useSortable, verticalListSortingStrategy, horizontalListSortingStrategy } from "@dnd-kit/sortable";
+import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { toast } from '../../utils/toast';
 import { generateTaskID } from "../../utils/taskIdGenerator";
@@ -316,6 +317,13 @@ function Card({
   const isNote = type === 'note';
   const { currentTheme } = useTheme();
   const { settings } = useSettings();
+  // Explicit drop target for the empty-state tile, so a card with no tasks is
+  // still a reliable drop zone in every layout (the sortable card shell alone
+  // is an awkward target when collapsed, e.g. a short lane card).
+  const { setNodeRef: setEmptyDropRef, isOver: isEmptyOver } = useDroppable({
+    id: `card-empty-${uid}`,
+    data: { type: 'card', cardUid: uid },
+  });
   const [uploading, setUploading]             = useState(false);
   const [isMounted, setIsMounted]             = useState(false);
   const [toggleAddTask, setToggleAddTask]     = useState(false);
@@ -869,7 +877,10 @@ function Card({
 
               if (allTasks.length === 0) {
                 return (
-                  <li className="mac-col-empty">
+                  <li
+                    ref={setEmptyDropRef}
+                    className={`mac-col-empty${isEmptyOver ? ' is-drop-over' : ''}`}
+                  >
                     <span>Nothing here yet</span>
                     <span className="mac-col-empty__hint">Drag a task here or create one below</span>
                   </li>

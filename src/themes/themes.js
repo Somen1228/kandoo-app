@@ -24,7 +24,7 @@ const themes = [
   {
     name: 'Zen',
     id: 'light',
-    emoji: '🦥',
+    icon: 'leaf',
     colors: {
       bgPrimary: '#fbf7f0',
       bgSecondary: '#f5efe3',
@@ -56,7 +56,7 @@ const themes = [
   {
     name: 'Foggy Morning',
     id: 'foggy',
-    emoji: '🌫️',
+    icon: 'fog',
     colors: {
       bgPrimary: '#ffffff',
       bgSecondary: '#f8fafc',
@@ -88,7 +88,7 @@ const themes = [
   {
     name: 'Solarized Light',
     id: 'solarized',
-    emoji: '☀️',
+    icon: 'sun',
     colors: {
       // Ethan Schoonover's classic warm-beige palette
       bgPrimary: '#fdf6e3',
@@ -121,7 +121,7 @@ const themes = [
   {
     name: 'Nord Light',
     id: 'nordLight',
-    emoji: '❄️',
+    icon: 'snow',
     colors: {
       // Arctic Snow Storm + Polar Night text + Frost accent
       bgPrimary: '#eceff4',
@@ -154,7 +154,7 @@ const themes = [
   {
     name: 'Monokai',
     id: 'monokai',
-    emoji: '🟢',
+    icon: 'terminal',
     colors: {
       // Sublime / TextMate classic
       bgPrimary: '#272822',
@@ -187,7 +187,7 @@ const themes = [
   {
     name: 'Dracula',
     id: 'dracula',
-    emoji: '🧛',
+    icon: 'gem',
     colors: {
       // Zeno Rocha — purple/pink on deep blue-gray
       bgPrimary: '#282a36',
@@ -220,7 +220,7 @@ const themes = [
   {
     name: 'Night Owl',
     id: 'nightOwl',
-    emoji: '🦉',
+    icon: 'owl',
     colors: {
       // Sarah Drasner — deep navy with bright but soft accents
       bgPrimary: '#011627',
@@ -253,7 +253,7 @@ const themes = [
   {
     name: 'Darcula',
     id: 'darcula',
-    emoji: '🟧',
+    icon: 'coffee',
     colors: {
       // JetBrains' default dark — warm grays with muted blue + orange accents
       bgPrimary: '#2b2b2b',
@@ -286,7 +286,7 @@ const themes = [
   {
     name: 'Zen Dark',
     id: 'dark',
-    emoji: '🌙',
+    icon: 'moon',
     colors: {
       bgPrimary: '#0f172a',
       bgSecondary: '#162032',
@@ -318,7 +318,7 @@ const themes = [
   {
     name: 'Midnight',
     id: 'midnight',
-    emoji: '🔮',
+    icon: 'sparkles',
     colors: {
       bgPrimary: '#0e0c1a',
       bgSecondary: '#16132a',
@@ -350,7 +350,7 @@ const themes = [
   {
     name: 'Forest',
     id: 'forest',
-    emoji: '🌿',
+    icon: 'forest',
     colors: {
       bgPrimary: '#0d1a10',
       bgSecondary: '#132018',
@@ -382,7 +382,7 @@ const themes = [
   {
     name: 'Sunset',
     id: 'sunset',
-    emoji: '🌅',
+    icon: 'sunset',
     colors: {
       bgPrimary: '#1a1210',
       bgSecondary: '#261a15',

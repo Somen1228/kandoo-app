@@ -794,6 +794,19 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
     const aRect = active.rect.current.translated;
     const oRect = over.rect;
     const ratio = (aRect && oRect) ? (aRect.top + aRect.height / 2 - oRect.top) / oRect.height : 0.5;
+    // A notebook is a container: dropping a page onto the body of a *different*
+    // notebook nests it inside, instead of requiring the rightward "nest" gesture
+    // (which left pages stranded at the top level). Top/bottom edges still reorder,
+    // and notebook-to-notebook reordering is unaffected (only pages auto-nest).
+    const overNote = notes.find((n) => n.uid === over.id);
+    const overIsNotebook = overNote && !overNote.parentUid;
+    const draggedIsPage = !!dragged?.parentUid;
+    if (overIsNotebook && draggedIsPage && over.id !== dragged.parentUid
+        && !isDescendantOf(notes, active.id, over.id)
+        && ratio > 0.2 && ratio < 0.8) {
+      setDropTarget({ overUid: over.id, mode: 'inside' });
+      return;
+    }
     setDropTarget({ overUid: over.id, mode: ratio < 0.5 ? 'before' : 'after' });
   };
 

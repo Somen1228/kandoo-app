@@ -754,7 +754,9 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
 }
 .board-layout--grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  /* auto-fit (not auto-fill) collapses empty tracks so a few cards on a fresh
+     workspace stretch to fill the row instead of staying pinned at 18rem. */
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
   width: 100%;
 }
 .board-layout--columns {
@@ -957,6 +959,12 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
 .mac-col-empty__hint {
   font-size: 0.72rem;
   opacity: 0.8;
+}
+.mac-col-empty.is-drop-over {
+  border-color: var(--accent);
+  border-style: solid;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
 }
 
 /* Task card */
