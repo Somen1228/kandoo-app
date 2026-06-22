@@ -30,6 +30,8 @@ export const SETTINGS_DEFAULTS = {
   taskDeleteMode: 'undo',     // 'undo' | 'confirm'
   quickAddDueToday: true,
   autoMoveDone: true,         // move completed tasks to Done column
+  boardLayoutScope: 'per-board', // 'per-board' | 'global'
+  globalBoardLayout: 'grid',     // 'grid' | 'columns' | 'lanes'
 };
 
 export function SettingsProvider({ children }) {

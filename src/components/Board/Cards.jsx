@@ -23,23 +23,59 @@ import {
   SortableContext,
   useSortable,
   horizontalListSortingStrategy,
+  verticalListSortingStrategy,
+  rectSortingStrategy,
   arrayMove,
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import {
+  restrictToFirstScrollableAncestor,
+  restrictToHorizontalAxis,
+  restrictToVerticalAxis,
+} from "@dnd-kit/modifiers";
 import Card from "./Card";
 import NotesView from "./NotesView";
-import { matchesTask, matchesCardTitle, matchesNote } from "../../utils/search";
+import { matchesTask, matchesCardTitle } from "../../utils/search";
 import { classifyTask } from "../../utils/dueDate";
 import { renderTaskValue } from "../../utils/richText";
 import Modal from "./Modal";
 import { CardsContext } from "../../contexts/CardsContext";
 import { useSettings } from "../../contexts/SettingsContext";
-import { VscHistory, VscClose } from "react-icons/vsc";
+import { VscHistory, VscClose, VscLayout, VscLayoutPanelRight, VscListFlat } from "react-icons/vsc";
 import ResetWarningModal from "./ResetWarningModal";
 import SendToBoardModal from "./SendToBoardModal";
 
 const MAX_PINNED_CARDS = 3;
+const BOARD_LAYOUTS = new Set(['grid', 'columns', 'lanes']);
+
+const normalizeBoardLayout = (layout) => BOARD_LAYOUTS.has(layout) ? layout : 'grid';
+
+function BoardLayoutSwitcher({ value, onChange }) {
+  const options = [
+    { value: 'grid', label: 'Grid layout', icon: <VscLayout /> },
+    { value: 'columns', label: 'Column layout', icon: <VscLayoutPanelRight /> },
+    { value: 'lanes', label: 'Lane layout', icon: <VscListFlat /> },
+  ];
+
+  return (
+    <div className="board-layout-switcher" role="group" aria-label="Board layout">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className={`board-layout-switcher__btn${value === option.value ? ' is-active' : ''}`}
+          onClick={() => onChange(option.value)}
+          title={option.label}
+          aria-label={option.label}
+          aria-pressed={value === option.value}
+        >
+          {option.icon}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // Notes and todo cards share one persisted array. Reorder only todo-card slots
 // so pinning a Kanban column never disturbs the Notes page hierarchy.
@@ -51,6 +87,19 @@ function pinnedCardsFirst(cards) {
   return cards.map((card) =>
     (card.type || 'todo') === 'todo' ? orderedTodos[todoIndex++] : card
   );
+}
+
+function reorderTodoCards(cards, activeUid, overUid) {
+  const todos = cards.filter((card) => (card.type || 'todo') === 'todo');
+  const oldIndex = todos.findIndex((card) => card.uid === activeUid);
+  const newIndex = todos.findIndex((card) => card.uid === overUid);
+  if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex) return cards;
+
+  const reorderedTodos = arrayMove(todos, oldIndex, newIndex);
+  let todoIndex = 0;
+  return pinnedCardsFirst(cards.map((card) =>
+    (card.type || 'todo') === 'todo' ? reorderedTodos[todoIndex++] : card
+  ));
 }
 
 // Build a tasks-map from extracted note checklist items. Checked items land as
@@ -74,7 +123,7 @@ function buildTasksFromItems(items, noteUid) {
   return out;
 }
 
-function SortableCardWrapper({ uid, children }) {
+function SortableCardWrapper({ uid, layout, children }) {
   const {
     attributes,
     listeners,
@@ -87,6 +136,7 @@ function SortableCardWrapper({ uid, children }) {
   return (
     <div
       ref={setNodeRef}
+      className={`board-card-shell board-card-shell--${layout}`}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
@@ -107,8 +157,22 @@ function Cards({
   const [activeNoteUid, setActiveNoteUid] = useState(null);
   const [sendToBoard, setSendToBoard] = useState(null); // { items, noteUid } | null
   const { boards, setBoards, defaultCards } = useContext(CardsContext);
-  const { settings } = useSettings();
+  const { settings, setSetting } = useSettings();
   const board = boards.find((b) => b.id === boardId);
+  const boardLayout = settings.boardLayoutScope === 'global'
+    ? normalizeBoardLayout(settings.globalBoardLayout)
+    : normalizeBoardLayout(board?.taskLayout);
+
+  const changeBoardLayout = useCallback((nextLayout) => {
+    const normalized = normalizeBoardLayout(nextLayout);
+    if (settings.boardLayoutScope === 'global') {
+      setSetting('globalBoardLayout', normalized);
+      return;
+    }
+    setBoards((previous) => previous.map((candidate) =>
+      candidate.id === boardId ? { ...candidate, taskLayout: normalized } : candidate
+    ));
+  }, [boardId, setBoards, setSetting, settings.boardLayoutScope]);
   const pinnedCardCount = useMemo(
     () => (board?.cards || []).filter((card) => (card.type || 'todo') === 'todo' && card.pinned).length,
     [board?.cards]
@@ -135,7 +199,7 @@ function Cards({
   const addChildNote = useCallback((parentUid = null, select = true) => {
     const uid = uuidv4();
     const newCard = {
-      uid, type: 'note', title: 'New page', color: null, isVisible: true,
+      uid, type: 'note', title: 'Untitled', color: null, isVisible: true,
       parentUid: parentUid || null, tasks: {},
       note: { content: '', images: [], updatedAt: Date.now() },
     };
@@ -465,14 +529,17 @@ function Cards({
       const overData = over.data.current;
 
       if (captured.type === "card") {
-        if (overData?.type !== "card") return;
+        const overCardUid = overData?.type === 'task'
+          ? overData.cardUid
+          : overData?.type === 'card'
+            ? over.id
+            : null;
+        if (!overCardUid) return;
         setBoards((prev) =>
           prev.map((b) => {
             if (b.id !== boardId) return b;
-            const oldIdx = b.cards.findIndex((c) => c.uid === active.id);
-            const newIdx = b.cards.findIndex((c) => c.uid === over.id);
-            if (oldIdx < 0 || newIdx < 0 || oldIdx === newIdx) return b;
-            return { ...b, cards: pinnedCardsFirst(arrayMove(b.cards, oldIdx, newIdx)) };
+            const cards = reorderTodoCards(b.cards, active.id, overCardUid);
+            return cards === b.cards ? b : { ...b, cards };
           })
         );
       } else if (captured.type === "task") {
@@ -513,6 +580,29 @@ function Cards({
   const scheduleLabel = scheduleView
     ? scheduleView.charAt(0).toUpperCase() + scheduleView.slice(1)
     : null;
+  // Cards keep their per-layout axis lock. Tasks must travel freely across cards
+  // in every layout, so they get no modifier — restrictToFirstScrollableAncestor
+  // would clamp a dragged task inside its source card's scrollable task-list,
+  // preventing the overlay (and thus closestCenter) from ever reaching another card.
+  const dragModifiers = activeType === 'card'
+    ? boardLayout === 'columns'
+      ? [restrictToHorizontalAxis]
+      : boardLayout === 'lanes'
+        ? [restrictToVerticalAxis]
+        : [restrictToFirstScrollableAncestor]
+    : [];
+  const visibleCardEntries = board.cards
+    .map((card, cardIndex) => ({ card, cardIndex }))
+    .filter(({ card }) => {
+      if ((card.type || 'todo') === 'note') return false;
+      if (scheduleView && !Object.values(card.tasks || {}).some((task) => classifyTask(task) === scheduleView)) {
+        return false;
+      }
+      if (filterMode && query && !query.isEmpty && !matchesCardTitle(card, query)) {
+        return Object.values(card.tasks || {}).some((task) => matchesTask(task, query));
+      }
+      return true;
+    });
 
   return (
     <div className="mac-board">
@@ -558,14 +648,17 @@ function Cards({
         <div style={{ flex: 1 }} />
 
         {section === 'todos' && (
-          <button
-            onClick={handleResetClick}
-            className="mac-iconbtn"
-            title="Reset board to default"
-            aria-label="Reset board to default"
-          >
-            <VscHistory />
-          </button>
+          <div className="mac-board-head__view-actions">
+            <button
+              onClick={handleResetClick}
+              className="mac-iconbtn"
+              title="Reset board to default"
+              aria-label="Reset board to default"
+            >
+              <VscHistory />
+            </button>
+            <BoardLayoutSwitcher value={boardLayout} onChange={changeBoardLayout} />
+          </div>
         )}
       </div>
 
@@ -586,44 +679,23 @@ function Cards({
         <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
+        modifiers={dragModifiers}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="container" data-tour="board">
+        <div className={`container board-layout board-layout--${boardLayout}`} data-tour="board" data-layout={boardLayout}>
           <SortableContext
-            items={board.cards
-              .filter((c) => (section === 'notes' ? c.type === 'note' : (c.type || 'todo') === 'todo'))
-              .map((c) => c.uid)}
-            strategy={horizontalListSortingStrategy}
+            items={visibleCardEntries.map(({ card }) => card.uid)}
+            strategy={boardLayout === 'lanes'
+              ? verticalListSortingStrategy
+              : boardLayout === 'grid'
+                ? rectSortingStrategy
+                : horizontalListSortingStrategy}
           >
-            {board.cards.map((card, cardIndex) => {
-              // Section filter — Todos tab hides notes, Notes tab hides everything else
-              const cardType = card.type || 'todo';
-              if (section === 'notes' && cardType !== 'note') return null;
-              if (section === 'todos' && cardType === 'note') return null;
-
-              // In schedule view, hide cards with no tasks in the active bucket.
-              if (scheduleView) {
-                const hasMatch = Object.values(card.tasks || {}).some(
-                  (t) => classifyTask(t) === scheduleView
-                );
-                if (!hasMatch) return null;
-              }
-
-              // In filter mode, hide cards that have zero matching tasks AND
-              // whose title doesn't match either.
-              if (filterMode && query && !query.isEmpty) {
-                const titleHit = matchesCardTitle(card, query);
-                if (!titleHit) {
-                  const hit = card.type === 'note'
-                    ? matchesNote(card, query)
-                    : Object.values(card.tasks || {}).some((t) => matchesTask(t, query));
-                  if (!hit) return null;
-                }
-              }
+            {visibleCardEntries.map(({ card, cardIndex }, visibleIndex) => {
               return (
-              <SortableCardWrapper key={card.uid} uid={card.uid}>
+              <SortableCardWrapper key={card.uid} uid={card.uid} layout={boardLayout}>
                 {({ dragHandleProps }) => (
                   <Card
                     index={cardIndex}
@@ -646,12 +718,13 @@ function Cards({
                     filterMode={filterMode}
                     scheduleView={scheduleView}
                     currentMatchTaskId={currentMatchTaskId}
-                    quickAddSignal={cardIndex === 0 ? quickAddSignal : 0}
+                    quickAddSignal={visibleIndex === 0 ? quickAddSignal : 0}
                     dragHandleProps={dragHandleProps}
                     onMoveToDone={settings.autoMoveDone ? (taskId, taskData) => moveTaskToDone(card.uid, taskId, taskData) : undefined}
                     navigateToNote={navigateToNote}
                     getNoteTitle={getNoteTitle}
                     notes={notesCards}
+                    layout={boardLayout}
                   />
                 )}
               </SortableCardWrapper>

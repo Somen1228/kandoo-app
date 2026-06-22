@@ -370,7 +370,7 @@ body {
   max-width: 98%;
   min-height: 150%;
   margin: 0 auto;
-  padding: 1.25rem 1rem 2.5rem;
+  padding: 1.5rem 3rem 3rem;
   background: var(--theme-bg-card);
   border: 1px solid color-mix(in srgb, var(--theme-border) 82%, var(--theme-text-primary) 8%);
   border-radius: 0.75rem;

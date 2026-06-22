@@ -811,6 +811,10 @@ function BehaviorPanel() {
         <Row title="Move done tasks to Done column" desc="When a task is marked complete, automatically move it to the Done column.">
           <Toggle checked={settings.autoMoveDone} onChange={(v) => setSetting('autoMoveDone', v)} />
         </Row>
+        <Row title="Remember board layout" desc="Per board remembers a different view for each board. All boards uses one shared view everywhere.">
+          <Segmented value={settings.boardLayoutScope} onChange={(v) => setSetting('boardLayoutScope', v)}
+            options={[{ label: 'Per board', value: 'per-board' }, { label: 'All boards', value: 'global' }]} />
+        </Row>
 
       </Section>
       <Section title="Keyboard shortcuts">
