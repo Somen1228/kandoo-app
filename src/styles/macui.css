@@ -554,6 +554,9 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   padding: 16px 24px 6px;
   flex-shrink: 0;
 }
+/* In Notes, the tabs head shares the flush-left edge of the Pages sidebar
+   below it (the sidebar starts at the content edge, not inset). */
+.mac-board-head.is-notes { padding-left: 0; }
 .mac-board-head__meta {
   font-size: 0.78rem;
   color: var(--text-muted);
@@ -566,6 +569,7 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   background: var(--theme-bg-secondary);
   border: 1px solid var(--border-subtle);
   gap: 2px;
+  margin: 0 0 0 10px;
 }
 .mac-segmented__btn {
   display: inline-flex;
@@ -1906,9 +1910,14 @@ html.is-panel-window #root {
   width: 232px;
   min-width: 0;
   flex: 0 0 auto;
+  background: color-mix(in srgb, var(--bg-sidebar) 55%, var(--bg-app));
+  overflow: hidden;
+  transition: width var(--motion-slow) var(--ease-in-out);
+}
+.notes-tree-panel__inner {
   display: flex;
   flex-direction: column;
-  background: color-mix(in srgb, var(--bg-sidebar) 55%, var(--bg-app));
+  height: 100%;
 }
 .notes-tree-resizer {
   position: relative;
@@ -1956,6 +1965,8 @@ html.is-panel-window #root {
   font-size: 0.95rem;
 }
 .notes-tree__head button:hover { background: var(--bg-hover); color: var(--text-primary); }
+.notes-tree__head-actions { display: inline-flex; align-items: center; gap: 2px; }
+.notes-tree__head button:disabled { opacity: 0.32; cursor: default; pointer-events: none; }
 .notes-tree__scroll { flex: 1; overflow-y: auto; padding: 2px 8px 12px; }
 .notes-tree__empty { padding: 16px 12px; color: var(--text-muted); font-size: 0.8rem; }
 .notes-tree__row {
@@ -1971,6 +1982,36 @@ html.is-panel-window #root {
   transition: background var(--motion-fast);
 }
 .notes-tree__row:hover { background: var(--bg-hover); }
+/* The dragged row floats and is kept translucent so it never hides the
+   right-edge "nest inside" accent on the notebook it's hovering over. */
+.notes-tree__row.is-dragging {
+  background: color-mix(in srgb, var(--theme-bg-card) 55%, transparent);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--theme-shadow) 60%, transparent);
+  opacity: 0.6;
+}
+/* Accent line showing a reorder drop (before/after a row, at its depth). */
+.notes-tree__drop-line {
+  height: 2px;
+  margin-right: 8px;
+  border-radius: 2px;
+  background: var(--theme-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--theme-accent) 35%, transparent);
+}
+/* Dragging right onto a row to nest inside it: an accent line down the box's
+   right edge (+ a faint tint) signals "this will go inside here". */
+.notes-tree__row.is-drop-into {
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  box-shadow: inset -3px 0 0 0 var(--theme-accent);
+  border-radius: 6px;
+}
+/* Dragging left to pop out of the parent: accent line down the box's left edge
+   (+ faint tint) signals "this will move out to the parent's level". */
+.notes-tree__row.is-drop-outof {
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  box-shadow: inset 3px 0 0 0 var(--theme-accent);
+  border-radius: 6px;
+}
 .notes-tree__row.is-active {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent);
@@ -1990,6 +2031,18 @@ html.is-panel-window #root {
 }
 .notes-tree__icon { flex-shrink: 0; font-size: 0.9rem; opacity: 0.8; }
 .notes-tree__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notes-tree__rename {
+  flex: 1;
+  min-width: 0;
+  background: var(--theme-bg-input);
+  border: 1px solid var(--theme-accent);
+  border-radius: 5px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: inherit;
+  padding: 1px 5px;
+  outline: none;
+}
 .notes-tree__actions { display: inline-flex; gap: 1px; opacity: 0; transition: opacity var(--motion-fast); }
 .notes-tree__row:hover .notes-tree__actions { opacity: 1; }
 .notes-tree__actions button {
@@ -2006,8 +2059,57 @@ html.is-panel-window #root {
   background: color-mix(in srgb, var(--text-muted) 18%, transparent);
   color: var(--text-primary);
 }
-.notes-canvas-wrap { flex: 1; overflow-y: auto; min-width: 0; }
+/* The canvas is a "desk" surface; the page sits on it as an elevated sheet so
+   the centered paper reads as intentional rather than floating on a blank void. */
+.notes-canvas-wrap {
+  flex: 1;
+  overflow-y: auto;
+  min-width: 0;
+  background: var(--bg-app);
+  padding: 12px 0 28px;
+}
 .notes-canvas-empty { padding: 3rem; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+
+/* Back / forward page navigation */
+.note-canvas__nav {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+.note-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-bg-input);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, opacity 0.12s;
+}
+.note-nav-btn:hover:not(:disabled) {
+  background: var(--theme-bg-hover);
+  color: var(--text-primary);
+}
+.note-nav-btn:disabled { opacity: 0.38; cursor: default; }
+/* Pages-sidebar toggle, sitting just before the back/forward pair. */
+.note-nav-btn--toggle.is-active {
+  background: color-mix(in srgb, var(--theme-accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--theme-accent) 35%, var(--theme-border));
+  color: var(--theme-accent);
+}
+.note-canvas__nav-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 3px;
+  background: var(--theme-border);
+}
+
+/* Notebook (top-level) icon picks up the accent to read as a container. */
+.notes-tree__icon--book { color: var(--theme-accent); }
 
 .note-canvas__meta {
   min-height: 29px;
@@ -2155,6 +2257,7 @@ html.is-panel-window #root {
 [data-density="compact"] .mac-nav-item { padding: 5px 10px; }
 [data-density="compact"] .mac-task { padding: 7px 9px; margin-top: 6px; }
 [data-density="compact"] .mac-board-head { padding: 10px 24px 4px; }
+[data-density="compact"] .mac-board-head.is-notes { padding-left: 0; }
 [data-density="compact"] .mac-board-scroll { padding: 6px 18px 22px; }
 
 /* App-level reduce motion (in addition to the OS preference) */

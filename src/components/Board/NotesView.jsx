@@ -1,14 +1,138 @@
-import { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import { VscAdd, VscTrash, VscChevronRight, VscFile, VscChromeMaximize, VscChromeRestore } from 'react-icons/vsc';
-import { markdownToHtml, isHtml, htmlToText } from '../../utils/htmlEditor';
+import { Suspense, lazy, useEffect, useRef, useState, useMemo, Fragment } from 'react';
+import { VscAdd, VscTrash, VscChevronRight, VscChromeMaximize, VscChromeRestore, VscArrowLeft, VscArrowRight, VscLayoutSidebarLeft } from 'react-icons/vsc';
+import { IoBookOutline, IoDocumentTextOutline, IoArrowUndoOutline, IoArrowRedoOutline } from 'react-icons/io5';
+import { DndContext, PointerSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { restrictToFirstScrollableAncestor } from '@dnd-kit/modifiers';
+
+const NEST_THRESHOLD = 22; // px dragged right before a hover becomes a "nest inside"
+import { CSS } from '@dnd-kit/utilities';
+import { markdownToHtml, isHtml } from '../../utils/htmlEditor';
+
+const INDENT_WIDTH = 14;
+
+// ── Note-tree drag-and-drop helpers (flat array, order = sibling order) ───────
+
+// Flatten the visible tree (collapsed subtrees omitted) into an ordered list.
+function flattenNoteTree(notes, collapsed) {
+  const byParent = new Map();
+  notes.forEach((n) => {
+    const p = n.parentUid || null;
+    if (!byParent.has(p)) byParent.set(p, []);
+    byParent.get(p).push(n);
+  });
+  const out = [];
+  const walk = (parentUid, depth) => {
+    (byParent.get(parentUid) || []).forEach((n) => {
+      const hasKids = (byParent.get(n.uid) || []).length > 0;
+      out.push({ uid: n.uid, parentUid: parentUid || null, depth, hasKids, note: n });
+      if (hasKids && !collapsed.has(n.uid)) walk(n.uid, depth + 1);
+    });
+  };
+  walk(null, 0);
+  return out;
+}
+
+// uids of every descendant of `uid` within a flattened list.
+function descendantUids(flat, uid) {
+  const result = new Set();
+  const addChildren = (parent) => {
+    flat.forEach((f) => {
+      if (f.parentUid === parent && !result.has(f.uid)) { result.add(f.uid); addChildren(f.uid); }
+    });
+  };
+  addChildren(uid);
+  return result;
+}
+
+// Is `maybeUid` a descendant of `ancestorUid`? Used to forbid dropping a
+// notebook into its own subtree.
+function isDescendantOf(notes, ancestorUid, maybeUid) {
+  const byParent = new Map();
+  notes.forEach((n) => {
+    const p = n.parentUid || null;
+    if (!byParent.has(p)) byParent.set(p, []);
+    byParent.get(p).push(n.uid);
+  });
+  const stack = [...(byParent.get(ancestorUid) || [])];
+  while (stack.length) {
+    const cur = stack.pop();
+    if (cur === maybeUid) return true;
+    stack.push(...(byParent.get(cur) || []));
+  }
+  return false;
+}
+
+// Compute the full new uid order for a drop:
+//   'before' / 'after' → reorder as a sibling of `overUid`
+//   'inside'           → nest as the first child of `overUid`
+//   'outdent'          → pop out one level (sibling right after its old parent)
+// Returns { orderedUids, newParent } or null.
+function applyZoneOrder(notes, draggedUid, overUid, mode) {
+  let newParent;
+  let placement; // { type: 'unshift' | 'before' | 'after', uid? }
+  if (mode === 'inside') {
+    if (!notes.find((n) => n.uid === overUid)) return null;
+    newParent = overUid;
+    placement = { type: 'unshift' };
+  } else if (mode === 'outdent') {
+    const dragged = notes.find((n) => n.uid === draggedUid);
+    const oldParentUid = dragged?.parentUid || null;
+    if (!oldParentUid) return null; // already top-level — nothing to come out of
+    const oldParent = notes.find((n) => n.uid === oldParentUid);
+    newParent = oldParent?.parentUid || null;
+    placement = { type: 'after', uid: oldParentUid };
+  } else {
+    const overNote = notes.find((n) => n.uid === overUid);
+    if (!overNote) return null;
+    newParent = overNote.parentUid || null;
+    placement = { type: mode, uid: overUid }; // 'before' | 'after'
+  }
+
+  const childrenOf = new Map();
+  notes.forEach((n) => {
+    const p = n.parentUid || null;
+    if (!childrenOf.has(p)) childrenOf.set(p, []);
+    childrenOf.get(p).push(n.uid);
+  });
+  childrenOf.forEach((list) => {
+    const i = list.indexOf(draggedUid);
+    if (i >= 0) list.splice(i, 1);
+  });
+  if (!childrenOf.has(newParent)) childrenOf.set(newParent, []);
+  const target = childrenOf.get(newParent);
+  if (placement.type === 'unshift') {
+    target.unshift(draggedUid);
+  } else {
+    const idx = target.indexOf(placement.uid);
+    const at = placement.type === 'before' ? Math.max(0, idx) : (idx < 0 ? target.length : idx + 1);
+    target.splice(at, 0, draggedUid);
+  }
+
+  const orderedUids = [];
+  const seen = new Set();
+  const dfs = (parentUid) => {
+    (childrenOf.get(parentUid) || []).forEach((uid) => {
+      if (seen.has(uid)) return;
+      seen.add(uid);
+      orderedUids.push(uid);
+      dfs(uid);
+    });
+  };
+  dfs(null);
+  notes.forEach((n) => { if (!seen.has(n.uid)) { orderedUids.push(n.uid); seen.add(n.uid); } });
+  return { orderedUids, newParent };
+}
 import { useSettings } from '../../contexts/SettingsContext';
 import ContextMenu from '../ContextMenu';
 import NoteExportMenu from './NoteExportMenu';
+import MoveNoteConfirmModal from './MoveNoteConfirmModal';
 
 // TipTap pulls in ProseMirror + lowlight — load it only when Notes is opened.
 const NoteEditor = lazy(() => import('./NoteEditor'));
 
 const NOTES_TREE_WIDTH_KEY = 'kandoo-notes-tree-width';
+const NOTES_TREE_COLLAPSED_KEY = 'kandoo-notes-tree-collapsed';
 const NOTES_TREE_MIN = 180;
 const NOTES_TREE_MAX = 420;
 const NOTES_CANVAS_MIN = 420;
@@ -36,47 +160,88 @@ function relativeTime(ts) {
   return new Date(ts).toLocaleDateString();
 }
 
-// ── Recursive page tree ─────────────────────────────────────────────────────
-function NoteTree({ notes, parentUid, depth, activeUid, collapsed, onToggle, onSelect, onCreate, onDelete, onOpenMenu }) {
-  const items = notes.filter((n) => (n.parentUid || null) === parentUid);
-  return items.map((n) => {
-    const hasKids = notes.some((c) => (c.parentUid || null) === n.uid);
-    const isCollapsed = collapsed.has(n.uid);
-    return (
-      <div key={n.uid}>
-        <div
-          className={`notes-tree__row${n.uid === activeUid ? ' is-active' : ''}`}
-          style={{ paddingLeft: 6 + depth * 14 }}
-          onClick={() => onSelect(n.uid)}
-          onContextMenu={(event) => onOpenMenu(event, n, hasKids, isCollapsed)}
-        >
-          <button
-            type="button"
-            className="notes-tree__caret"
-            style={{ visibility: hasKids ? 'visible' : 'hidden' }}
-            onClick={(e) => { e.stopPropagation(); onToggle(n.uid); }}
-            tabIndex={-1}
-            aria-label={isCollapsed ? 'Expand' : 'Collapse'}
-          >
-            <VscChevronRight style={{ transform: isCollapsed ? 'none' : 'rotate(90deg)', transition: 'transform 0.12s' }} />
-          </button>
-          <VscFile className="notes-tree__icon" />
-          <span className="notes-tree__title">{n.title?.trim() || 'Untitled'}</span>
-          <span className="notes-tree__actions">
-            <button type="button" onClick={(e) => { e.stopPropagation(); onToggle(n.uid, true); onCreate(n.uid, true); }} title="Add sub-page"><VscAdd /></button>
-            <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(n.uid); }} title="Delete page"><VscTrash /></button>
-          </span>
-        </div>
-        {hasKids && !isCollapsed && (
-          <NoteTree
-            notes={notes} parentUid={n.uid} depth={depth + 1} activeUid={activeUid}
-            collapsed={collapsed} onToggle={onToggle} onSelect={onSelect} onCreate={onCreate} onDelete={onDelete}
-            onOpenMenu={onOpenMenu}
-          />
-        )}
-      </div>
-    );
+// Document metrics for the meta line — words, lines (text blocks), characters
+// and an estimated reading time (~200 wpm).
+function noteMetrics(html) {
+  const div = document.createElement('div');
+  div.innerHTML = html || '';
+  const text = div.textContent || '';
+  const words = (text.match(/\S+/g) || []).length;
+  const characters = text.trim().length;
+  let lines = 0;
+  div.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, blockquote, pre').forEach((b) => {
+    if ((b.textContent || '').trim()) lines += 1;
   });
+  return { words, characters, lines, readingMin: words ? Math.max(1, Math.round(words / 200)) : 0 };
+}
+
+// ── Sortable tree row (drag to reorder / reparent) ──────────────────────────
+function SortableNoteRow({ item, activeUid, isDropInto, isDropOutOf, isCollapsed, editingUid, onSelect, onToggle, onCreate, onDelete, onOpenMenu, onStartRename, onRename }) {
+  const { uid, depth, hasKids, note } = item;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: uid });
+  // Vertical-only drag (locked by the modifier); only the dragged row moves, so
+  // the drop target never slides away.
+  const style = {
+    transform: isDragging ? CSS.Translate.toString(transform) : undefined,
+    transition: isDragging ? transition : undefined,
+    paddingLeft: 6 + depth * INDENT_WIDTH,
+    position: 'relative',
+    zIndex: isDragging ? 5 : undefined,
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      className={`notes-tree__row${uid === activeUid ? ' is-active' : ''}${isDragging ? ' is-dragging' : ''}${isDropInto ? ' is-drop-into' : ''}${isDropOutOf ? ' is-drop-outof' : ''}`}
+      style={style}
+      onClick={() => onSelect(uid)}
+      onContextMenu={(event) => onOpenMenu(event, note, hasKids, isCollapsed)}
+      {...attributes}
+      {...listeners}
+    >
+      <button
+        type="button"
+        className="notes-tree__caret"
+        style={{ visibility: hasKids ? 'visible' : 'hidden' }}
+        onClick={(e) => { e.stopPropagation(); onToggle(uid); }}
+        onPointerDown={(e) => e.stopPropagation()}
+        tabIndex={-1}
+        aria-label={isCollapsed ? 'Expand' : 'Collapse'}
+      >
+        <VscChevronRight style={{ transform: isCollapsed ? 'none' : 'rotate(90deg)', transition: 'transform 0.12s' }} />
+      </button>
+      {depth === 0
+        ? <IoBookOutline className="notes-tree__icon notes-tree__icon--book" />
+        : <IoDocumentTextOutline className="notes-tree__icon" />}
+      {editingUid === uid ? (
+        <input
+          className="notes-tree__rename"
+          autoFocus
+          defaultValue={note.title || ''}
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          onFocus={(e) => e.target.select()}
+          onBlur={(e) => onRename(uid, e.target.value)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); }
+            if (e.key === 'Escape') { e.preventDefault(); onRename(uid, note.title || ''); }
+          }}
+        />
+      ) : (
+        <span
+          className="notes-tree__title"
+          onDoubleClick={(e) => { e.stopPropagation(); onStartRename(uid); }}
+          title="Double-click to rename · drag to move"
+        >
+          {note.title?.trim() || 'Untitled'}
+        </span>
+      )}
+      <span className="notes-tree__actions">
+        <button type="button" onClick={(e) => { e.stopPropagation(); onToggle(uid, true); onCreate(uid, true); }} onPointerDown={(e) => e.stopPropagation()} title="Add sub-page"><VscAdd /></button>
+        <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(uid); }} onPointerDown={(e) => e.stopPropagation()} title="Delete page"><VscTrash /></button>
+      </span>
+    </div>
+  );
 }
 
 // ── Editable page title ─────────────────────────────────────────────────────
@@ -121,7 +286,7 @@ function PageTitle({ value, onChange }) {
 }
 
 // ── Active-page canvas ──────────────────────────────────────────────────────
-function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateChild, onNavigate, onSendListToBoard }) {
+function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateChild, onNavigate, onSendListToBoard, onBack, onForward, canBack, canForward, treeCollapsed, onToggleTree }) {
   const { settings } = useSettings();
   const [paperless, setPaperless] = useState(settings.noteDefaultView === 'wide');
   const togglePaperless = () => setPaperless((p) => !p);
@@ -140,19 +305,39 @@ function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateC
 
   const handleContent = (html) => updateCardNote(index, { ...safeNote, content: html, images: [] });
   const handleTitle = (newTitle) => updateCards((cards) => cards.map((c) => (c.uid === card.uid ? { ...c, title: newTitle } : c)));
-  const charCount = htmlToText(safeNote.content || '').length;
+  const metrics = noteMetrics(safeNote.content || '');
 
   return (
     <div
       key={card.uid}
       className={paperless ? 'note-canvas' : 'note-canvas note-paper'}
     >
+      <div className="note-canvas__nav">
+        <button type="button" className={`note-nav-btn note-nav-btn--toggle${treeCollapsed ? ' is-active' : ''}`} onClick={onToggleTree} title={treeCollapsed ? 'Show pages' : 'Hide pages'} aria-label="Toggle pages sidebar" aria-pressed={!treeCollapsed}>
+          <VscLayoutSidebarLeft />
+        </button>
+        <span className="note-canvas__nav-sep" />
+        <button type="button" className="note-nav-btn" onClick={onBack} disabled={!canBack} title="Back" aria-label="Back">
+          <VscArrowLeft />
+        </button>
+        <button type="button" className="note-nav-btn" onClick={onForward} disabled={!canForward} title="Forward" aria-label="Forward">
+          <VscArrowRight />
+        </button>
+      </div>
+
       <PageTitle value={card.title} onChange={handleTitle} />
 
       <div className="note-canvas__meta">
         <span>
           {safeNote.updatedAt && `Edited ${relativeTime(safeNote.updatedAt)}`}
-          {charCount > 0 && <span> · {charCount} character{charCount === 1 ? '' : 's'}</span>}
+          {metrics.words > 0 && (
+            <span title={`${metrics.words} words · ${metrics.lines} lines · ${metrics.characters} characters · ~${metrics.readingMin} min read`}>
+              {' · '}{metrics.words} word{metrics.words === 1 ? '' : 's'}
+              {' · '}{metrics.lines} line{metrics.lines === 1 ? '' : 's'}
+              {' · '}{metrics.characters} char{metrics.characters === 1 ? '' : 's'}
+              {' · ~'}{metrics.readingMin} min read
+            </span>
+          )}
         </span>
         <div className="note-canvas__actions">
           <NoteExportMenu title={card.title?.trim() || 'Untitled'} html={initialContent} />
@@ -187,10 +372,249 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
   const activeIndex = activeCard ? allCards.findIndex((c) => c.uid === activeCard.uid) : -1;
   const [collapsed, setCollapsed] = useState(() => new Set());
   const [pageContextMenu, setPageContextMenu] = useState(null);
+  const [editingUid, setEditingUid] = useState(null);
+
+  const renameNote = (uid, title) => {
+    const t = (title || '').trim();
+    if (t) updateCards((cards) => cards.map((c) => (c.uid === uid ? { ...c, title: t } : c)));
+    setEditingUid(null);
+  };
+
+  // ── Tree drag-and-drop (vertical-locked; hover top/middle/bottom of a row to
+  //    drop before / inside / after it) ─────────────────────────────────────────
+  const [activeId, setActiveId]     = useState(null);
+  const [dropTarget, setDropTarget] = useState(null); // { overUid, mode: 'before'|'inside'|'after' }
+  const [pendingMove, setPendingMove] = useState(null); // reparent awaiting confirmation
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  // The boundary modifier clamps the dragged row to the narrow sidebar, so its
+  // delta.x can't grow — track the raw pointer X to detect rightward "nest" intent.
+  const dragStartXRef = useRef(0);
+  const dragXRef = useRef(0);
+  useEffect(() => {
+    if (!activeId) return undefined;
+    const onMove = (e) => { dragXRef.current = e.clientX; };
+    window.addEventListener('pointermove', onMove, { passive: true });
+    return () => window.removeEventListener('pointermove', onMove);
+  }, [activeId]);
+
+  const flattened = useMemo(() => flattenNoteTree(notes, collapsed), [notes, collapsed]);
+  const flattenedTrimmed = useMemo(() => {
+    if (!activeId) return flattened;
+    const desc = descendantUids(flattened, activeId); // hide the dragged subtree
+    return flattened.filter((f) => !desc.has(f.uid));
+  }, [flattened, activeId]);
+  const sortableUids = useMemo(() => flattenedTrimmed.map((f) => f.uid), [flattenedTrimmed]);
+
+  const resetDrag = () => { setActiveId(null); setDropTarget(null); };
+
+  const reorderNotes = (orderedUids, draggedUid, newParentUid) => {
+    updateCards((cards) => {
+      const noteCards = cards.filter((c) => (c.type || 'todo') === 'note');
+      // Safety net: only apply when the new order is an exact permutation of the
+      // notes (no missing/duplicate uids) — so a logic slip can never drop a note.
+      if (!orderedUids || orderedUids.length !== noteCards.length || new Set(orderedUids).size !== noteCards.length) return cards;
+      const noteMap = new Map(noteCards.map((c) => [c.uid, c]));
+      if (!noteMap.has(draggedUid)) return cards;
+      noteMap.set(draggedUid, { ...noteMap.get(draggedUid), parentUid: newParentUid || null });
+      let i = 0;
+      return cards.map((c) => ((c.type || 'todo') === 'note' ? noteMap.get(orderedUids[i++]) : c));
+    });
+  };
+
+  // ── Move history (undo / redo for drag reparents & reorders) ────────────────
+  // Always read the freshest notes (event handlers can hold stale closures).
+  const notesRef = useRef(notes);
+  useEffect(() => { notesRef.current = notes; });
+  const undoRef = useRef([]);
+  const redoRef = useRef([]);
+  const [history, setHistory] = useState({ canUndo: false, canRedo: false });
+  const syncHistory = () => setHistory({ canUndo: undoRef.current.length > 0, canRedo: redoRef.current.length > 0 });
+
+  // A snapshot of the note order + each note's parent — enough to fully restore.
+  const captureLayout = () => {
+    const ns = notesRef.current;
+    return {
+      order: ns.map((n) => n.uid),
+      parents: Object.fromEntries(ns.map((n) => [n.uid, n.parentUid || null])),
+    };
+  };
+
+  // Re-apply a captured layout. Bails if it no longer matches the current notes
+  // (e.g. a page was added/removed) so a stale snapshot can't corrupt state.
+  const restoreLayout = (snap) => {
+    updateCards((cards) => {
+      const noteCards = cards.filter((c) => (c.type || 'todo') === 'note');
+      const curUids = new Set(noteCards.map((c) => c.uid));
+      if (snap.order.length !== noteCards.length || !snap.order.every((u) => curUids.has(u))) return cards;
+      const noteMap = new Map(noteCards.map((c) => [c.uid, c]));
+      snap.order.forEach((uid) => { noteMap.set(uid, { ...noteMap.get(uid), parentUid: snap.parents[uid] ?? null }); });
+      let i = 0;
+      return cards.map((c) => ((c.type || 'todo') === 'note' ? noteMap.get(snap.order[i++]) : c));
+    });
+  };
+
+  // Apply a move and record it so it can be undone. `revealUid` (a new parent)
+  // is expanded so the moved page stays visible.
+  const commitMove = (orderedUids, draggedUid, newParent, revealUid) => {
+    undoRef.current = [...undoRef.current, captureLayout()].slice(-50);
+    redoRef.current = [];
+    reorderNotes(orderedUids, draggedUid, newParent);
+    if (revealUid) onToggle(revealUid, true);
+    syncHistory();
+  };
+
+  const undoMove = () => {
+    if (!undoRef.current.length) return;
+    const target = undoRef.current[undoRef.current.length - 1];
+    undoRef.current = undoRef.current.slice(0, -1);
+    redoRef.current = [...redoRef.current, captureLayout()].slice(-50);
+    restoreLayout(target);
+    syncHistory();
+  };
+
+  const redoMove = () => {
+    if (!redoRef.current.length) return;
+    const target = redoRef.current[redoRef.current.length - 1];
+    redoRef.current = redoRef.current.slice(0, -1);
+    undoRef.current = [...undoRef.current, captureLayout()].slice(-50);
+    restoreLayout(target);
+    syncHistory();
+  };
+
+  // Adding/removing a page invalidates the snapshots — start history fresh.
+  const noteCount = notes.length;
+  useEffect(() => {
+    undoRef.current = [];
+    redoRef.current = [];
+    syncHistory();
+  }, [noteCount]);
+
+  // ⌘Z / ⌘⇧Z (and ⌘Y) undo & redo moves — but never while typing in the editor
+  // or an input, where those keys belong to the text editor's own history.
+  const movesRef = useRef({ undo: undoMove, redo: redoMove });
+  useEffect(() => { movesRef.current = { undo: undoMove, redo: redoMove }; });
+  const pendingMoveRef = useRef(null);
+  useEffect(() => { pendingMoveRef.current = pendingMove; }, [pendingMove]);
+  useEffect(() => {
+    const onKey = (e) => {
+      if (pendingMoveRef.current) return; // a confirm dialog owns the keyboard
+      const meta = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
+      if (!meta || (key !== 'z' && key !== 'y')) return;
+      const el = document.activeElement;
+      if (el && (el.isContentEditable || el.closest?.('.ProseMirror, input, textarea, [contenteditable="true"]'))) return;
+      const isRedo = key === 'y' || (key === 'z' && e.shiftKey);
+      if (isRedo) { if (redoRef.current.length) { e.preventDefault(); movesRef.current.redo(); } }
+      else if (undoRef.current.length) { e.preventDefault(); movesRef.current.undo(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Drag right onto a row → nest inside it; drag left → pop out of the parent;
+  // otherwise reorder before/after by vertical position. (Only the dragged row
+  // moves; targets stay put.)
+  const onDragMove = ({ active, over }) => {
+    const rawDeltaX = dragXRef.current - dragStartXRef.current;
+    const dragged = notes.find((n) => n.uid === active.id);
+    // Leftward pull out of the parent — works even when hovering its own row.
+    if (rawDeltaX < -NEST_THRESHOLD && dragged?.parentUid) {
+      setDropTarget({ mode: 'outdent', overUid: over?.id ?? null, outOfUid: dragged.parentUid });
+      return;
+    }
+    if (!over || over.id === active.id) { setDropTarget(null); return; }
+    if (rawDeltaX > NEST_THRESHOLD && !isDescendantOf(notes, active.id, over.id)) {
+      setDropTarget({ overUid: over.id, mode: 'inside' });
+      return;
+    }
+    const aRect = active.rect.current.translated;
+    const oRect = over.rect;
+    const ratio = (aRect && oRect) ? (aRect.top + aRect.height / 2 - oRect.top) / oRect.height : 0.5;
+    setDropTarget({ overUid: over.id, mode: ratio < 0.5 ? 'before' : 'after' });
+  };
+
+  const onDragEnd = ({ active, over }) => {
+    const dt = dropTarget;
+    let res = null;
+    if (dt && dt.mode === 'outdent') {
+      res = applyZoneOrder(notes, active.id, null, 'outdent');
+    } else if (over && over.id !== active.id && dt && dt.overUid === over.id
+               && !(dt.mode === 'inside' && isDescendantOf(notes, active.id, over.id))) {
+      res = applyZoneOrder(notes, active.id, dt.overUid, dt.mode);
+    }
+    if (res) {
+      const dragged = notes.find((n) => n.uid === active.id);
+      const curParent = dragged?.parentUid || null;
+      const newParent = res.newParent || null;
+      const revealUid = dt.mode === 'inside' ? dt.overUid : null;
+      if (newParent !== curParent) {
+        // Reparenting — confirm before moving the page under (or out of) another.
+        setPendingMove({
+          draggedUid: active.id,
+          draggedTitle: dragged?.title?.trim() || 'Untitled',
+          orderedUids: res.orderedUids,
+          newParent,
+          newParentTitle: newParent ? (notes.find((n) => n.uid === newParent)?.title?.trim() || 'Untitled') : null,
+          revealUid,
+        });
+      } else {
+        // Same parent — just a reorder; apply directly (still undoable).
+        commitMove(res.orderedUids, active.id, newParent, revealUid);
+      }
+    }
+    resetDrag();
+  };
+
+  const confirmPendingMove = () => {
+    if (!pendingMove) return;
+    commitMove(pendingMove.orderedUids, pendingMove.draggedUid, pendingMove.newParent, pendingMove.revealUid);
+    setPendingMove(null);
+  };
+
   const [treeWidth, setTreeWidth] = useState(initialNotesTreeWidth);
   const [isTreeResizing, setIsTreeResizing] = useState(false);
+  const [treeCollapsed, setTreeCollapsed] = useState(() => {
+    try { return localStorage.getItem(NOTES_TREE_COLLAPSED_KEY) === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(NOTES_TREE_COLLAPSED_KEY, treeCollapsed ? '1' : '0'); } catch { /* storage unavailable */ }
+  }, [treeCollapsed]);
   const layoutRef = useRef(null);
   const resizeCleanupRef = useRef(null);
+
+  // ── Back/forward page-navigation history ────────────────────────────────────
+  const historyRef = useRef({ stack: [], index: -1 });
+  const navLockRef  = useRef(false); // true while a back/forward jump is in flight
+  const [navState, setNavState] = useState({ canBack: false, canForward: false });
+
+  useEffect(() => {
+    if (!activeUid) return;
+    const h = historyRef.current;
+    if (navLockRef.current) {
+      navLockRef.current = false; // jump came from a back/forward button — don't re-record
+    } else if (h.stack[h.index] !== activeUid) {
+      h.stack = h.stack.slice(0, h.index + 1); // truncate any forward history
+      h.stack.push(activeUid);
+      h.index = h.stack.length - 1;
+    }
+    setNavState({ canBack: h.index > 0, canForward: h.index < h.stack.length - 1 });
+  }, [activeUid]);
+
+  const goBack = () => {
+    const h = historyRef.current;
+    if (h.index <= 0) return;
+    h.index -= 1;
+    navLockRef.current = true;
+    onSelectNote(h.stack[h.index]);
+  };
+  const goForward = () => {
+    const h = historyRef.current;
+    if (h.index >= h.stack.length - 1) return;
+    h.index += 1;
+    navLockRef.current = true;
+    onSelectNote(h.stack[h.index]);
+  };
 
   const maxTreeWidth = () => {
     const layoutWidth = layoutRef.current?.getBoundingClientRect().width || NOTES_TREE_MAX + NOTES_CANVAS_MIN;
@@ -283,6 +707,7 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
     event.stopPropagation();
     const items = [
       { label: 'Open page', onClick: () => onSelectNote(note.uid) },
+      { label: 'Rename', onClick: () => setEditingUid(note.uid) },
       { label: 'New sub-page', onClick: () => { onToggle(note.uid, true); onCreateNote(note.uid, true); } },
     ];
     if (hasKids) {
@@ -295,39 +720,83 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
 
   return (
     <div ref={layoutRef} className="notes-layout">
-      <aside className="notes-tree-panel" style={{ width: treeWidth }}>
+      <aside className={`notes-tree-panel${treeCollapsed ? ' is-collapsed' : ''}`} style={{ width: treeCollapsed ? 0 : treeWidth, transition: isTreeResizing ? 'none' : undefined }}>
+        <div className="notes-tree-panel__inner" style={{ width: treeWidth, minWidth: treeWidth }}>
         <div className="notes-tree__head">
           <span>Pages</span>
-          <button type="button" onClick={() => onCreateNote(null, true)} title="New page" aria-label="New page"><VscAdd /></button>
+          <div className="notes-tree__head-actions">
+            <button type="button" onClick={undoMove} disabled={!history.canUndo} title="Undo move (⌘Z)" aria-label="Undo move"><IoArrowUndoOutline /></button>
+            <button type="button" onClick={redoMove} disabled={!history.canRedo} title="Redo move (⌘⇧Z)" aria-label="Redo move"><IoArrowRedoOutline /></button>
+            <button type="button" onClick={() => onCreateNote(null, true)} title="New page" aria-label="New page"><VscAdd /></button>
+          </div>
         </div>
         <div className="notes-tree__scroll">
           {notes.length === 0 ? (
             <div className="notes-tree__empty">No pages yet</div>
           ) : (
-            <NoteTree
-              notes={notes} parentUid={null} depth={0} activeUid={activeUid}
-              collapsed={collapsed} onToggle={onToggle} onSelect={onSelectNote}
-              onCreate={onCreateNote} onDelete={onDeleteNote}
-              onOpenMenu={openPageContextMenu}
-            />
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              modifiers={[restrictToFirstScrollableAncestor]}
+              onDragStart={({ active, activatorEvent }) => {
+                setActiveId(active.id);
+                const x = activatorEvent && 'clientX' in activatorEvent ? activatorEvent.clientX : 0;
+                dragStartXRef.current = x;
+                dragXRef.current = x;
+              }}
+              onDragMove={onDragMove}
+              onDragEnd={onDragEnd}
+              onDragCancel={resetDrag}
+            >
+              <SortableContext items={sortableUids} strategy={verticalListSortingStrategy}>
+                {flattenedTrimmed.map((item) => (
+                  <Fragment key={item.uid}>
+                    {dropTarget && dropTarget.overUid === item.uid && dropTarget.mode === 'before' && (
+                      <div className="notes-tree__drop-line" style={{ marginLeft: 6 + item.depth * INDENT_WIDTH }} />
+                    )}
+                    <SortableNoteRow
+                      item={item}
+                      activeUid={activeUid}
+                      isDropInto={!!dropTarget && dropTarget.overUid === item.uid && dropTarget.mode === 'inside'}
+                      isDropOutOf={!!dropTarget && dropTarget.mode === 'outdent' && dropTarget.outOfUid === item.uid}
+                      isCollapsed={collapsed.has(item.uid)}
+                      editingUid={editingUid}
+                      onSelect={onSelectNote}
+                      onToggle={onToggle}
+                      onCreate={onCreateNote}
+                      onDelete={onDeleteNote}
+                      onOpenMenu={openPageContextMenu}
+                      onStartRename={setEditingUid}
+                      onRename={renameNote}
+                    />
+                    {dropTarget && dropTarget.overUid === item.uid && dropTarget.mode === 'after' && (
+                      <div className="notes-tree__drop-line" style={{ marginLeft: 6 + item.depth * INDENT_WIDTH }} />
+                    )}
+                  </Fragment>
+                ))}
+              </SortableContext>
+            </DndContext>
           )}
+        </div>
         </div>
       </aside>
 
-      <div
-        className={`notes-tree-resizer${isTreeResizing ? ' is-resizing' : ''}`}
-        role="separator"
-        aria-label="Resize notes sidebar"
-        aria-orientation="vertical"
-        aria-valuemin={NOTES_TREE_MIN}
-        aria-valuemax={NOTES_TREE_MAX}
-        aria-valuenow={Math.round(treeWidth)}
-        aria-controls="notes-canvas-pane"
-        tabIndex={0}
-        title="Drag to resize the notes sidebar"
-        onPointerDown={startTreeResize}
-        onKeyDown={resizeTreeWithKeyboard}
-      />
+      {!treeCollapsed && (
+        <div
+          className={`notes-tree-resizer${isTreeResizing ? ' is-resizing' : ''}`}
+          role="separator"
+          aria-label="Resize notes sidebar"
+          aria-orientation="vertical"
+          aria-valuemin={NOTES_TREE_MIN}
+          aria-valuemax={NOTES_TREE_MAX}
+          aria-valuenow={Math.round(treeWidth)}
+          aria-controls="notes-canvas-pane"
+          tabIndex={0}
+          title="Drag to resize the notes sidebar"
+          onPointerDown={startTreeResize}
+          onKeyDown={resizeTreeWithKeyboard}
+        />
+      )}
 
       <div id="notes-canvas-pane" className="notes-canvas-wrap">
         {activeCard && activeIndex >= 0 ? (
@@ -340,6 +809,12 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
             onCreateChild={onCreateNote}
             onNavigate={onSelectNote}
             onSendListToBoard={onSendListToBoard}
+            onBack={goBack}
+            onForward={goForward}
+            canBack={navState.canBack}
+            canForward={navState.canForward}
+            treeCollapsed={treeCollapsed}
+            onToggleTree={() => setTreeCollapsed((c) => !c)}
           />
         ) : (
           <div className="notes-canvas-empty">Creating a new page…</div>
@@ -348,6 +823,14 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
       {pageContextMenu && (
         <ContextMenu x={pageContextMenu.x} y={pageContextMenu.y}
           items={pageContextMenu.items} onClose={() => setPageContextMenu(null)} />
+      )}
+      {pendingMove && (
+        <MoveNoteConfirmModal
+          title={pendingMove.draggedTitle}
+          destinationTitle={pendingMove.newParentTitle}
+          onConfirm={confirmPendingMove}
+          onCancel={() => setPendingMove(null)}
+        />
       )}
     </div>
   );

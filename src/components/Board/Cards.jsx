@@ -27,6 +27,7 @@ import {
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { restrictToFirstScrollableAncestor } from "@dnd-kit/modifiers";
 import Card from "./Card";
 import NotesView from "./NotesView";
 import { matchesTask, matchesCardTitle, matchesNote } from "../../utils/search";
@@ -517,7 +518,7 @@ function Cards({
   return (
     <div className="mac-board">
       {/* Board header — segmented control + metadata */}
-      <div className="mac-board-head">
+      <div className={`mac-board-head${section === 'notes' ? ' is-notes' : ''}`}>
         <div className="mac-segmented" role="tablist" aria-label="Board section">
           <button
             role="tab"
@@ -586,6 +587,7 @@ function Cards({
         <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
+        modifiers={[restrictToFirstScrollableAncestor]}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}

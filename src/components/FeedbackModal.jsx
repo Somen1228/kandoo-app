@@ -33,7 +33,7 @@ export default function FeedbackModal({ isOpen, onClose }) {
 
   const handleSubmit = () => {
     if (!message.trim()) {
-      toast.warning('Please write something before sending.');
+      toast.error('Please write something before sending.');
       return;
     }
     const categoryLabel = CATEGORIES.find(c => c.id === category)?.label || category;
