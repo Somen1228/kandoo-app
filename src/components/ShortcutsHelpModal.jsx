@@ -5,12 +5,21 @@ const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigat
 const mod = isMac ? '⌘' : 'Ctrl';
 
 const SHORTCUTS = [
+  { group: 'Command chord — works anywhere, even while typing', items: [
+    { keys: [mod, 'J', '→', 'F'], desc: 'Focus search' },
+    { keys: [mod, 'J', '→', 'N'], desc: 'Quick-add task' },
+    { keys: [mod, 'J', '→', 'T'], desc: 'Cycle to next theme' },
+    { keys: [mod, 'J', '→', 'B'], desc: 'Toggle sidebar' },
+    { keys: [mod, 'J', '→', 'S'], desc: 'Switch Tasks / Notes' },
+    { keys: [mod, 'J', '→', 'H'], desc: 'Open Help guide' },
+    { keys: [mod, 'J', '→', 'K'], desc: 'Show this shortcuts panel' },
+  ]},
   { group: 'Navigation', items: [
     { keys: [mod, 'K'], desc: 'Focus search' },
     { keys: ['/'], desc: 'Focus search' },
     { keys: ['Esc'], desc: 'Close any open modal or menu' },
   ]},
-  { group: 'Actions', items: [
+  { group: 'Quick keys — on the board (not while typing)', items: [
     { keys: ['N'], desc: 'Quick-add task to active board' },
     { keys: ['T'], desc: 'Cycle to next theme' },
     { keys: ['?'], desc: 'Show this shortcuts panel' },
@@ -101,9 +110,11 @@ function ShortcutsHelpModal({ onClose }) {
                     <span className="text-sm" style={{ color: 'var(--theme-text-secondary)' }}>
                       {item.desc}
                     </span>
-                    <span className="flex gap-1">
+                    <span className="flex gap-1 items-center">
                       {item.keys.map((k, j) => (
-                        <Key key={j}>{k}</Key>
+                        k === '→'
+                          ? <span key={j} style={{ color: 'var(--theme-text-muted)' }}>→</span>
+                          : <Key key={j}>{k}</Key>
                       ))}
                     </span>
                   </li>

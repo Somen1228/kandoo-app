@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { VscClose, VscBug, VscLightbulb, VscCommentDiscussion } from 'react-icons/vsc';
 import { toast } from '../utils/toast';
+import { useAuth } from '../contexts/AuthContext';
+
+const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
 const CATEGORIES = [
   { id: 'bug',     label: 'Bug Report',      icon: VscBug },
@@ -8,9 +11,18 @@ const CATEGORIES = [
   { id: 'general', label: 'General Feedback', icon: VscCommentDiscussion },
 ];
 
+// Web3Forms delivers the submission straight to the owner's inbox — no backend,
+// works in both the web build and the Tauri webview (a plain fetch, unlike
+// mailto: which the webview swallows). The access key is a public submit key.
+const WEB3FORMS_ENDPOINT = 'https://api.web3forms.com/submit';
+const WEB3FORMS_ACCESS_KEY = import.meta.env.VITE_WEB3FORMS_ACCESS_KEY?.trim() || '';
+
 export default function FeedbackModal({ isOpen, onClose }) {
+  const { user } = useAuth();
   const [category, setCategory] = useState('general');
   const [message, setMessage]   = useState('');
+  const [email, setEmail]       = useState('');
+  const [sending, setSending]   = useState(false);
   const overlayRef = useRef(null);
   const textareaRef = useRef(null);
 
@@ -18,9 +30,11 @@ export default function FeedbackModal({ isOpen, onClose }) {
     if (isOpen) {
       setMessage('');
       setCategory('general');
+      setEmail(user?.email || ''); // pre-fill for signed-in users; guests can type one
+      setSending(false);
       setTimeout(() => textareaRef.current?.focus(), 50);
     }
-  }, [isOpen]);
+  }, [isOpen, user?.email]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -31,17 +45,50 @@ export default function FeedbackModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (sending) return;
     if (!message.trim()) {
       toast.warning('Please write something before sending.');
       return;
     }
+    if (!WEB3FORMS_ACCESS_KEY) {
+      toast.error('Feedback isn’t configured yet (missing access key).');
+      return;
+    }
+    const contactEmail = email.trim();
+    if (contactEmail && !isValidEmail(contactEmail)) {
+      toast.warning('That email doesn’t look right — fix it or clear it.');
+      return;
+    }
     const categoryLabel = CATEGORIES.find(c => c.id === category)?.label || category;
-    const subject = encodeURIComponent(`Kandoo Feedback — ${categoryLabel}`);
-    const body = encodeURIComponent(`Category: ${categoryLabel}\n\n${message.trim()}`);
-    window.open(`mailto:somen1228@gmail.com?subject=${subject}&body=${body}`, '_blank');
-    toast.success('Opening your mail client…');
-    onClose();
+    setSending(true);
+    try {
+      const res = await fetch(WEB3FORMS_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          access_key: WEB3FORMS_ACCESS_KEY,
+          subject: `Kandoo Feedback — ${categoryLabel}`,
+          from_name: user?.displayName || contactEmail || 'Kandoo Feedback',
+          // Reply-To so you can answer the sender straight from your inbox.
+          ...(contactEmail ? { email: contactEmail, replyto: contactEmail } : {}),
+          category: categoryLabel,
+          sender_account: user ? `${user.displayName || ''} <${user.email || ''}> (uid: ${user.uid})` : 'Guest (not signed in)',
+          message: message.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        toast.success('Thanks! Your feedback was sent.');
+        onClose();
+      } else {
+        toast.error(data.message || 'Could not send feedback. Please try again.');
+      }
+    } catch {
+      toast.error('Network error — could not send feedback. Please try again.');
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -146,8 +193,32 @@ export default function FeedbackModal({ isOpen, onClose }) {
             onBlur={e => e.target.style.borderColor = 'var(--theme-border)'}
           />
 
+          {/* Reply-to email — pre-filled when signed in, optional for guests */}
+          <input
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="Your email (optional, so we can reply)"
+            style={{
+              width: '100%', boxSizing: 'border-box',
+              background: 'var(--theme-bg-input)',
+              border: '1px solid var(--theme-border)',
+              borderRadius: 10,
+              color: 'var(--theme-text-primary)',
+              fontSize: '0.875rem',
+              fontFamily: 'inherit',
+              padding: '9px 12px',
+              outline: 'none',
+              transition: 'border-color 0.15s',
+            }}
+            onFocus={e => e.target.style.borderColor = 'var(--theme-accent)'}
+            onBlur={e => e.target.style.borderColor = 'var(--theme-border)'}
+          />
+
           <div style={{ fontSize: '0.75rem', color: 'var(--theme-text-muted)' }}>
-            This will open your mail client with your feedback pre-filled.
+            {email.trim()
+              ? 'We’ll reply to the email above.'
+              : 'Add your email if you’d like a reply — otherwise it’s anonymous.'}
           </div>
         </div>
 
@@ -169,15 +240,18 @@ export default function FeedbackModal({ isOpen, onClose }) {
           </button>
           <button
             onClick={handleSubmit}
+            disabled={sending}
             style={{
               padding: '8px 22px', borderRadius: 8,
               border: 'none',
               background: 'var(--theme-accent)', color: '#fff',
-              fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer',
+              fontSize: '0.875rem', fontWeight: 600,
+              cursor: sending ? 'default' : 'pointer',
+              opacity: sending ? 0.7 : 1,
               boxShadow: '0 2px 8px color-mix(in srgb, var(--theme-accent) 40%, transparent)',
             }}
           >
-            Send Feedback
+            {sending ? 'Sending…' : 'Send Feedback'}
           </button>
         </div>
       </div>
