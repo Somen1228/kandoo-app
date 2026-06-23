@@ -1548,7 +1548,7 @@ html.is-panel-window #root {
   margin-bottom: 8px;
   overflow: hidden;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  border-radius: var(--board-corner);
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent 42%),
     var(--note-toolbar-bg);
@@ -1595,12 +1595,12 @@ html.is-panel-window #root {
 }
 .note-tb__overflow--left {
   left: 0;
-  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+  border-radius: var(--board-corner) 0 0 var(--board-corner);
   background: linear-gradient(to right, var(--note-toolbar-bg) 62%, transparent);
 }
 .note-tb__overflow--right {
   right: 0;
-  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  border-radius: 0 var(--board-corner) var(--board-corner) 0;
   background: linear-gradient(to left, var(--note-toolbar-bg) 62%, transparent);
 }
 .note-tb__overflow:hover { color: var(--accent); filter: brightness(1.08); }
@@ -1613,7 +1613,7 @@ html.is-panel-window #root {
   padding: 0 6px;
   border: 1px solid transparent;
   background: transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--board-corner);
   color: var(--text-secondary);
   font-size: 0.95rem;
   cursor: pointer;
@@ -1637,7 +1637,7 @@ html.is-panel-window #root {
   border: 1px solid var(--border-subtle);
   background: color-mix(in srgb, var(--theme-bg-input) 88%, transparent);
   color: var(--text-primary);
-  border-radius: 8px;
+  border-radius: var(--board-corner);
   font-size: 0.78rem;
   padding: 0 8px 0 10px;
   cursor: pointer;
@@ -1678,7 +1678,7 @@ html.is-panel-window #root {
   z-index: var(--z-popover);
   padding: 7px;
   border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border-subtle));
-  border-radius: var(--radius-lg);
+  border-radius: var(--board-corner);
   background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
   box-shadow: var(--shadow-pop), inset 0 1px 0 color-mix(in srgb, #fff 35%, transparent);
   backdrop-filter: blur(18px) saturate(1.35);
@@ -1714,7 +1714,7 @@ html.is-panel-window #root {
   margin: 2px 2px 7px;
   padding: 0 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: 9px;
+  border-radius: var(--board-corner);
   background: var(--theme-bg-input);
   color: var(--text-muted);
 }
@@ -1782,7 +1782,7 @@ html.is-panel-window #root {
   gap: 9px;
   padding: 6px 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: 9px;
+  border-radius: var(--board-corner);
   background: transparent;
   color: var(--text-secondary);
   text-align: left;
@@ -1807,7 +1807,7 @@ html.is-panel-window #root {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: var(--board-corner);
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-hover));
   color: var(--accent);
   font-size: 0.82rem;
@@ -1878,7 +1878,7 @@ html.is-panel-window #root {
   padding: 8px;
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border-radius: var(--board-corner);
   box-shadow: var(--shadow-pop);
 }
 .note-color-popover__grid {
@@ -1890,7 +1890,7 @@ html.is-panel-window #root {
   width: 34px;
   height: 26px;
   border: 1px solid color-mix(in srgb, var(--text-primary) 18%, transparent);
-  border-radius: var(--radius-sm);
+  border-radius: var(--board-corner);
   cursor: pointer;
 }
 .note-color-swatch:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -1906,7 +1906,7 @@ html.is-panel-window #root {
 .note-color-popover__footer button,
 .note-color-custom {
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  border-radius: var(--board-corner);
   background: var(--bg-surface);
   color: var(--text-secondary);
   font-size: 0.72rem;
@@ -1931,7 +1931,7 @@ html.is-panel-window #root {
   width: 274px;
   padding: 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border-radius: var(--board-corner);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-pop);
 }
@@ -1972,7 +1972,7 @@ html.is-panel-window #root {
   min-height: 29px;
   padding: 0 7px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  border-radius: var(--board-corner);
   background: var(--bg-surface);
   color: var(--text-secondary);
   font-size: 0.68rem;
@@ -1987,12 +1987,28 @@ html.is-panel-window #root {
 /* ── Selection bubble menu ───────────────────────────────────────────────── */
 .note-bubble {
   display: flex;
+  align-items: center;
   gap: 2px;
-  padding: 3px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-pop);
+  max-width: min(96vw, 720px);
+  overflow-x: auto;
+  padding: 4px;
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border-subtle));
+  border-radius: var(--board-corner);
+  box-shadow: var(--shadow-pop), inset 0 1px 0 color-mix(in srgb, #fff 32%, transparent);
+  backdrop-filter: blur(16px) saturate(1.25);
+  -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  scrollbar-width: none;
+}
+.note-bubble::-webkit-scrollbar { display: none; }
+.note-bubble .note-tb__menu-trigger {
+  height: 29px;
+}
+.note-bubble .note-tb__menu-trigger--style { width: 96px; }
+.note-bubble .note-tb__menu-trigger--font { width: 112px; }
+.note-bubble .note-tb__menu-trigger--size { width: 66px; }
+.note-bubble .note-tb__sep {
+  margin: 4px 3px;
 }
 
 /* ── Editable content (.ProseMirror gets the .note-prose class) ──────────── */
@@ -2036,7 +2052,7 @@ html.is-panel-window #root {
 .note-prose img {
   max-width: 100%;
   height: auto;
-  border-radius: var(--radius-md);
+  border-radius: var(--board-corner);
   border: 1px solid var(--border-subtle);
   margin: 0.3em 0;
 }
@@ -2054,7 +2070,7 @@ html.is-panel-window #root {
 .note-image-frame {
   overflow: hidden;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border-radius: var(--board-corner);
   background: var(--bg-hover);
 }
 .note-image-frame img {
@@ -2084,7 +2100,7 @@ html.is-panel-window #root {
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border-radius: var(--board-corner);
   background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
   box-shadow: var(--shadow-md);
   backdrop-filter: blur(12px);
@@ -2093,7 +2109,7 @@ html.is-panel-window #root {
 .note-image-tools select {
   height: 25px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  border-radius: var(--board-corner);
   background: var(--bg-surface);
   color: var(--text-primary);
   padding: 0 6px;
@@ -2133,7 +2149,7 @@ html.is-panel-window #root {
 .note-prose pre {
   background: #0d1117;
   color: #c9d1d9;
-  border-radius: var(--radius-md);
+  border-radius: var(--board-corner);
   padding: 0.9rem 1rem;
   font-family: var(--font-mono);
   font-size: 0.85rem;
@@ -2229,7 +2245,7 @@ html.is-panel-window #root {
   width: min(420px, 100%);
   padding: 16px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  border-radius: var(--board-corner);
   background: var(--bg-elevated);
   color: var(--text-primary);
   box-shadow: var(--shadow-lg);
@@ -2254,7 +2270,7 @@ html.is-panel-window #root {
   height: 34px;
   padding: 0 9px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  border-radius: var(--board-corner);
   outline: none;
   background: var(--theme-bg-input);
   color: var(--text-primary);
@@ -2281,7 +2297,7 @@ html.is-panel-window #root {
   min-height: 31px;
   padding: 0 10px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  border-radius: var(--board-corner);
   background: var(--bg-surface);
   color: var(--text-secondary);
   font-size: 0.75rem;
@@ -2306,7 +2322,7 @@ html.is-panel-window #root {
   overflow-y: auto;
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border-radius: var(--board-corner);
   box-shadow: var(--shadow-pop);
   padding: 6px;
 }
@@ -2318,7 +2334,7 @@ html.is-panel-window #root {
   padding: 6px 8px;
   border: none;
   background: transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--board-corner);
   cursor: pointer;
   text-align: left;
   color: var(--text-primary);
@@ -2331,7 +2347,7 @@ html.is-panel-window #root {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  border-radius: var(--board-corner);
   background: var(--bg-surface);
   font-size: 0.8rem;
   font-weight: 600;
@@ -2405,7 +2421,7 @@ html.is-panel-window #root {
   cursor: pointer;
   display: inline-flex;
   padding: 3px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--board-corner);
   font-size: 0.95rem;
 }
 .notes-tree__head button:hover { background: var(--bg-hover); color: var(--text-primary); }
@@ -2418,7 +2434,7 @@ html.is-panel-window #root {
   align-items: center;
   gap: 4px;
   padding: 4px 6px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--board-corner);
   cursor: pointer;
   color: var(--text-secondary);
   font-size: 0.84rem;
@@ -2430,7 +2446,7 @@ html.is-panel-window #root {
    right-edge "nest inside" accent on the notebook it's hovering over. */
 .notes-tree__row.is-dragging {
   background: color-mix(in srgb, var(--theme-bg-card) 55%, transparent);
-  border-radius: 6px;
+  border-radius: var(--board-corner);
   box-shadow: 0 6px 18px color-mix(in srgb, var(--theme-shadow) 60%, transparent);
   opacity: 0.6;
 }
@@ -2447,14 +2463,14 @@ html.is-panel-window #root {
 .notes-tree__row.is-drop-into {
   background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
   box-shadow: inset -3px 0 0 0 var(--theme-accent);
-  border-radius: 6px;
+  border-radius: var(--board-corner);
 }
 /* Dragging left to pop out of the parent: accent line down the box's left edge
    (+ faint tint) signals "this will move out to the parent's level". */
 .notes-tree__row.is-drop-outof {
   background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
   box-shadow: inset 3px 0 0 0 var(--theme-accent);
-  border-radius: 6px;
+  border-radius: var(--board-corner);
 }
 .notes-tree__row.is-active {
   background: color-mix(in srgb, var(--accent) 14%, transparent);
@@ -2487,7 +2503,7 @@ html.is-panel-window #root {
   justify-content: center;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--board-corner);
   background: transparent;
   color: var(--theme-accent);
   font-size: 1rem;
@@ -2504,7 +2520,7 @@ html.is-panel-window #root {
   min-width: 0;
   background: var(--theme-bg-input);
   border: 1px solid var(--theme-accent);
-  border-radius: 5px;
+  border-radius: var(--board-corner);
   color: var(--text-primary);
   font-family: inherit;
   font-size: inherit;
@@ -2520,7 +2536,7 @@ html.is-panel-window #root {
   cursor: pointer;
   display: inline-flex;
   padding: 2px;
-  border-radius: 4px;
+  border-radius: var(--board-corner);
   font-size: 0.8rem;
 }
 .notes-tree__actions button:hover {
@@ -2542,7 +2558,7 @@ html.is-panel-window #root {
   justify-content: center;
   width: 28px;
   height: 26px;
-  border-radius: 7px;
+  border-radius: var(--board-corner);
   border: 1px solid var(--theme-border);
   background: var(--theme-bg-input);
   color: var(--text-secondary);
@@ -2570,7 +2586,7 @@ html.is-panel-window #root {
   overflow: hidden;
   padding: 10px;
   border: 1px solid var(--theme-border);
-  border-radius: 14px;
+  border-radius: var(--board-corner);
   background: var(--theme-bg-modal);
   color: var(--theme-text-primary);
   box-shadow: 0 14px 38px color-mix(in srgb, #000 24%, transparent);
@@ -2594,7 +2610,7 @@ html.is-panel-window #root {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 9px;
+  border-radius: var(--board-corner);
   background: color-mix(in srgb, var(--notebook-picker-color) 13%, transparent);
   font-size: 1.25rem;
 }
@@ -2613,7 +2629,7 @@ html.is-panel-window #root {
 .notebook-icon-picker__preview small { color: var(--text-muted); font-size: 0.68rem; }
 .notebook-icon-picker__reset {
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--board-corner);
   padding: 5px 7px;
   background: transparent;
   color: var(--text-muted);
@@ -2625,7 +2641,7 @@ html.is-panel-window #root {
 .notebook-icon-picker__search input {
   width: 100%;
   border: 1px solid var(--theme-border);
-  border-radius: 8px;
+  border-radius: var(--board-corner);
   padding: 7px 9px;
   outline: none;
   background: var(--theme-bg-input);
@@ -2654,7 +2670,7 @@ html.is-panel-window #root {
   flex: 0 0 22px;
   padding: 0;
   border: 2px solid var(--theme-bg-modal);
-  border-radius: 999px;
+  border-radius: var(--board-corner);
   outline: 1px solid color-mix(in srgb, var(--notebook-swatch) 34%, var(--theme-border));
   background: var(--notebook-swatch);
   cursor: pointer;
@@ -2681,7 +2697,7 @@ html.is-panel-window #root {
   justify-content: center;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--board-corner);
   background: transparent;
   color: var(--notebook-picker-color);
   font-size: 1.05rem;
@@ -2719,7 +2735,7 @@ html.is-panel-window #root {
   gap: 5px;
   padding: 0 9px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-pill);
+  border-radius: var(--board-corner);
   background: color-mix(in srgb, var(--bg-surface) 78%, transparent);
   color: var(--text-muted);
   font: inherit;
@@ -2740,7 +2756,7 @@ html.is-panel-window #root {
   z-index: var(--z-popover);
   padding: 8px;
   border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border-subtle));
-  border-radius: var(--radius-lg);
+  border-radius: var(--board-corner);
   background: color-mix(in srgb, var(--bg-elevated) 97%, transparent);
   box-shadow: var(--shadow-pop), inset 0 1px 0 color-mix(in srgb, #fff 35%, transparent);
   backdrop-filter: blur(18px) saturate(1.3);
@@ -2772,7 +2788,7 @@ html.is-panel-window #root {
   gap: 10px;
   padding: 6px 7px;
   border: none;
-  border-radius: 9px;
+  border-radius: var(--board-corner);
   background: transparent;
   color: var(--text-secondary);
   text-align: left;
@@ -2791,7 +2807,7 @@ html.is-panel-window #root {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: var(--board-corner);
   background: color-mix(in srgb, var(--accent) 11%, var(--bg-hover));
   color: var(--accent);
   font-size: 0.62rem;
@@ -2811,7 +2827,7 @@ html.is-panel-window #root {
   width: 100%;
   padding: 8px 11px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border-radius: var(--board-corner);
   background: var(--bg-surface);
   color: var(--text-primary);
   cursor: pointer;
@@ -2842,7 +2858,7 @@ html.is-panel-window #root {
   width: 100%;
   padding: 8px 10px;
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--board-corner);
   background: transparent;
   color: var(--text-primary);
   cursor: pointer;

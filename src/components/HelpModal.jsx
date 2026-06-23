@@ -293,23 +293,17 @@ const SECTIONS = [
           <><strong>/quote</strong> — block quote.</>,
           <><strong>/table</strong> — insert a table.</>,
           <><strong>/image</strong> — open image picker.</>,
+          <><strong>/link</strong> — insert or edit a hyperlink.</>,
           <><strong>/divider</strong> — horizontal rule.</>,
         ]} />
 
-        <SubH>Toolbar formatting</SubH>
+        <SubH>Selection formatting</SubH>
         <Steps items={[
-          <>Font family and size selectors.</>,
-          <>Bold, italic, underline, strikethrough, superscript, subscript, inline code.</>,
-          <>Text colour and highlight palettes.</>,
-          <>Alignment (left / center / right / justify), indent / outdent.</>,
-          <>Bullet, numbered, and to-do (checklist) lists.</>,
-          <>Block quote, code block, horizontal rule, hyperlink.</>,
-          <>Table controls — insert rows/columns, toggle headers, delete.</>,
-          <>Image upload — paste, drag-drop, or click to pick.</>,
+          <>Select text to open the floating format bubble.</>,
+          <>Use it for text style, font family, size, bold, italic, underline, strikethrough, inline code, colour, highlight, and links.</>,
+          <>Use right-click for contextual actions like table rows/columns, image resize/crop, list-to-board, paste, and link actions.</>,
+          <>Use <Kbd>/</Kbd> for insertions such as tables, images, pages, headings, lists, quotes, code blocks, and dividers.</>,
         ]} />
-
-        <SubH>Bubble menu</SubH>
-        <P>Select any text to get a floating quick-format bar — bold, italic, underline, colour, and link in one click.</P>
 
         <SubH>Paper vs Wide layout</SubH>
         <P>Toggle between <strong>Paper</strong> (centred, themed page feel) and <strong>Wide</strong> (full-width canvas) using the toggle next to "Edited X ago". Preference is saved per device. Default controlled in <strong>Settings → Editor</strong>.</P>
@@ -325,7 +319,7 @@ const SECTIONS = [
         <SubH>Inline images</SubH>
         <P>Paste an image, drag-drop a file, or use <Kbd>/image</Kbd> to insert at the cursor position. Images are stored as compressed base64 inside the note.</P>
 
-        <Tip>Type <Kbd>/</Kbd> to insert anything — headings, lists, code blocks, pages — without touching the toolbar.</Tip>
+        <Tip>Notes no longer use a persistent formatting toolbar. Insert with <Kbd>/</Kbd>, format selected text with the bubble, and right-click objects for contextual controls.</Tip>
       </>
     ),
   },

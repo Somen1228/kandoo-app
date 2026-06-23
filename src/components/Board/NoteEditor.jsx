@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react';
 import { Extension } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -30,15 +30,13 @@ import { DOCUMENT_FONTS, FONT_CATEGORIES } from '../../utils/documentFonts';
 // Loads the @font-face families used by the font picker (lazy with the editor).
 import '../../utils/loadEditorFonts';
 import {
-  VscBold, VscItalic, VscListUnordered, VscListOrdered, VscCode, VscQuote,
-  VscLink, VscHorizontalRule, VscClearAll, VscChecklist, VscTable,
-  VscChevronDown, VscChevronLeft, VscChevronRight, VscCheck, VscSearch,
+  VscBold, VscItalic, VscLink, VscClearAll,
+  VscChevronDown, VscCheck, VscSearch,
 } from 'react-icons/vsc';
 import {
   RiUnderline, RiStrikethrough, RiFontColor, RiMarkPenLine,
-  RiAlignLeft, RiAlignCenter, RiAlignRight, RiCodeSSlashLine,
+  RiCodeSSlashLine,
 } from 'react-icons/ri';
-import { IoImageOutline } from 'react-icons/io5';
 
 const lowlight = createLowlight(common);
 
@@ -296,6 +294,7 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
         onImage: () => fileRef.current?.click(),
         onCreatePage,
         onInsertTable: () => setTableDialogOpen(true),
+        onLink: () => setLinkDialogOpen(true),
         onOpen:   handleSlashOpen,
         onUpdate: handleSlashUpdate,
         onClose:  handleSlashClose,
@@ -344,14 +343,19 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
   return (
     <div className={`note-editor${paperless ? ' is-paperless' : ''}`}>
       {editor && (
-        <Toolbar
+        <BubbleMenu
           editor={editor}
-          onImage={() => fileRef.current?.click()}
-          onLink={() => setLinkDialogOpen(true)}
-          onTable={() => setTableDialogOpen(true)}
-        />
+          className="note-bubble"
+          tippyOptions={{ duration: 120, placement: 'top', maxWidth: 'none' }}
+          shouldShow={({ editor }) => {
+            const { empty } = editor.state.selection;
+            return editor.isFocused && !empty;
+          }}
+        >
+          <SelectionBubble editor={editor} onLink={() => setLinkDialogOpen(true)} />
+        </BubbleMenu>
       )}
-      {/* Child pages belong to the page body — rendered below the toolbar. */}
+      {/* Child pages belong to the page body. */}
       {childPagesSlot}
       <EditorContent editor={editor} />
       <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={onFilePick} />
@@ -374,61 +378,27 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
   );
 }
 
-// ── Toolbar ─────────────────────────────────────────────────────────────────
-function Toolbar({ editor, onImage, onLink, onTable }) {
+// ── Selection bubble ────────────────────────────────────────────────────────
+function SelectionBubble({ editor, onLink }) {
   const [openPalette, setOpenPalette] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
   const [menuAnchor, setMenuAnchor] = useState(null);
-  const [toolbarOverflow, setToolbarOverflow] = useState({ left: false, right: false });
-  const toolbarRef = useRef(null);
-
-  useEffect(() => {
-    const element = toolbarRef.current;
-    if (!element) return undefined;
-    const update = () => {
-      const maxScroll = Math.max(0, element.scrollWidth - element.clientWidth);
-      setToolbarOverflow({
-        left: element.scrollLeft > 2,
-        right: element.scrollLeft < maxScroll - 2,
-      });
-    };
-    const frame = requestAnimationFrame(update);
-    const observer = new ResizeObserver(update);
-    observer.observe(element);
-    element.addEventListener('scroll', update, { passive: true });
-    window.addEventListener('resize', update);
-    return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-      element.removeEventListener('scroll', update);
-      window.removeEventListener('resize', update);
-    };
-  }, []);
-
-  const scrollToolbar = (direction) => {
-    const element = toolbarRef.current;
-    if (!element) return;
-    element.scrollBy({
-      left: direction * Math.max(180, element.clientWidth * 0.65),
-      behavior: 'smooth',
-    });
-  };
 
   const styleValue = editor.isActive('heading', { level: 1 }) ? 'h1'
     : editor.isActive('heading', { level: 2 }) ? 'h2'
     : editor.isActive('heading', { level: 3 }) ? 'h3'
     : 'p';
 
-  const applyStyle = (v) => {
-    const c = editor.chain().focus();
-    if (v === 'p') c.setParagraph().run();
-    else c.toggleHeading({ level: Number(v.slice(1)) }).run();
+  const applyStyle = (value) => {
+    const chain = editor.chain().focus();
+    if (value === 'p') chain.setParagraph().run();
+    else chain.toggleHeading({ level: Number(value.slice(1)) }).run();
   };
 
   const fontFamily = editor.getAttributes('textStyle').fontFamily || '';
   const fontSize = editor.getAttributes('textStyle').fontSize || '';
   const styleLabel = TEXT_STYLES.find((option) => option.value === styleValue)?.label || 'Normal';
-  const fontLabel = FONT_FAMILIES.find((option) => option.value === fontFamily)?.label || 'Default font';
+  const fontLabel = FONT_FAMILIES.find((option) => option.value === fontFamily)?.label || 'Default';
   const sizeLabel = fontSize ? `${parseInt(fontSize, 10)} px` : 'Size';
 
   const menuConfig = openMenu === 'style'
@@ -477,26 +447,14 @@ function Toolbar({ editor, onImage, onLink, onTable }) {
   };
 
   return (
-    <div className={`note-tb-shell${openMenu ? ' is-menu-open' : ''}`}>
-      {toolbarOverflow.left && (
-        <button type="button" className="note-tb__overflow note-tb__overflow--left"
-          title="More formatting options to the left" aria-label="Scroll toolbar left"
-          onMouseDown={(event) => event.preventDefault()} onClick={() => scrollToolbar(-1)}>
-          <VscChevronLeft />
-        </button>
-      )}
-      <div ref={toolbarRef} className="note-tb" onMouseDown={(e) => {
-        if (!e.target.closest('select, input')) e.preventDefault();
-      }}>
-      <ToolbarMenuTrigger id="style" label={styleLabel} title="Paragraph style"
+    <>
+      <ToolbarMenuTrigger id="bubble-style" label={styleLabel} title="Text style"
         open={openMenu === 'style'} width="style"
         onClick={(event) => toggleMenu('style', event)} />
-
-      <ToolbarMenuTrigger id="font" label={fontLabel} title="Font family"
+      <ToolbarMenuTrigger id="bubble-font" label={fontLabel} title="Font family"
         open={openMenu === 'font'} width="font"
         onClick={(event) => toggleMenu('font', event)} />
-
-      <ToolbarMenuTrigger id="size" label={sizeLabel} title="Font size"
+      <ToolbarMenuTrigger id="bubble-size" label={sizeLabel} title="Font size"
         open={openMenu === 'size'} width="size"
         onClick={(event) => toggleMenu('size', event)} />
 
@@ -531,41 +489,15 @@ function Toolbar({ editor, onImage, onLink, onTable }) {
         onApply={(color) => editor.chain().focus().setHighlight({ color }).run()}
         onClear={() => editor.chain().focus().unsetHighlight().run()}
       />
-
-      <Sep />
-      <TBtn editor={editor} run="toggleBulletList" active="bulletList" title="Bullet list"><VscListUnordered /></TBtn>
-      <TBtn editor={editor} run="toggleOrderedList" active="orderedList" title="Numbered list"><VscListOrdered /></TBtn>
-      <TBtn editor={editor} run="toggleTaskList" active="taskList" title="Checklist"><VscChecklist /></TBtn>
-
-      <Sep />
-      <button className={`note-tb__btn${editor.isActive({ textAlign: 'left' }) ? ' is-active' : ''}`} title="Align left" onClick={() => editor.chain().focus().setTextAlign('left').run()}><RiAlignLeft /></button>
-      <button className={`note-tb__btn${editor.isActive({ textAlign: 'center' }) ? ' is-active' : ''}`} title="Align center" onClick={() => editor.chain().focus().setTextAlign('center').run()}><RiAlignCenter /></button>
-      <button className={`note-tb__btn${editor.isActive({ textAlign: 'right' }) ? ' is-active' : ''}`} title="Align right" onClick={() => editor.chain().focus().setTextAlign('right').run()}><RiAlignRight /></button>
-
-      <Sep />
-      <TBtn editor={editor} run="toggleBlockquote" active="blockquote" title="Quote"><VscQuote /></TBtn>
-      <TBtn editor={editor} run="toggleCodeBlock" active="codeBlock" title="Code block"><VscCode /></TBtn>
-      <button className="note-tb__btn" title="Horizontal rule" onClick={() => editor.chain().focus().setHorizontalRule().run()}><VscHorizontalRule /></button>
-      <TableControl editor={editor} onInsert={onTable} />
       <button className={`note-tb__btn${editor.isActive('link') ? ' is-active' : ''}`} title="Link" onClick={onLink}><VscLink /></button>
-      <button className="note-tb__btn" title="Image" onClick={onImage}><IoImageOutline /></button>
+      <button className="note-tb__btn" title="Clear formatting" onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}><VscClearAll /></button>
 
-      <Sep />
-        <button className="note-tb__btn" title="Clear formatting" onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}><VscClearAll /></button>
-      </div>
-      {toolbarOverflow.right && (
-        <button type="button" className="note-tb__overflow note-tb__overflow--right"
-          title="More formatting options to the right" aria-label="Scroll toolbar right"
-          onMouseDown={(event) => event.preventDefault()} onClick={() => scrollToolbar(1)}>
-          <VscChevronRight />
-        </button>
-      )}
       {menuConfig && menuAnchor && (
         <ToolbarMenuPanel key={menuConfig.kind} config={menuConfig}
           anchorElement={menuAnchor} onClose={closeMenu}
           onSelect={(value) => applyMenuValue(menuConfig.kind, value)} />
       )}
-    </div>
+    </>
   );
 }
 
@@ -770,40 +702,6 @@ function ColorControl({ title, icon, active = false, open, onToggle, onClose, co
           </div>
         </div>,
         document.body
-      )}
-    </div>
-  );
-}
-
-function TableControl({ editor, onInsert }) {
-  const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState(null);
-  const buttonRef = useRef(null);
-  const inTable = editor.isActive('table');
-
-  useEffect(() => {
-    if (!inTable) setOpen(false);
-  }, [inTable]);
-
-  const activate = () => {
-    if (!inTable) { onInsert(); return; }
-    if (open) { setOpen(false); return; }
-    const rect = buttonRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setPosition(clampTableMenuPosition(rect.right - 274, rect.bottom + 8));
-    setOpen(true);
-  };
-
-  return (
-    <div className="note-table-control">
-      <button ref={buttonRef} type="button" className={`note-tb__btn${inTable ? ' is-active' : ''}`}
-        title={inTable ? 'Table options' : 'Insert table'} aria-expanded={inTable ? open : undefined}
-        onClick={activate}>
-        <VscTable />
-      </button>
-      {inTable && open && position && (
-        <TableMenu editor={editor} position={position} anchorRef={buttonRef}
-          onClose={() => setOpen(false)} />
       )}
     </div>
   );

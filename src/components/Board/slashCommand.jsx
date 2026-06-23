@@ -4,7 +4,7 @@ import { Extension } from '@tiptap/core';
 import Suggestion from '@tiptap/suggestion';
 import {
   VscSymbolString, VscListUnordered, VscListOrdered, VscChecklist,
-  VscQuote, VscCode, VscHorizontalRule, VscTable, VscFile,
+  VscQuote, VscCode, VscHorizontalRule, VscTable, VscFile, VscLink,
 } from 'react-icons/vsc';
 import { IoImageOutline } from 'react-icons/io5';
 
@@ -40,6 +40,11 @@ const COMMANDS = [
     run: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run() },
   { title: 'Divider', desc: 'Visually divide blocks', kw: ['divider', 'hr', 'rule', 'line'], icon: <VscHorizontalRule />,
     run: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
+  { title: 'Link', desc: 'Insert or edit a hyperlink', kw: ['link', 'url', 'hyperlink'], icon: <VscLink />,
+    run: (e, r, ctx) => {
+      e.chain().focus().deleteRange(r).run();
+      ctx?.onLink?.();
+    } },
   { title: 'Table', desc: 'Choose rows and columns', kw: ['table', 'grid'], icon: <VscTable />,
     run: (e, r, ctx) => {
       e.chain().focus().deleteRange(r).run();
@@ -147,7 +152,7 @@ export function SlashMenuPortal({ state }) {
 export const SlashCommand = Extension.create({
   name: 'slashCommand',
   addOptions() {
-    return { onImage: null, onCreatePage: null, onInsertTable: null, onOpen: null, onUpdate: null, onClose: null };
+    return { onImage: null, onCreatePage: null, onInsertTable: null, onLink: null, onOpen: null, onUpdate: null, onClose: null };
   },
   addProseMirrorPlugins() {
     const ext = this;
@@ -173,6 +178,7 @@ export const SlashCommand = Extension.create({
             onImage: ext.options.onImage,
             onCreatePage: ext.options.onCreatePage,
             onInsertTable: ext.options.onInsertTable,
+            onLink: ext.options.onLink,
           };
           item.run(editor, range, ctx);
         },
@@ -182,6 +188,7 @@ export const SlashCommand = Extension.create({
               onImage: ext.options.onImage,
               onCreatePage: ext.options.onCreatePage,
               onInsertTable: ext.options.onInsertTable,
+              onLink: ext.options.onLink,
             };
             ext.options.onOpen?.({
               items: props.items,
@@ -198,6 +205,7 @@ export const SlashCommand = Extension.create({
               onImage: ext.options.onImage,
               onCreatePage: ext.options.onCreatePage,
               onInsertTable: ext.options.onInsertTable,
+              onLink: ext.options.onLink,
             };
             ext.options.onUpdate?.({
               items: props.items,
