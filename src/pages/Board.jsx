@@ -14,10 +14,11 @@ import { IoColorFilterOutline } from "react-icons/io5";
 import { v4 as uuidv4 } from "uuid";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useLeaderChords, LEADER_LABEL } from "../hooks/useLeaderChords";
+import { useViewport } from "../hooks/useViewport";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
-  DndContext, KeyboardSensor, PointerSensor, closestCenter,
+  DndContext, KeyboardSensor, MouseSensor, TouchSensor, closestCenter,
   useSensor, useSensors,
 } from "@dnd-kit/core";
 import {
@@ -107,7 +108,8 @@ function Board() {
   const [showCrossBoardDropdown, setShowCrossBoardDropdown] = useState(false);
   const suppressBoardClickRef = useRef(false);
   const boardSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 7 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 7 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
@@ -121,12 +123,20 @@ function Board() {
     const v = parseInt(localStorage.getItem("kandoo-sidebar-width") || "", 10);
     return Number.isFinite(v) ? Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, v)) : 248;
   });
+  const { isCompact } = useViewport();
   useEffect(() => {
+    // Don't let the mobile drawer's open/close overwrite the desktop preference.
+    if (isCompact) return;
     localStorage.setItem("kandoo-sidebar-collapsed", isSidebarCollapsed ? "1" : "0");
-  }, [isSidebarCollapsed]);
+  }, [isSidebarCollapsed, isCompact]);
   useEffect(() => {
     localStorage.setItem("kandoo-sidebar-width", String(sidebarWidth));
   }, [sidebarWidth]);
+  // On compact screens the sidebar is an overlay drawer: start closed, and close
+  // it after navigating to a board / section / schedule so content is visible.
+  useEffect(() => {
+    if (isCompact) setIsSidebarCollapsed(true);
+  }, [isCompact, activeBoard, section, scheduleView]);
 
   // Track macOS fullscreen — the traffic lights vanish, so drop the space we
   // reserve for them (otherwise the logo looks like it's floating).
@@ -606,6 +616,11 @@ function Board() {
 
         <div className="mac-sidebar__resizer" onMouseDown={startResize} title="Drag to resize" />
       </aside>
+
+      {/* Scrim behind the drawer on compact screens — tap to dismiss */}
+      {isCompact && !isSidebarCollapsed && (
+        <div className="mac-sidebar-scrim" onClick={() => setIsSidebarCollapsed(true)} aria-hidden="true" />
+      )}
 
       {/* ── Main column ─────────────────────────────────────────────────── */}
       <div className="mac-main">

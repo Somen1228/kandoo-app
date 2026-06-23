@@ -2940,3 +2940,73 @@ html.reduce-motion *::after {
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Responsive: compact screens (phone / small tablet) ──────────────────────
+   All rules are gated behind this width query, so desktop layout is untouched.
+   The sidebar becomes an overlay drawer instead of an inline, resizable column. */
+@media (max-width: 820px) {
+  .mac-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 120;
+    width: min(84vw, 320px);
+    transform: translateX(0);
+    transition: transform var(--motion-slow) var(--ease-in-out);
+    box-shadow: 0 0 48px rgba(0, 0, 0, 0.28);
+    border-right: 1px solid var(--border-subtle);
+  }
+  .mac-sidebar.is-collapsed {
+    /* Keep the width so the inner content doesn't reflow while sliding away. */
+    width: min(84vw, 320px);
+    transform: translateX(-100%);
+    border-right-color: var(--border-subtle);
+    box-shadow: none;
+  }
+  .mac-sidebar__inner {
+    width: 100%;
+    min-width: 0;
+  }
+  .mac-sidebar__resizer {
+    display: none;
+  }
+  .mac-sidebar-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 110;
+    background: rgba(0, 0, 0, 0.42);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    animation: mac-scrim-in var(--motion-fast) var(--ease-out);
+  }
+  .mac-main {
+    width: 100%;
+    min-width: 0;
+  }
+}
+@keyframes mac-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Single-column board on phones so cards never overflow a narrow viewport. */
+@media (max-width: 560px) {
+  .board-layout--grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Notch / safe-area handling — no-op on devices without insets (env() = 0). */
+@media (max-width: 820px) {
+  .mac-toolbar {
+    height: calc(var(--toolbar-height) + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+  }
+  .mac-sidebar {
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+  }
+}

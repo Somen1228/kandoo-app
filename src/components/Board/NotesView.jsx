@@ -4,7 +4,7 @@ import {
   VscAdd, VscTrash, VscChevronRight, VscChromeMaximize, VscChromeRestore,
   VscArrowLeft, VscArrowRight, VscBook, VscFile, VscDiscard, VscRedo,
 } from 'react-icons/vsc';
-import { DndContext, PointerSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
+import { DndContext, MouseSensor, TouchSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { restrictToFirstScrollableAncestor } from '@dnd-kit/modifiers';
 
@@ -648,7 +648,10 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
   const [activeId, setActiveId]     = useState(null);
   const [dropTarget, setDropTarget] = useState(null); // { overUid, mode: 'before'|'inside'|'after' }
   const [pendingMove, setPendingMove] = useState(null); // reparent awaiting confirmation
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }),
+  );
 
   // The boundary modifier clamps the dragged row to the narrow sidebar, so its
   // delta.x can't grow — track the raw pointer X to detect rightward "nest" intent.

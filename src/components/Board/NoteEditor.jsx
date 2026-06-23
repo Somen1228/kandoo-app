@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback, Fragment } from 'react';
 import { createPortal } from 'react-dom';
-import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react';
+import { useEditor, EditorContent } from '@tiptap/react';
 import { Extension } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -350,16 +350,6 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
           onLink={() => setLinkDialogOpen(true)}
           onTable={() => setTableDialogOpen(true)}
         />
-      )}
-      {editor && (
-        <BubbleMenu editor={editor} tippyOptions={{ duration: 120 }} className="note-bubble">
-          <BubbleBtn editor={editor} cmd="toggleBold" name="bold" title="Bold"><VscBold /></BubbleBtn>
-          <BubbleBtn editor={editor} cmd="toggleItalic" name="italic" title="Italic"><VscItalic /></BubbleBtn>
-          <BubbleBtn editor={editor} cmd="toggleUnderline" name="underline" title="Underline"><RiUnderline /></BubbleBtn>
-          <BubbleBtn editor={editor} cmd="toggleStrike" name="strike" title="Strikethrough"><RiStrikethrough /></BubbleBtn>
-          <BubbleBtn editor={editor} cmd="toggleCode" name="code" title="Inline code"><RiCodeSSlashLine /></BubbleBtn>
-          <button className="note-tb__btn" title="Link" onClick={() => setLinkDialogOpen(true)}><VscLink /></button>
-        </BubbleMenu>
       )}
       <EditorContent editor={editor} />
       <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={onFilePick} />
@@ -1033,19 +1023,6 @@ function TBtn({ editor, run, active, title, children }) {
       className={`note-tb__btn${editor.isActive(active) ? ' is-active' : ''}`}
       title={title}
       onClick={() => editor.chain().focus()[run]().run()}
-    >
-      {children}
-    </button>
-  );
-}
-
-function BubbleBtn({ editor, cmd, name, title, children }) {
-  return (
-    <button
-      type="button"
-      className={`note-tb__btn${editor.isActive(name) ? ' is-active' : ''}`}
-      title={title}
-      onClick={() => editor.chain().focus()[cmd]().run()}
     >
       {children}
     </button>
