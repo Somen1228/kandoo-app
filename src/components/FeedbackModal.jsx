@@ -94,6 +94,7 @@ export default function FeedbackModal({ isOpen, onClose }) {
   return (
     <div
       ref={overlayRef}
+      className="kandoo-modal-overlay"
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
       style={{
         position: 'fixed', inset: 0, zIndex: 3000,
@@ -103,7 +104,7 @@ export default function FeedbackModal({ isOpen, onClose }) {
         WebkitBackdropFilter: 'blur(10px)',
       }}
     >
-      <div style={{
+      <div className="kandoo-modal-card" style={{
         width: 500,
         background: 'var(--theme-bg-modal)',
         border: '1px solid var(--theme-border)',

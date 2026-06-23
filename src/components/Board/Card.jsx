@@ -15,7 +15,7 @@ import { useSettings } from "../../contexts/SettingsContext";
 import { uploadImage, deleteImage, isStorageUrl } from "../../services/imageStorage";
 import {
   VscEdit, VscCheck, VscTrash, VscSave, VscCopy, VscClose,
-  VscBold, VscItalic, VscCalendar, VscNote, VscLink, VscPin, VscPinned,
+  VscBold, VscItalic, VscCalendar, VscNote, VscLink, VscPin, VscPinned, VscChevronDown,
 } from "react-icons/vsc";
 import { IoDuplicateOutline } from "react-icons/io5";
 import { IoImageOutline } from "react-icons/io5";
@@ -313,6 +313,7 @@ function Card({
   query, filterMode = false, scheduleView = null, currentMatchTaskId = null,
   quickAddSignal = 0, dragHandleProps = {}, onMoveToDone,
   navigateToNote, getNoteTitle, notes = [], layout = 'grid',
+  compact = false, collapsed = false, onToggleCollapsed,
 }) {
   const isNote = type === 'note';
   const { currentTheme } = useTheme();
@@ -748,7 +749,7 @@ function Card({
 
   return (
     <div
-      className={`card card--${layout}${isPinned ? " is-pinned" : ""} transition-all duration-300 ease-in-out transform ${
+      className={`card card--${layout}${isPinned ? " is-pinned" : ""}${collapsed ? " is-collapsed" : ""} transition-all duration-300 ease-in-out transform ${
         isMounted ? "opacity-100 translate-x-0" : "opacity-0 translate-x-4"
       } shadow-lg relative`}
       style={{
@@ -764,14 +765,26 @@ function Card({
       {/* Card header — drag handle */}
       <div
         className="card-title flex justify-between items-center text-sm"
-        style={layout === 'lanes'
-          ? { backgroundColor: 'transparent', color: 'var(--theme-text-primary)', cursor: 'grab' }
-          : { backgroundColor: cardColor.header, color: cardColor.headerText, cursor: 'grab' }}
+        style={layout === 'grid'
+          ? { backgroundColor: cardColor.header, color: cardColor.headerText, cursor: 'grab' }
+          : { backgroundColor: 'transparent', color: 'var(--theme-text-primary)', cursor: 'grab' }}
         onContextMenu={openCardContextMenu}
         {...dragHandleProps}
       >
         <div className="h-full flex justify-between items-center">
-          {layout === 'lanes' && <span className="lane-card-color-dot" aria-hidden="true" />}
+          {compact && !isNote && (
+            <button
+              type="button"
+              className="card-collapse-toggle"
+              aria-label={collapsed ? 'Expand column' : 'Collapse column'}
+              aria-expanded={!collapsed}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onToggleCollapsed?.(); }}
+            >
+              <VscChevronDown style={{ transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.15s' }} />
+            </button>
+          )}
+          {layout !== 'grid' && <span className="lane-card-color-dot" aria-hidden="true" />}
           {isEditingTitle ? (
             <input
               type="text"
@@ -787,7 +800,7 @@ function Card({
               onPointerDown={e => e.stopPropagation()}
               className="font-semibold px-2 bg-transparent border-b focus:outline-none"
               style={{
-                color: layout === 'lanes' ? 'var(--theme-text-primary)' : cardColor.headerText,
+                color: layout === 'grid' ? cardColor.headerText : 'var(--theme-text-primary)',
                 borderColor: 'currentColor',
                 width: `${Math.max(editingTitleValue.length + 2, 6)}ch`,
                 minWidth: '4rem',
@@ -815,7 +828,7 @@ function Card({
           <div className="w-4 h-5 text-sm rounded-sm text-center"
             style={{
               color: 'inherit',
-              background: layout === 'lanes'
+              background: layout !== 'grid'
                 ? 'color-mix(in srgb, var(--card-hue) 12%, var(--theme-bg-hover))'
                 : cardColor.headerBadge,
             }}>

@@ -267,7 +267,11 @@ function TourCard({ step, stepIndex, total, onNext, onBack, onSkip, targetRect, 
     const VP_W = window.innerWidth;
     const VP_H = window.innerHeight;
 
-    if (!targetRect || step.cardSide === 'center') {
+    // On phones the tour's desktop anchors are off-screen (sidebar is a drawer),
+    // so always centre the card to avoid it mis-positioning / overflowing.
+    const compact = typeof window !== 'undefined' && window.matchMedia
+      && window.matchMedia('(max-width: 640px)').matches;
+    if (compact || !targetRect || step.cardSide === 'center') {
       setPos({ position: 'fixed', top: Math.round((VP_H - H) / 2), left: Math.round((VP_W - W) / 2) });
       return;
     }

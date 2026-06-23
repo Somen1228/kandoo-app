@@ -746,7 +746,7 @@ function HelpModal({ isOpen, onClose, defaultSection = null, onLaunchTour, onFee
   const active = allSections.find((s) => s.id === activeId) || allSections[0];
 
   return (
-    <div style={{
+    <div className="kandoo-modal-overlay" style={{
       position: 'fixed', inset: 0, zIndex: 1000,
       background: 'rgba(0,0,0,0.35)',
       backdropFilter: 'blur(10px)',
@@ -755,6 +755,7 @@ function HelpModal({ isOpen, onClose, defaultSection = null, onLaunchTour, onFee
     }}>
       <div
         ref={modalRef}
+        className="kandoo-modal-card help-modal-card"
         style={{
           background: 'var(--theme-bg-primary)',
           border: '1px solid var(--theme-border)',
@@ -785,9 +786,9 @@ function HelpModal({ isOpen, onClose, defaultSection = null, onLaunchTour, onFee
         </div>
 
         {/* Body: sidebar + content */}
-        <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+        <div className="help-modal-body" style={{ display: 'flex', flex: 1, minHeight: 0 }}>
           {/* Sidebar */}
-          <nav style={{
+          <nav className="help-modal-nav" style={{
             width: '220px',
             borderRight: '1px solid var(--theme-border)',
             overflowY: 'auto',

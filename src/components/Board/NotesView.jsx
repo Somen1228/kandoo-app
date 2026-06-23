@@ -2,7 +2,7 @@ import { Suspense, lazy, useEffect, useRef, useState, useMemo, Fragment } from '
 import { createPortal } from 'react-dom';
 import {
   VscAdd, VscTrash, VscChevronRight, VscChromeMaximize, VscChromeRestore,
-  VscArrowLeft, VscArrowRight, VscBook, VscFile, VscDiscard, VscRedo,
+  VscArrowLeft, VscArrowRight, VscBook, VscDiscard, VscRedo,
 } from 'react-icons/vsc';
 import { DndContext, MouseSensor, TouchSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -66,6 +66,20 @@ function isDescendantOf(notes, ancestorUid, maybeUid) {
   return false;
 }
 
+// Remove a page's inline reference block (`/page`) from a chunk of editor HTML —
+// used when that page is reparented, so it never shows in two places.
+function stripPageLink(html, uid) {
+  if (!html || !uid || !html.includes(uid)) return html;
+  try {
+    const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+    let removed = false;
+    doc.body.querySelectorAll(`[data-page-link][data-uid="${uid}"]`).forEach((el) => { el.remove(); removed = true; });
+    return removed ? doc.body.innerHTML : html;
+  } catch {
+    return html;
+  }
+}
+
 // Compute the full new uid order for a drop:
 //   'before' / 'after' → reorder as a sibling of `overUid`
 //   'inside'           → nest as the first child of `overUid`
@@ -126,8 +140,36 @@ function applyZoneOrder(notes, draggedUid, overUid, mode) {
   notes.forEach((n) => { if (!seen.has(n.uid)) { orderedUids.push(n.uid); seen.add(n.uid); } });
   return { orderedUids, newParent };
 }
+
+// Reparent a page under `newParent` (uid or null for top level), as the first
+// child. Returns { orderedUids, newParent } in the same shape as applyZoneOrder.
+function reparentTo(notes, draggedUid, newParent) {
+  const childrenOf = new Map();
+  notes.forEach((n) => {
+    const p = n.parentUid || null;
+    if (!childrenOf.has(p)) childrenOf.set(p, []);
+    childrenOf.get(p).push(n.uid);
+  });
+  childrenOf.forEach((list) => { const i = list.indexOf(draggedUid); if (i >= 0) list.splice(i, 1); });
+  if (!childrenOf.has(newParent)) childrenOf.set(newParent, []);
+  childrenOf.get(newParent).unshift(draggedUid);
+  const orderedUids = [];
+  const seen = new Set();
+  const dfs = (parentUid) => {
+    (childrenOf.get(parentUid) || []).forEach((uid) => {
+      if (seen.has(uid)) return;
+      seen.add(uid);
+      orderedUids.push(uid);
+      dfs(uid);
+    });
+  };
+  dfs(null);
+  notes.forEach((n) => { if (!seen.has(n.uid)) { orderedUids.push(n.uid); seen.add(n.uid); } });
+  return { orderedUids, newParent };
+}
 import { useSettings } from '../../contexts/SettingsContext';
 import ContextMenu from '../ContextMenu';
+import { toast } from '../../utils/toast';
 import NoteExportMenu from './NoteExportMenu';
 import MoveNoteConfirmModal from './MoveNoteConfirmModal';
 
@@ -451,18 +493,16 @@ function SortableNoteRow({ item, activeUid, isDropInto, isDropOutOf, isCollapsed
       >
         <VscChevronRight style={{ transform: isCollapsed ? 'none' : 'rotate(90deg)', transition: 'transform 0.12s' }} />
       </button>
-      {depth === 0 ? (
-        <button
-          type="button"
-          className="notes-tree__icon-button notes-tree__icon--book"
-          onClick={(event) => { event.stopPropagation(); onOpenIconPicker(event, note); }}
-          onPointerDown={(event) => event.stopPropagation()}
-          title="Change notebook icon"
-          aria-label={`Change icon for ${note.title?.trim() || 'Untitled'}`}
-        >
-          <NotebookIcon iconKey={note.notebookIcon} colorKey={note.notebookIconColor} />
-        </button>
-      ) : <VscFile className="notes-tree__icon" />}
+      <button
+        type="button"
+        className="notes-tree__icon-button notes-tree__icon--book"
+        onClick={(event) => { event.stopPropagation(); onOpenIconPicker(event, note); }}
+        onPointerDown={(event) => event.stopPropagation()}
+        title="Change page icon"
+        aria-label={`Change icon for ${note.title?.trim() || 'Untitled'}`}
+      >
+        <NotebookIcon iconKey={note.notebookIcon} colorKey={note.notebookIconColor} />
+      </button>
       {editingUid === uid ? (
         <input
           className="notes-tree__rename"
@@ -537,7 +577,9 @@ function PageTitle({ value, onChange }) {
 }
 
 // ── Active-page canvas ──────────────────────────────────────────────────────
-function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateChild, onNavigate, onSendListToBoard, onBack, onForward, canBack, canForward }) {
+function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateChild, onNavigate, onReparentChild, onChildMenu, onSendListToBoard, onBack, onForward, canBack, canForward }) {
+  const dragChildRef = useRef(null);
+  const [dropChildUid, setDropChildUid] = useState(null);
   const { settings } = useSettings();
   const [paperless, setPaperless] = useState(settings.noteDefaultView === 'wide');
   const togglePaperless = () => setPaperless((p) => !p);
@@ -557,6 +599,22 @@ function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateC
   const handleContent = (html) => updateCardNote(index, { ...safeNote, content: html, images: [] });
   const handleTitle = (newTitle) => updateCards((cards) => cards.map((c) => (c.uid === card.uid ? { ...c, title: newTitle } : c)));
   const metrics = noteMetrics(safeNote.content || '');
+
+  // Pages referenced by an inline block in *this* page's content (created via
+  // `/page`) render where they were typed — exclude them from the top list.
+  const inlineChildUids = useMemo(() => {
+    const ids = new Set();
+    if (!initialContent || !initialContent.includes('data-page-link')) return ids;
+    try {
+      new DOMParser().parseFromString(initialContent, 'text/html')
+        .querySelectorAll('[data-page-link]')
+        .forEach((el) => { const uid = el.getAttribute('data-uid'); if (uid) ids.add(uid); });
+    } catch { /* ignore malformed content */ }
+    return ids;
+  }, [initialContent]);
+  // The rest of a page's children (reparented in, or made from the sidebar) are
+  // derived live from the tree and shown at the top.
+  const childPages = notes.filter((n) => (n.parentUid || null) === card.uid && !inlineChildUids.has(n.uid));
 
   return (
     <div
@@ -607,6 +665,41 @@ function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateC
           onNavigatePage={onNavigate}
           onSendListToBoard={(items) => onSendListToBoard?.({ items, noteUid: card.uid })}
           placeholder="Type ‘/’ for commands, or just start writing. Markdown shortcuts and drag-and-drop images work too."
+          childPagesSlot={childPages.length > 0 ? (
+            <div className="note-children">
+              {childPages.map((child) => (
+                <button
+                  key={child.uid}
+                  type="button"
+                  className={`note-child-link${dropChildUid === child.uid ? ' is-drop-target' : ''}`}
+                  onClick={() => onNavigate(child.uid)}
+                  onContextMenu={(e) => onChildMenu?.(e, child)}
+                  draggable
+                  onDragStart={(e) => { dragChildRef.current = child.uid; e.dataTransfer.effectAllowed = 'move'; }}
+                  onDragOver={(e) => {
+                    if (dragChildRef.current && dragChildRef.current !== child.uid) {
+                      e.preventDefault();
+                      if (dropChildUid !== child.uid) setDropChildUid(child.uid);
+                    }
+                  }}
+                  onDragLeave={() => setDropChildUid((u) => (u === child.uid ? null : u))}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const dragged = dragChildRef.current;
+                    dragChildRef.current = null;
+                    setDropChildUid(null);
+                    if (dragged && dragged !== child.uid) onReparentChild?.(dragged, child.uid);
+                  }}
+                  onDragEnd={() => { dragChildRef.current = null; setDropChildUid(null); }}
+                  title="Click to open · drag onto another page to nest · right-click for options"
+                >
+                  <NotebookIcon iconKey={child.notebookIcon} colorKey={child.notebookIconColor} />
+                  <span className="note-child-link__title">{child.title?.trim() || 'Untitled'}</span>
+                  <VscChevronRight className="note-child-link__chev" />
+                </button>
+              ))}
+            </div>
+          ) : null}
         />
       </Suspense>
     </div>
@@ -633,7 +726,6 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
   };
 
   const openNotebookIconPicker = (event, note) => {
-    if (note.parentUid) return;
     const rect = event.currentTarget?.getBoundingClientRect?.();
     setIconPicker({
       uid: note.uid,
@@ -682,7 +774,17 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
       if (!orderedUids || orderedUids.length !== noteCards.length || new Set(orderedUids).size !== noteCards.length) return cards;
       const noteMap = new Map(noteCards.map((c) => [c.uid, c]));
       if (!noteMap.has(draggedUid)) return cards;
+      const oldParentUid = noteMap.get(draggedUid).parentUid || null;
       noteMap.set(draggedUid, { ...noteMap.get(draggedUid), parentUid: newParentUid || null });
+      // If the page was an inline block in its previous parent, strip that block
+      // so it surfaces only in the new parent's top list (never in two places).
+      if (oldParentUid && oldParentUid !== (newParentUid || null) && noteMap.has(oldParentUid)) {
+        const op = noteMap.get(oldParentUid);
+        const stripped = stripPageLink(op.note?.content, draggedUid);
+        if (stripped !== op.note?.content) {
+          noteMap.set(oldParentUid, { ...op, note: { ...(op.note || {}), content: stripped, updatedAt: Date.now() } });
+        }
+      }
       let i = 0;
       return cards.map((c) => ((c.type || 'todo') === 'note' ? noteMap.get(orderedUids[i++]) : c));
     });
@@ -728,6 +830,90 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
     reorderNotes(orderedUids, draggedUid, newParent);
     if (revealUid) onToggle(revealUid, true);
     syncHistory();
+  };
+
+  // ── Sub-page actions (used by the editor's child-page list) ─────────────────
+  // Move a page under `newParentUid` (or null for top level), guarding against
+  // dropping a page into its own subtree.
+  const movePage = (draggedUid, newParentUid) => {
+    if (draggedUid === newParentUid) return;
+    if (newParentUid && isDescendantOf(notesRef.current, draggedUid, newParentUid)) return;
+    const cur = notesRef.current.find((n) => n.uid === draggedUid);
+    if ((cur?.parentUid || null) === (newParentUid || null)) return;
+    const res = reparentTo(notesRef.current, draggedUid, newParentUid || null);
+    commitMove(res.orderedUids, draggedUid, res.newParent, newParentUid || null);
+  };
+
+  // Deep-duplicate a page and its whole subtree, with fresh uids and inline
+  // page-link references remapped to point at the new copies.
+  const duplicatePage = (uid) => {
+    updateCards((cards) => {
+      const noteCards = cards.filter((c) => (c.type || 'todo') === 'note');
+      const root = noteCards.find((c) => c.uid === uid);
+      if (!root) return cards;
+      const childrenOf = new Map();
+      noteCards.forEach((c) => {
+        const p = c.parentUid || null;
+        if (!childrenOf.has(p)) childrenOf.set(p, []);
+        childrenOf.get(p).push(c);
+      });
+      const idMap = new Map();
+      const assign = (u) => {
+        idMap.set(u, (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${u}-copy-${Math.random().toString(36).slice(2)}`);
+        (childrenOf.get(u) || []).forEach((ch) => assign(ch.uid));
+      };
+      assign(uid);
+      const remap = (html) => {
+        if (!html || !html.includes('data-page-link')) return html;
+        try {
+          const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+          doc.body.querySelectorAll('[data-page-link][data-uid]').forEach((el) => {
+            const old = el.getAttribute('data-uid');
+            if (idMap.has(old)) el.setAttribute('data-uid', idMap.get(old));
+          });
+          return doc.body.innerHTML;
+        } catch { return html; }
+      };
+      const clones = [];
+      const cloneNode = (u, newParentUid, isRoot) => {
+        const orig = noteCards.find((c) => c.uid === u);
+        clones.push({
+          ...orig,
+          uid: idMap.get(u),
+          parentUid: newParentUid,
+          title: isRoot ? `${orig.title || 'Untitled'} copy` : (orig.title || 'Untitled'),
+          note: orig.note ? { ...orig.note, content: remap(orig.note.content), updatedAt: Date.now() } : orig.note,
+        });
+        (childrenOf.get(u) || []).forEach((ch) => cloneNode(ch.uid, idMap.get(u), false));
+      };
+      cloneNode(uid, root.parentUid || null, true);
+      return [...cards, ...clones];
+    });
+  };
+
+  const copyPageLink = (uid) => {
+    const link = `kandoo://page/${uid}`;
+    navigator.clipboard?.writeText(link)
+      .then(() => toast.success('Page link copied'))
+      .catch(() => toast.error('Could not copy link'));
+  };
+
+  const openChildPageMenu = (event, child) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setPageContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        { label: 'Open', onClick: () => onSelectNote(child.uid) },
+        { label: 'Rename', onClick: () => { onSelectNote(child.uid); setEditingUid(child.uid); } },
+        { label: 'Duplicate', onClick: () => duplicatePage(child.uid) },
+        { label: 'Move to top level', onClick: () => movePage(child.uid, null) },
+        { label: 'Copy link', onClick: () => copyPageLink(child.uid) },
+        { divider: true },
+        { label: 'Delete page', danger: true, onClick: () => onDeleteNote(child.uid) },
+      ],
+    });
   };
 
   const undoMove = () => {
@@ -790,23 +976,16 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
       return;
     }
     if (!over || over.id === active.id) { setDropTarget(null); return; }
-    if (rawDeltaX > NEST_THRESHOLD && !isDescendantOf(notes, active.id, over.id)) {
-      setDropTarget({ overUid: over.id, mode: 'inside' });
-      return;
-    }
+
+    // Uniform 3-zone model — every row is just a page (no notebook special case):
+    //   top third    → drop *before* it (same parent, reorder)
+    //   middle third → nest *inside* it (becomes its first child)
+    //   bottom third → drop *after* it (same parent, reorder)
     const aRect = active.rect.current.translated;
     const oRect = over.rect;
     const ratio = (aRect && oRect) ? (aRect.top + aRect.height / 2 - oRect.top) / oRect.height : 0.5;
-    // A notebook is a container: dropping a page onto the body of a *different*
-    // notebook nests it inside, instead of requiring the rightward "nest" gesture
-    // (which left pages stranded at the top level). Top/bottom edges still reorder,
-    // and notebook-to-notebook reordering is unaffected (only pages auto-nest).
-    const overNote = notes.find((n) => n.uid === over.id);
-    const overIsNotebook = overNote && !overNote.parentUid;
-    const draggedIsPage = !!dragged?.parentUid;
-    if (overIsNotebook && draggedIsPage && over.id !== dragged.parentUid
-        && !isDescendantOf(notes, active.id, over.id)
-        && ratio > 0.2 && ratio < 0.8) {
+    const canNest = !isDescendantOf(notes, active.id, over.id);
+    if (canNest && ratio >= 0.3 && ratio <= 0.7) {
       setDropTarget({ overUid: over.id, mode: 'inside' });
       return;
     }
@@ -981,14 +1160,12 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
     const items = [
       { label: 'Open page', onClick: () => onSelectNote(note.uid) },
       { label: 'Rename', onClick: () => setEditingUid(note.uid) },
-      { label: 'New sub-page', onClick: () => { onToggle(note.uid, true); onCreateNote(note.uid, true); } },
-    ];
-    if (!note.parentUid) {
-      items.splice(2, 0, {
+      {
         label: 'Change icon and colour…',
         onClick: () => setIconPicker({ uid: note.uid, anchor: { x: event.clientX, y: event.clientY } }),
-      });
-    }
+      },
+      { label: 'New sub-page', onClick: () => { onToggle(note.uid, true); onCreateNote(note.uid, true); } },
+    ];
     if (hasKids) {
       items.push({ label: isCollapsed ? 'Expand sub-pages' : 'Collapse sub-pages', onClick: () => onToggle(note.uid) });
     }
@@ -1001,11 +1178,11 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
     <div ref={layoutRef} className="notes-layout">
       <aside className="notes-tree-panel" style={{ width: treeWidth }}>
         <div className="notes-tree__head">
-          <span>Notebooks</span>
+          <span>Pages</span>
           <div className="notes-tree__head-actions">
             <button type="button" onClick={undoMove} disabled={!history.canUndo} title="Undo move (⌘Z)" aria-label="Undo move"><VscDiscard /></button>
             <button type="button" onClick={redoMove} disabled={!history.canRedo} title="Redo move (⌘⇧Z)" aria-label="Redo move"><VscRedo /></button>
-            <button type="button" onClick={() => onCreateNote(null, true)} title="New notebook" aria-label="New notebook"><VscAdd /></button>
+            <button type="button" onClick={() => onCreateNote(null, true)} title="New page" aria-label="New page"><VscAdd /></button>
           </div>
         </div>
         <div className="notes-tree__scroll">
@@ -1085,6 +1262,8 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
             onCreateChild={onCreateNote}
             onNavigate={onSelectNote}
             onSendListToBoard={onSendListToBoard}
+            onReparentChild={movePage}
+            onChildMenu={openChildPageMenu}
             onBack={goBack}
             onForward={goForward}
             canBack={navState.canBack}
@@ -1099,12 +1278,12 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
           items={pageContextMenu.items} onClose={() => setPageContextMenu(null)} />
       )}
       {iconPicker && (() => {
-        const notebook = notes.find((note) => note.uid === iconPicker.uid && !note.parentUid);
-        return notebook ? (
+        const page = notes.find((note) => note.uid === iconPicker.uid);
+        return page ? (
           <NotebookIconPicker
-            note={notebook}
+            note={page}
             anchor={iconPicker.anchor}
-            onUpdate={(patch) => updateNotebookAppearance(notebook.uid, patch)}
+            onUpdate={(patch) => updateNotebookAppearance(page.uid, patch)}
             onClose={() => setIconPicker(null)}
           />
         ) : null;

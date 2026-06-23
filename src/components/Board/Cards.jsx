@@ -7,7 +7,7 @@ import {
   useMemo,
 } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { pickCardColorKey } from "../../themes/cardPalettes";
+import { CARD_HUES, normalizeCardColor, pickCardColorKey } from "../../themes/cardPalettes";
 import { generateTaskID } from "../../utils/taskIdGenerator";
 import { toast } from "../../utils/toast";
 import {
@@ -31,7 +31,6 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  restrictToFirstScrollableAncestor,
   restrictToHorizontalAxis,
   restrictToVerticalAxis,
 } from "@dnd-kit/modifiers";
@@ -43,8 +42,8 @@ import { renderTaskValue } from "../../utils/richText";
 import Modal from "./Modal";
 import { CardsContext } from "../../contexts/CardsContext";
 import { useSettings } from "../../contexts/SettingsContext";
+import { useViewport } from "../../hooks/useViewport";
 import { VscHistory, VscClose } from "react-icons/vsc";
-import { RiLayoutGridFill, RiLayoutColumnFill, RiLayoutRowFill } from "react-icons/ri";
 import ResetWarningModal from "./ResetWarningModal";
 import SendToBoardModal from "./SendToBoardModal";
 
@@ -53,11 +52,45 @@ const BOARD_LAYOUTS = new Set(['grid', 'columns', 'lanes']);
 
 const normalizeBoardLayout = (layout) => BOARD_LAYOUTS.has(layout) ? layout : 'grid';
 
+function GridLayoutIcon() {
+  return (
+    <svg className="board-layout-switcher__icon" viewBox="0 0 24 24" aria-hidden="true">
+      <rect className="layout-icon__tile layout-icon__tile--accent" x="4" y="4" width="6.5" height="6.5" rx="1.2" />
+      <rect className="layout-icon__tile" x="13.5" y="4" width="6.5" height="6.5" rx="1.2" />
+      <rect className="layout-icon__tile" x="4" y="13.5" width="6.5" height="6.5" rx="1.2" />
+      <rect className="layout-icon__tile" x="13.5" y="13.5" width="6.5" height="6.5" rx="1.2" />
+    </svg>
+  );
+}
+
+function ColumnsLayoutIcon() {
+  return (
+    <svg className="board-layout-switcher__icon" viewBox="0 0 24 24" aria-hidden="true">
+      <rect className="layout-icon__panel" x="3.5" y="4" width="5" height="16" rx="1.2" />
+      <rect className="layout-icon__panel layout-icon__tile--accent" x="9.5" y="4" width="5" height="16" rx="1.2" />
+      <rect className="layout-icon__panel" x="15.5" y="4" width="5" height="16" rx="1.2" />
+      <path className="layout-icon__line" d="M5.2 7h1.6M11.2 7h1.6M17.2 7h1.6" />
+      <path className="layout-icon__line" d="M5.2 10.5h1.6M11.2 10.5h1.6M17.2 10.5h1.6" />
+    </svg>
+  );
+}
+
+function LanesLayoutIcon() {
+  return (
+    <svg className="board-layout-switcher__icon" viewBox="0 0 24 24" aria-hidden="true">
+      <rect className="layout-icon__lane" x="4" y="4" width="16" height="4.8" rx="1.1" />
+      <rect className="layout-icon__lane layout-icon__tile--accent" x="4" y="9.6" width="16" height="4.8" rx="1.1" />
+      <rect className="layout-icon__lane" x="4" y="15.2" width="16" height="4.8" rx="1.1" />
+      <path className="layout-icon__line" d="M7 6.4h5.2M7 12h7.8M7 17.6h4.4" />
+    </svg>
+  );
+}
+
 function BoardLayoutSwitcher({ value, onChange }) {
   const options = [
-    { value: 'grid', label: 'Grid layout', icon: <RiLayoutGridFill /> },
-    { value: 'columns', label: 'Column layout', icon: <RiLayoutColumnFill /> },
-    { value: 'lanes', label: 'Lane layout', icon: <RiLayoutRowFill /> },
+    { value: 'grid', label: 'Grid layout', icon: <GridLayoutIcon /> },
+    { value: 'columns', label: 'Column layout', icon: <ColumnsLayoutIcon /> },
+    { value: 'lanes', label: 'Lane layout', icon: <LanesLayoutIcon /> },
   ];
 
   return (
@@ -125,7 +158,7 @@ function buildTasksFromItems(items, noteUid) {
   return out;
 }
 
-function SortableCardWrapper({ uid, layout, children }) {
+function SortableCardWrapper({ uid, layout, activeId, overCardUid, children }) {
   const {
     attributes,
     listeners,
@@ -138,14 +171,36 @@ function SortableCardWrapper({ uid, layout, children }) {
   return (
     <div
       ref={setNodeRef}
-      className={`board-card-shell board-card-shell--${layout}`}
+      className={`board-card-shell board-card-shell--${layout}${isDragging ? ' is-card-dragging' : ''}${activeId && overCardUid === uid && activeId !== uid ? ' is-card-drop-target' : ''}`}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
-        opacity: isDragging ? 0.5 : 1,
       }}
     >
       {children({ dragHandleProps: { ...attributes, ...listeners } })}
+    </div>
+  );
+}
+
+function CardDragPreview({ card, layout }) {
+  const tasks = Object.values(card?.tasks || {});
+  const colorKey = normalizeCardColor(card?.color);
+  const cardHue = CARD_HUES.find((hue) => hue.key === colorKey)?.hex || 'var(--accent)';
+  return (
+    <div className={`board-card-drag-preview board-card-drag-preview--${layout}`}>
+      <div className="board-card-drag-preview__head">
+        <span className="lane-card-color-dot" style={{ '--card-hue': cardHue }} aria-hidden="true" />
+        <span>{card?.title || 'Untitled'}</span>
+        <small>{tasks.length}</small>
+      </div>
+      <div className="board-card-drag-preview__body">
+        {tasks.slice(0, 3).map((task) => (
+          <div key={task.id} className="board-card-drag-preview__task">
+            {renderTaskValue(task.value)}
+          </div>
+        ))}
+        {tasks.length === 0 && <div className="board-card-drag-preview__empty">No tasks</div>}
+      </div>
     </div>
   );
 }
@@ -235,7 +290,18 @@ function Cards({
   const [warningBoardReset, setWarningBoardReset] = useState(false);
   const [activeId, setActiveId] = useState(null);
   const [activeType, setActiveType] = useState(null);
+  const [activeOverCardUid, setActiveOverCardUid] = useState(null);
   const activeDragDataRef = useRef(null);
+  // Phone accordion: columns are collapsible (tap the header chevron).
+  const { isCompact } = useViewport();
+  const [collapsedCols, setCollapsedCols] = useState(() => new Set());
+  const toggleColumnCollapse = useCallback((cardUid) => {
+    setCollapsedCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(cardUid)) next.delete(cardUid); else next.add(cardUid);
+      return next;
+    });
+  }, []);
 
   const sensors = useSensors(
     // Mouse keeps its small drag threshold; touch needs press-and-hold so a
@@ -470,16 +536,28 @@ function Cards({
   const handleDragStart = ({ active }) => {
     setActiveId(active.id);
     setActiveType(active.data.current?.type ?? null);
+    setActiveOverCardUid(null);
     activeDragDataRef.current = { ...active.data.current };
   };
 
   const handleDragOver = useCallback(
     ({ active, over }) => {
-      if (!over || active.id === over.id) return;
       const activeData = active.data.current;
+      const overData = over?.data.current;
+
+      if (activeData?.type === 'card') {
+        const overCardUid = overData?.type === 'task'
+          ? overData.cardUid
+          : overData?.type === 'card'
+            ? (overData.cardUid ?? over?.id)
+            : null;
+        setActiveOverCardUid(overCardUid && overCardUid !== active.id ? overCardUid : null);
+        return;
+      }
+
+      if (!over || active.id === over.id) return;
       if (activeData?.type !== "task") return;
 
-      const overData = over.data.current;
       const activeCardUid = activeData.cardUid;
       const overCardUid =
         overData?.type === "task"
@@ -528,6 +606,7 @@ function Cards({
       const captured = activeDragDataRef.current;
       setActiveId(null);
       setActiveType(null);
+      setActiveOverCardUid(null);
       activeDragDataRef.current = null;
 
       if (!over || active.id === over.id || !captured) return;
@@ -578,6 +657,13 @@ function Cards({
     [boardId, setBoards]
   );
 
+  const handleDragCancel = useCallback(() => {
+    setActiveId(null);
+    setActiveType(null);
+    setActiveOverCardUid(null);
+    activeDragDataRef.current = null;
+  }, []);
+
   if (!board) return null;
 
   const todosCount = (board.cards || []).filter((c) => (c.type || 'todo') === 'todo').length;
@@ -594,7 +680,7 @@ function Cards({
       ? [restrictToHorizontalAxis]
       : boardLayout === 'lanes'
         ? [restrictToVerticalAxis]
-        : [restrictToFirstScrollableAncestor]
+        : []
     : [];
   const visibleCardEntries = board.cards
     .map((card, cardIndex) => ({ card, cardIndex }))
@@ -688,6 +774,7 @@ function Cards({
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
         <div className={`container board-layout board-layout--${boardLayout}`} data-tour="board" data-layout={boardLayout}>
           <SortableContext
@@ -700,7 +787,13 @@ function Cards({
           >
             {visibleCardEntries.map(({ card, cardIndex }, visibleIndex) => {
               return (
-              <SortableCardWrapper key={card.uid} uid={card.uid} layout={boardLayout}>
+              <SortableCardWrapper
+                key={card.uid}
+                uid={card.uid}
+                layout={boardLayout}
+                activeId={activeType === 'card' ? activeId : null}
+                overCardUid={activeOverCardUid}
+              >
                 {({ dragHandleProps }) => (
                   <Card
                     index={cardIndex}
@@ -730,6 +823,9 @@ function Cards({
                     getNoteTitle={getNoteTitle}
                     notes={notesCards}
                     layout={boardLayout}
+                    compact={isCompact}
+                    collapsed={isCompact && collapsedCols.has(card.uid)}
+                    onToggleCollapsed={() => toggleColumnCollapse(card.uid)}
                   />
                 )}
               </SortableCardWrapper>
@@ -775,24 +871,7 @@ function Cards({
           {activeId && activeType === "card" && (() => {
             const card = board.cards.find((c) => c.uid === activeId);
             if (!card) return null;
-            return (
-              <div
-                style={{
-                  background: "var(--theme-bg-card)",
-                  border: "1px solid var(--theme-border)",
-                  borderRadius: "0.5rem",
-                  minWidth: 220,
-                  boxShadow: "0 20px 40px rgba(0,0,0,0.25)",
-                  transform: "rotate(2deg)",
-                  padding: "0.6rem 0.9rem",
-                  fontWeight: 600,
-                  fontSize: "0.875rem",
-                  color: "var(--theme-text-primary)",
-                }}
-              >
-                {card.title}
-              </div>
-            );
+            return <CardDragPreview card={card} layout={boardLayout} />;
           })()}
           {activeId && activeType === "task" && (() => {
             let task = activeDragDataRef.current?.task || null;
@@ -810,7 +889,7 @@ function Cards({
                   background:
                     "linear-gradient(315deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.04) 42%, rgba(255,255,255,0) 60%), color-mix(in srgb, var(--theme-bg-card) 78%, transparent)",
                   border: "1px solid var(--theme-task-border)",
-                  borderRadius: 14,
+                  borderRadius: "var(--board-corner)",
                   padding: "0.6rem 0.75rem",
                   minWidth: 200,
                   maxWidth: 280,

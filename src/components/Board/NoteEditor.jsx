@@ -98,7 +98,7 @@ function extractListItems(editor, liDom) {
   return items;
 }
 
-export default function NoteEditor({ content, onChange, placeholder, paperless, notes, onCreatePage, onNavigatePage, onSendListToBoard }) {
+export default function NoteEditor({ content, onChange, placeholder, paperless, notes, onCreatePage, onNavigatePage, onSendListToBoard, childPagesSlot }) {
   const fileRef = useRef(null);
   const editorRef = useRef(null);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -351,6 +351,8 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
           onTable={() => setTableDialogOpen(true)}
         />
       )}
+      {/* Child pages belong to the page body — rendered below the toolbar. */}
+      {childPagesSlot}
       <EditorContent editor={editor} />
       <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={onFilePick} />
       {editor && (

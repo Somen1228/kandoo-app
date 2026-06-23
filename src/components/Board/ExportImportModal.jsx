@@ -119,7 +119,7 @@ function ExportImportModal({ boards, activeBoardId, isOpen, onClose, onImport })
   };
 
   return (
-    <div style={{
+    <div className="kandoo-modal-overlay" style={{
       position: 'fixed', inset: 0, zIndex: 1000,
       background: 'rgba(0,0,0,0.35)',
       backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
@@ -127,6 +127,7 @@ function ExportImportModal({ boards, activeBoardId, isOpen, onClose, onImport })
     }}>
       <div
         ref={modalRef}
+        className="kandoo-modal-card"
         style={{
           backgroundColor: 'var(--theme-bg-primary)',
           border: '1px solid var(--theme-border)',

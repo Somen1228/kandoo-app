@@ -41,6 +41,8 @@ import HelpModal from "../components/HelpModal";
 import FeedbackModal from "../components/FeedbackModal";
 import TaskConflictModal from "../components/Board/TaskConflictModal";
 import OnboardingTour from "../components/OnboardingTour";
+import MobileTabBar from "../components/MobileTabBar";
+import BottomSheet from "../components/BottomSheet";
 
 const SIDEBAR_MIN = 210;
 const SIDEBAR_MAX = 360;
@@ -102,6 +104,7 @@ function Board() {
   const [showHelpModal, setShowHelpModal]         = useState(false);
   const [helpSection,   setHelpSection]           = useState(null);
   const [showFeedback,  setShowFeedback]          = useState(false);
+  const [showMoreSheet, setShowMoreSheet]         = useState(false);
   const [showTour, setShowTour] = useState(() => localStorage.getItem('kandoo-tour-auto') !== '0');
   const [filterMode, setFilterMode]               = useState(false);
   const [currentMatchIdx, setCurrentMatchIdx]     = useState(0);
@@ -701,6 +704,8 @@ function Board() {
             )}
           </div>
 
+          {/* Secondary actions — relocated to the bottom "More" sheet on phones */}
+          <div className="mac-toolbar__actions">
           {/* Filter toggle */}
           <button
             className={`mac-iconbtn${filterMode ? " is-on" : ""}`}
@@ -785,6 +790,7 @@ function Board() {
               <VscSignIn />
             </button>
           )}
+          </div>
         </header>
 
         {/* Guest upgrade nudge */}
@@ -869,6 +875,40 @@ function Board() {
         <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />
       )}
       {chordArmed && <ChordHint />}
+
+      {/* Phone chrome: bottom tab bar + secondary-actions sheet */}
+      {isCompact && (
+        <MobileTabBar
+          section={section}
+          onSection={(s) => { setSection(s); setScheduleView(null); }}
+          onAdd={quickAddTask}
+          onMore={() => setShowMoreSheet(true)}
+        />
+      )}
+      <BottomSheet open={isCompact && showMoreSheet} onClose={() => setShowMoreSheet(false)} title="More">
+        <button type="button" className="sheet-row" onClick={() => { setFilterMode((m) => !m); setShowMoreSheet(false); }}>
+          {filterMode ? <VscFilterFilled /> : <VscFilter />}
+          <span>{filterMode ? "Filtering matches" : "Filter matches"}</span>
+        </button>
+        <button type="button" className="sheet-row" onClick={() => { setShowExportImport(true); setShowMoreSheet(false); }}>
+          <VscArchive /><span>Export / Import</span>
+        </button>
+        <button type="button" className="sheet-row" onClick={() => { setShowHelpModal(true); setShowMoreSheet(false); }}>
+          <VscQuestion /><span>Help &amp; features</span>
+        </button>
+        <button type="button" className="sheet-row" onClick={() => { openSettings("appearance"); setShowMoreSheet(false); }}>
+          <VscSettingsGear /><span>Settings</span>
+        </button>
+        {user ? (
+          <button type="button" className="sheet-row" onClick={(e) => { openAccountMenu(e); setShowMoreSheet(false); }}>
+            <VscAccount /><span>Account</span>
+          </button>
+        ) : (
+          <button type="button" className="sheet-row" onClick={() => { exitOfflineMode(); setShowMoreSheet(false); }}>
+            <VscSignIn /><span>Sign in to sync</span>
+          </button>
+        )}
+      </BottomSheet>
     </div>
   );
 }

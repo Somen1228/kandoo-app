@@ -14,6 +14,9 @@ const COMMANDS = [
     run: (e, r) => e.chain().focus().deleteRange(r).setParagraph().run() },
   { title: 'Page', desc: 'Create a nested sub-page', kw: ['page', 'subpage', 'note', 'doc'], icon: <VscFile />,
     run: (e, r, ctx) => {
+      // Inline-created pages live as a block right where you typed. The derived
+      // child-list (top of editor) only shows pages that have NO inline block,
+      // so each child appears in exactly one place.
       const created = ctx?.onCreatePage?.();
       const chain = e.chain().focus().deleteRange(r);
       if (created) chain.insertContent({ type: 'pageLink', attrs: { uid: created.uid, title: created.title } });

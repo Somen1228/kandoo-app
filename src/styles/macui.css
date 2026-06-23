@@ -30,6 +30,7 @@
   --radius-lg: 14px;
   --radius-xl: 20px;
   --radius-pill: 999px;
+  --board-corner: 4px;
 
   /* ── Spacing scale ───────────────────────────────────────────────────── */
   --space-1: 4px;
@@ -617,8 +618,8 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   background: var(--theme-bg-secondary);
 }
 .board-layout-switcher__btn {
-  width: 29px;
-  height: 27px;
+  width: 31px;
+  height: 29px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -631,9 +632,37 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   cursor: pointer;
   transition: background var(--motion-fast), color var(--motion-fast), box-shadow var(--motion-fast);
 }
+.board-layout-switcher__icon {
+  width: 19px;
+  height: 19px;
+  display: block;
+}
+.layout-icon__tile,
+.layout-icon__panel,
+.layout-icon__lane {
+  fill: currentColor;
+  opacity: 0.62;
+  transition: opacity var(--motion-fast), fill var(--motion-fast);
+}
+.layout-icon__tile--accent {
+  opacity: 0.9;
+}
+.layout-icon__line {
+  fill: none;
+  stroke: color-mix(in srgb, var(--theme-bg-secondary) 64%, currentColor);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  opacity: 0.75;
+  transition: stroke var(--motion-fast), opacity var(--motion-fast);
+}
 .board-layout-switcher__btn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+.board-layout-switcher__btn:hover .layout-icon__tile,
+.board-layout-switcher__btn:hover .layout-icon__panel,
+.board-layout-switcher__btn:hover .layout-icon__lane {
+  opacity: 0.78;
 }
 .board-layout-switcher__btn:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 48%, transparent);
@@ -643,6 +672,19 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   background: var(--bg-surface);
   color: var(--accent);
   box-shadow: var(--shadow-xs);
+}
+.board-layout-switcher__btn.is-active .layout-icon__tile,
+.board-layout-switcher__btn.is-active .layout-icon__panel,
+.board-layout-switcher__btn.is-active .layout-icon__lane {
+  opacity: 0.92;
+}
+.board-layout-switcher__btn.is-active .layout-icon__tile--accent {
+  fill: color-mix(in srgb, var(--accent) 86%, var(--theme-text-primary));
+  opacity: 1;
+}
+.board-layout-switcher__btn.is-active .layout-icon__line {
+  stroke: color-mix(in srgb, var(--accent) 24%, var(--theme-bg-card));
+  opacity: 0.9;
 }
 
 /* ── Board wrapper fills the remaining height under the toolbar ─────────── */
@@ -710,7 +752,7 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
 /* Column panel — softer, layered macOS surface (overrides App.css .card) */
 .card {
   border: 1px solid var(--theme-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--board-corner);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
@@ -737,8 +779,8 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   padding: 7px 12px;
   font-weight: 600;
   letter-spacing: -0.005em;
-  border-top-left-radius: var(--radius-lg);
-  border-top-right-radius: var(--radius-lg);
+  border-top-left-radius: var(--board-corner);
+  border-top-right-radius: var(--board-corner);
 }
 .card .task-list {
   background: transparent;
@@ -747,10 +789,13 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
 .container {
   gap: var(--board-gap);
   padding: 12px 4px 4px;
-  align-items: start;
+  align-items: stretch;
 }
 .board-layout {
   box-sizing: border-box;
+}
+.board-layout > .add-btn {
+  border-radius: var(--board-corner);
 }
 .board-layout--grid {
   display: grid;
@@ -758,13 +803,14 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
      workspace stretch to fill the row instead of staying pinned at 18rem. */
   grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
   width: 100%;
+  align-items: stretch;
 }
 .board-layout--columns {
   display: flex;
   flex-flow: row nowrap;
   width: max-content;
   min-width: 100%;
-  align-items: flex-start;
+  align-items: stretch;
 }
 .board-layout--lanes {
   display: flex;
@@ -776,19 +822,171 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
 .board-card-shell {
   min-width: 0;
 }
+.board-card-shell.is-card-dragging {
+  position: relative;
+  z-index: 2;
+}
+.board-card-shell.is-card-dragging > .card {
+  opacity: 0;
+}
+.board-card-shell.is-card-dragging::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 62%, var(--theme-border));
+  border-radius: var(--board-corner);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 46%),
+    color-mix(in srgb, var(--accent) 7%, var(--theme-bg-secondary));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.board-card-shell.is-card-drop-target > .card {
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--theme-border));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent),
+    var(--shadow-md);
+}
+.board-card-drag-preview {
+  width: min(20rem, calc(100vw - 32px));
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--theme-border));
+  border-radius: var(--board-corner);
+  background:
+    linear-gradient(315deg, rgba(255,255,255,0.16), rgba(255,255,255,0) 58%),
+    color-mix(in srgb, var(--theme-bg-card) 92%, transparent);
+  box-shadow:
+    0 18px 42px rgba(0,0,0,0.30),
+    0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent);
+  backdrop-filter: blur(16px) saturate(1.35);
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  color: var(--text-primary);
+  transform: rotate(1.25deg);
+}
+.board-card-drag-preview--columns {
+  width: 18.5rem;
+}
+.board-card-drag-preview--lanes {
+  width: min(42rem, calc(100vw - 32px));
+}
+.board-card-drag-preview__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--theme-border) 58%, transparent);
+  background: color-mix(in srgb, var(--theme-bg-secondary) 66%, transparent);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+.board-card-drag-preview__head > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-card-drag-preview__head small {
+  min-width: 18px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--board-corner);
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+}
+.board-card-drag-preview__body {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+.board-card-drag-preview__task,
+.board-card-drag-preview__empty {
+  padding: 9px 11px;
+  border: 1px solid var(--theme-task-border);
+  border-radius: var(--board-corner);
+  background: var(--theme-bg-card);
+  box-shadow: var(--shadow-sm);
+  font-size: 0.82rem;
+  font-weight: 550;
+  line-height: 1.35;
+}
+.board-card-drag-preview__empty {
+  border-style: dashed;
+  color: var(--text-muted);
+  text-align: center;
+}
+.board-card-shell--grid {
+  display: flex;
+  align-self: stretch;
+}
+.board-card-shell--grid .card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  margin-bottom: 0;
+}
 .board-card-shell--columns {
-  width: 18rem;
-  flex: 0 0 18rem;
+  width: 18.5rem;
+  flex: 0 0 18.5rem;
+  display: flex;
+  align-self: stretch;
+  min-height: 0;
 }
 .board-card-shell--columns .card {
+  display: flex;
+  flex-direction: column;
   width: 100%;
+  height: auto;
+  min-height: 0;
   min-width: 0;
+  margin-bottom: 0;
+  border-radius: var(--board-corner);
+  background: color-mix(in srgb, var(--theme-bg-card) 88%, var(--theme-bg-secondary)) !important;
+}
+.card--columns .card-title {
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--theme-bg-secondary) 72%, var(--theme-bg-card)) !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--theme-border) 55%, transparent);
+  border-top-left-radius: var(--board-corner);
+  border-top-right-radius: var(--board-corner);
+}
+.card--columns .task-list {
+  flex: 0 0 auto;
+  min-height: 0;
+  max-height: none !important;
+  overflow-y: visible;
+  padding: 10px 10px 6px;
+}
+.card--columns .mac-task:first-child {
+  margin-top: 0;
+}
+.card--columns .mac-col-empty {
+  margin-top: 0;
+}
+.card--columns .create-task-btn {
+  flex: 0 0 auto;
+  margin: 4px 10px 10px !important;
+  padding: 8px 10px !important;
 }
 .board-card-shell--lanes {
   width: 100%;
 }
 .board-layout--columns > .add-btn {
-  flex: 0 0 18rem;
+  flex: 0 0 18.5rem;
+  align-self: stretch;
+  width: 18.5rem;
+  min-width: 18.5rem;
+  height: auto;
+  min-height: 9rem;
+  margin-bottom: 0;
+  border-radius: var(--board-corner);
 }
 .board-layout--lanes > .add-btn {
   width: 100%;
@@ -796,6 +994,7 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   height: 74px;
   margin: 0;
   align-self: stretch;
+  border-radius: var(--board-corner);
 }
 
 /* Lane layout — columns become stacked horizontal swimlanes. The Card and Task
@@ -804,7 +1003,7 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   width: 100%;
   min-width: 0;
   margin: 0;
-  border-radius: 18px;
+  border-radius: var(--board-corner);
 }
 .card--lanes .card-title {
   min-width: 0;
@@ -817,7 +1016,7 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   height: 10px;
   margin-right: 2px;
   flex: 0 0 auto;
-  border-radius: 3px;
+  border-radius: 999px;
   background: var(--card-hue, var(--accent));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 18%, transparent);
 }
@@ -825,7 +1024,7 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   margin-left: auto;
   padding: 4px 8px;
   border: none;
-  border-radius: 7px;
+  border-radius: var(--board-corner);
   background: transparent;
   color: inherit;
   font-family: var(--font-ui);
@@ -917,7 +1116,7 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   justify-content: center;
   gap: 4px;
   border: 1px dashed var(--theme-border);
-  border-radius: 14px;
+  border-radius: var(--board-corner);
   background: color-mix(in srgb, var(--theme-bg-card) 36%, transparent);
   color: var(--text-muted);
   cursor: pointer;
@@ -950,7 +1149,7 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   margin-top: 8px;
   padding: 22px 12px;
   border: 1px dashed var(--theme-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--board-corner);
   color: var(--text-muted);
   font-size: 0.8rem;
   font-weight: 500;
@@ -974,7 +1173,7 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   flex-direction: column;
   padding: 10px 13px;
   margin-top: 9px;
-  border-radius: 14px;
+  border-radius: var(--board-corner);
   /* Flat and calm at rest — clean surface, hairline border, gentle lift. The
      glass material (sheen + deeper shadow + lift) only appears on hover. */
   background: var(--theme-bg-card);
@@ -2629,6 +2828,48 @@ html.is-panel-window #root {
 .page-link__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .page-link__chev { flex-shrink: 0; opacity: 0.5; font-size: 0.85rem; }
 
+/* Derived child-page list at the top of a page's editor (mirrors the tree). */
+.note-children {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 14px 0 6px;
+}
+.note-child-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.92rem;
+  font-weight: 500;
+  text-align: left;
+  transition: background var(--motion-fast), border-color var(--motion-fast);
+}
+.note-child-link:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-subtle);
+}
+.note-child-link.is-drop-target {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.note-child-link__title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-child-link__chev { flex-shrink: 0; opacity: 0.45; font-size: 0.85rem; }
+.note-child-link svg { flex-shrink: 0; }
+
 /* ============================================================================
    Settings — density, reduce-motion, and the Settings modal
    ========================================================================== */
@@ -3009,4 +3250,293 @@ html.reduce-motion *::after {
     padding-top: env(safe-area-inset-top);
     padding-left: env(safe-area-inset-left);
   }
+}
+
+/* ── Phone polish (≤ 640px) ───────────────────────────────────────────────────
+   Tighten the toolbar + content so they fit a narrow viewport. Desktop and
+   tablet (> 640px) are unaffected. */
+@media (max-width: 640px) {
+  .mac-toolbar {
+    gap: 6px;
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right: max(10px, env(safe-area-inset-right));
+  }
+  /* The flex spacer fights the search for room — drop it on phones. */
+  .mac-toolbar__spacer {
+    display: none;
+  }
+  .mac-toolbar__title {
+    font-size: 1rem;
+    max-width: 32vw;
+  }
+  /* Search fills whatever space is left instead of demanding 200px. */
+  .mac-search {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+  }
+  /* Slightly tighter, but still ≥ comfortable tap size. */
+  .mac-iconbtn {
+    width: 34px;
+    height: 34px;
+  }
+
+  /* Give content the screen — 24px gutters are too much at 360px. */
+  .mac-board-scroll {
+    padding: 8px 12px calc(24px + env(safe-area-inset-bottom));
+  }
+  .mac-board-head {
+    padding: 12px 12px 4px;
+    gap: 10px;
+  }
+  .notes-canvas-wrap {
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Below 380px, hide the board title so the search + actions always fit. */
+@media (max-width: 380px) {
+  .mac-toolbar__title {
+    display: none;
+  }
+}
+
+/* Phone: strip the board header down to just the Tasks/Notes tabs. The meta
+   ("N tasks · saved locally") wraps into a tall stack and the layout switcher
+   overflows — both are non-essential on a phone (single-column anyway). */
+@media (max-width: 640px) {
+  .mac-board-head__meta {
+    display: none;
+  }
+  .mac-board-head .board-layout-switcher {
+    display: none;
+  }
+  /* Every layout collapses to one readable column on a phone. */
+  .board-layout--columns,
+  .board-layout--lanes,
+  .board-layout--grid {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+}
+
+/* ── Phone accordion: collapsible board columns ──────────────────────────── */
+.card-collapse-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-right: 2px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+/* When a column is collapsed, show only its header (title + count + chevron). */
+.card.is-collapsed > :not(.card-title) {
+  display: none;
+}
+.card.is-collapsed {
+  min-height: 0;
+}
+@media (max-width: 640px) {
+  /* Columns sit flush as a tidy stacked list on phones. */
+  .board-layout--grid,
+  .board-layout--columns,
+  .board-layout--lanes {
+    gap: 10px;
+  }
+  .card {
+    margin-bottom: 0;
+    min-width: 0;
+    width: 100%;
+  }
+  .card .card-title {
+    min-height: 48px;
+  }
+}
+
+/* ── Mobile chrome: bottom tab bar + secondary-actions sheet ──────────────── */
+.mobile-tabbar { display: none; }
+.mac-toolbar__actions { display: contents; }
+
+@media (max-width: 640px) {
+  /* Secondary toolbar actions move to the "More" sheet. */
+  .mac-toolbar__actions { display: none; }
+  /* Tasks/Notes tabs + meta now live in the bottom bar — drop the board header. */
+  .mac-board-head { display: none; }
+  /* Leave room for the fixed bottom bar. */
+  .mac-board-scroll {
+    padding: 8px 12px calc(78px + env(safe-area-inset-bottom));
+  }
+  .notes-canvas-wrap {
+    padding-bottom: calc(78px + env(safe-area-inset-bottom));
+  }
+
+  .mobile-tabbar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 90;
+    display: flex;
+    align-items: stretch;
+    height: calc(56px + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+    background: color-mix(in srgb, var(--bg-sidebar) 92%, var(--bg-app));
+    border-top: 1px solid var(--border-subtle);
+    backdrop-filter: blur(18px) saturate(1.4);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  }
+  .mobile-tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-family: var(--font-ui);
+    font-size: 0.62rem;
+    font-weight: 600;
+  }
+  .mobile-tab svg { font-size: 1.3rem; }
+  .mobile-tab.is-active { color: var(--accent); }
+  .mobile-tab--add svg {
+    color: #fff;
+    background: var(--accent);
+    border-radius: 50%;
+    padding: 11px;
+    box-sizing: content-box;
+    margin-top: -20px;
+    font-size: 1.35rem;
+    box-shadow: 0 5px 16px color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+}
+
+/* Bottom sheet (More menu + mobile modal presentation) */
+.bottom-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: mac-scrim-in var(--motion-fast) var(--ease-out);
+}
+.bottom-sheet {
+  width: 100%;
+  max-width: 640px;
+  max-height: 88vh;
+  background: var(--theme-bg-modal, var(--bg-sidebar));
+  color: var(--text-primary);
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.3);
+  padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  animation: bottom-sheet-up var(--motion-base) var(--ease-out);
+}
+@keyframes bottom-sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.bottom-sheet__grip {
+  width: 38px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border-subtle);
+  margin: 4px auto 10px;
+}
+.bottom-sheet__title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0 4px 8px;
+}
+.bottom-sheet__body { overflow-y: auto; }
+.sheet-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  font-weight: 500;
+  text-align: left;
+  border-radius: 10px;
+}
+.sheet-row:active { background: var(--bg-hover); }
+.sheet-row svg { font-size: 1.2rem; color: var(--text-secondary); flex-shrink: 0; }
+
+/* Modals presented as bottom sheets on phones (opt-in via these classes). */
+@media (max-width: 640px) {
+  .kandoo-modal-overlay {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+  .kandoo-modal-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 92vh !important;
+    border-radius: 18px 18px 0 0 !important;
+    margin: 0 !important;
+    animation: bottom-sheet-up var(--motion-base) var(--ease-out);
+  }
+}
+
+/* Two-pane modals (Settings, Help) → stacked full-height sheets on phones. */
+@media (max-width: 640px) {
+  .settings-overlay { align-items: flex-end; padding: 0; }
+  .settings-modal {
+    width: 100%;
+    max-width: 100%;
+    height: 92vh;
+    max-height: 92vh;
+    flex-direction: column;
+    border-radius: 18px 18px 0 0;
+  }
+  .settings-rail {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    overflow-x: auto;
+    flex-shrink: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    scrollbar-width: none;
+  }
+  .settings-rail::-webkit-scrollbar { display: none; }
+  .settings-rail__title { display: none; }
+  .settings-rail__item { white-space: nowrap; flex-shrink: 0; }
+  .settings-content { width: 100%; min-width: 0; }
+
+  .help-modal-body { flex-direction: column; }
+  .help-modal-nav {
+    width: 100% !important;
+    flex-direction: row !important;
+    align-items: center;
+    overflow-x: auto;
+    flex-shrink: 0;
+    border-right: none !important;
+    border-bottom: 1px solid var(--theme-border);
+    scrollbar-width: none;
+  }
+  .help-modal-nav::-webkit-scrollbar { display: none; }
 }
