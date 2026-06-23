@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react';
 import { Extension } from '@tiptap/core';
@@ -26,6 +26,9 @@ import ContextMenu from '../ContextMenu';
 import { toast } from '../../utils/toast';
 import { compressImage } from './NoteCard';
 import { useSettings } from '../../contexts/SettingsContext';
+import { DOCUMENT_FONTS, FONT_CATEGORIES } from '../../utils/documentFonts';
+// Loads the @font-face families used by the font picker (lazy with the editor).
+import '../../utils/loadEditorFonts';
 import {
   VscBold, VscItalic, VscListUnordered, VscListOrdered, VscCode, VscQuote,
   VscLink, VscHorizontalRule, VscClearAll, VscChecklist, VscTable,
@@ -64,12 +67,8 @@ const FontSize = Extension.create({
   },
 });
 
-const FONT_FAMILIES = [
-  { label: 'Default font', value: '' },
-  { label: 'Sans', value: 'Inter, -apple-system, sans-serif' },
-  { label: 'Serif', value: 'Georgia, "Times New Roman", serif' },
-  { label: 'Mono', value: '"SF Mono", ui-monospace, monospace' },
-];
+// Sourced from the shared registry so the picker and the exporters agree.
+const FONT_FAMILIES = DOCUMENT_FONTS.map((font) => ({ label: font.label, value: font.css, category: font.category }));
 const FONT_SIZES = ['', '12px', '13px', '14px', '16px', '18px', '20px', '24px', '30px'];
 const TEXT_STYLES = [
   { label: 'Normal', value: 'p', hint: 'Paragraph' },
@@ -669,27 +668,41 @@ function ToolbarMenuPanel({ config, anchorElement, onSelect, onClose }) {
         </label>
       )}
       <div className="note-tb-panel__options">
-        {visibleOptions.map((option) => {
-          const active = option.value === config.value;
-          const fontStyle = config.kind === 'font'
-            ? { fontFamily: option.value || 'var(--font-ui)' }
-            : undefined;
-          return (
-            <button key={option.value || 'default'} type="button"
-              className={`note-tb-panel__option${active ? ' is-active' : ''}`}
-              role="option" aria-selected={active}
-              onClick={() => onSelect(option.value)}>
-              {config.kind === 'font' && (
-                <span className="note-tb-panel__sample" style={fontStyle}>Aa</span>
-              )}
-              <span className="note-tb-panel__copy">
-                <strong style={fontStyle}>{option.label}</strong>
-                {option.hint && <small>{option.hint}</small>}
-              </span>
-              {active && <VscCheck className="note-tb-panel__check" aria-hidden="true" />}
-            </button>
-          );
-        })}
+        {(() => {
+          let lastCategory = null;
+          return visibleOptions.map((option) => {
+            const active = option.value === config.value;
+            const fontStyle = config.kind === 'font'
+              ? { fontFamily: option.value || 'var(--font-ui)' }
+              : undefined;
+            // Insert a category header (Sans-serif / Serif / Monospace) the first
+            // time each group appears in the (possibly filtered) list.
+            const showHeader = config.kind === 'font' && option.category
+              && option.category !== 'default' && option.category !== lastCategory;
+            lastCategory = option.category;
+            const groupLabel = showHeader
+              ? FONT_CATEGORIES.find((category) => category.id === option.category)?.label
+              : null;
+            return (
+              <Fragment key={option.value || 'default'}>
+                {groupLabel && <div className="note-tb-panel__group">{groupLabel}</div>}
+                <button type="button"
+                  className={`note-tb-panel__option${active ? ' is-active' : ''}`}
+                  role="option" aria-selected={active}
+                  onClick={() => onSelect(option.value)}>
+                  {config.kind === 'font' && (
+                    <span className="note-tb-panel__sample" style={fontStyle}>Aa</span>
+                  )}
+                  <span className="note-tb-panel__copy">
+                    <strong style={fontStyle}>{option.label}</strong>
+                    {option.hint && <small>{option.hint}</small>}
+                  </span>
+                  {active && <VscCheck className="note-tb-panel__check" aria-hidden="true" />}
+                </button>
+              </Fragment>
+            );
+          });
+        })()}
         {visibleOptions.length === 0 && (
           <div className="note-tb-panel__empty">No fonts match “{query.trim()}”.</div>
         )}

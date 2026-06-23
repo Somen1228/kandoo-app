@@ -1,4 +1,6 @@
 import { NOTE_EXPORT_FORMATS } from './noteExportFormats';
+import { fontFromFamily, CODE_FONT } from './documentFonts';
+import { loadDocumentFonts } from './pdfFonts';
 
 export { NOTE_EXPORT_FORMATS } from './noteExportFormats';
 
@@ -353,7 +355,9 @@ function runOptions(node, marks = {}) {
   if (['EM', 'I'].includes(node.tagName)) next.italics = true;
   if (node.tagName === 'U') next.underline = {};
   if (['S', 'STRIKE', 'DEL'].includes(node.tagName)) next.strike = true;
-  if (node.tagName === 'CODE') next.font = 'Courier New';
+  const family = fontFromFamily(node.style?.fontFamily);
+  if (family && family.docx) next.font = family.docx;
+  if (node.tagName === 'CODE') next.font = CODE_FONT.docx;
   const color = node.style?.color?.match(/#([0-9a-f]{6})/i)?.[1];
   if (color) next.color = color.toUpperCase();
   const px = parseFloat(node.style?.fontSize || '');
@@ -414,7 +418,7 @@ async function docxBlocks(root, D) {
     } else if (node.tagName === 'BLOCKQUOTE') {
       blocks.push(new D.Paragraph({ indent: { left: 480 }, children: await docxInline(node, { italics: true }, D) }));
     } else if (node.tagName === 'PRE') {
-      blocks.push(new D.Paragraph({ children: await docxInline(node, { font: 'Courier New' }, D) }));
+      blocks.push(new D.Paragraph({ children: await docxInline(node, { font: CODE_FONT.docx }, D) }));
     } else {
       blocks.push(new D.Paragraph({ children: await docxInline(node, {}, D) }));
     }
@@ -436,22 +440,348 @@ async function buildDocx(title, root) {
   return D.Packer.toBlob(documentFile);
 }
 
-async function buildPdf(title, root) {
+// ── PDF: our own renderer over pdfmake ───────────────────────────────────────
+// We walk the cleaned note DOM and emit a pdfmake document model, so the layout,
+// fonts and styling are entirely ours — no DOM rasterisation (html2canvas) and
+// no browser print dialog. Output is a real, selectable-text PDF blob.
+
+const PDF_ACCENT = '#5b4ce3';
+const PDF_TEXT = '#172033';
+const PDF_MUTED = '#4b5563';
+const PDF_CONTENT_WIDTH = 487; // A4 width (595pt) minus the 54pt side margins.
+
+// pdfmake table layouts (passed inline on each node — no global registration).
+const PDF_TABLE_LAYOUT = {
+  hLineWidth: () => 0.5, vLineWidth: () => 0.5,
+  hLineColor: () => '#d7dce5', vLineColor: () => '#d7dce5',
+  paddingLeft: () => 6, paddingRight: () => 6, paddingTop: () => 4, paddingBottom: () => 4,
+};
+const PDF_QUOTE_LAYOUT = {
+  hLineWidth: () => 0, vLineWidth: (i) => (i === 0 ? 3 : 0), vLineColor: () => PDF_ACCENT,
+  paddingLeft: () => 10, paddingRight: () => 6, paddingTop: () => 2, paddingBottom: () => 2,
+};
+const PDF_CODE_LAYOUT = {
+  hLineWidth: () => 0, vLineWidth: () => 0, fillColor: () => '#111827',
+  paddingLeft: () => 10, paddingRight: () => 10, paddingTop: () => 8, paddingBottom: () => 8,
+};
+
+// Fonts actually registered for the current export (set in buildPdf). A font is
+// only applied to a run if it's in here, so a load failure can't crash render.
+let registeredPdfFonts = new Set(['Roboto']);
+
+// Which embeddable families a note references — so we embed only those.
+function usedPdfFonts(root) {
+  const families = new Set();
+  root.querySelectorAll('[style*="font-family" i]').forEach((element) => {
+    const font = fontFromFamily(element.style?.fontFamily);
+    if (font && font.pdf !== 'Roboto') families.add(font.pdf);
+  });
+  if (root.querySelector('pre, code')) families.add(CODE_FONT.pdf);
+  return [...families];
+}
+
+function pdfAddDecoration(marks, value) {
+  const list = new Set(Array.isArray(marks.decoration) ? marks.decoration : marks.decoration ? [marks.decoration] : []);
+  list.add(value);
+  marks.decoration = [...list];
+}
+
+// HTML inline node → array of pdfmake text runs, carrying inherited marks.
+function pdfInline(node, marks = {}) {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const text = node.nodeValue || '';
+    return text ? [{ text, ...marks }] : [];
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) return [];
+  if (node.tagName === 'BR') return [{ text: '\n', ...marks }];
+  if (node.tagName === 'IMG') return []; // images are emitted as block nodes
+  const next = { ...marks, decoration: marks.decoration ? [...marks.decoration] : undefined };
+  if (['STRONG', 'B'].includes(node.tagName)) next.bold = true;
+  if (['EM', 'I'].includes(node.tagName)) next.italics = true;
+  if (node.tagName === 'U') pdfAddDecoration(next, 'underline');
+  if (['S', 'STRIKE', 'DEL'].includes(node.tagName)) pdfAddDecoration(next, 'lineThrough');
+  // Honour a chosen document font (inline style set by the editor's font picker),
+  // but only if it was actually embedded for this export.
+  const family = fontFromFamily(node.style?.fontFamily);
+  if (family && registeredPdfFonts.has(family.pdf)) next.font = family.pdf;
+  if (node.tagName === 'CODE') {
+    next.color = '#b4408f';
+    if (registeredPdfFonts.has(CODE_FONT.pdf)) next.font = CODE_FONT.pdf;
+  }
+  if (node.tagName === 'A' && node.getAttribute('href')) {
+    next.link = node.getAttribute('href');
+    next.color = PDF_ACCENT;
+    pdfAddDecoration(next, 'underline');
+  }
+  const runs = [];
+  for (const child of node.childNodes) runs.push(...pdfInline(child, next));
+  return runs;
+}
+
+// Convert any image source to a pdfkit-friendly PNG/JPEG data URI (+ dimensions).
+// Non-PNG/JPEG (svg, webp, gif) or remote images are rasterised via a canvas.
+async function pdfImage(src) {
+  if (!src) return null;
+  const parts = dataUriParts(src);
+  if (parts && /image\/(png|jpe?g)/.test(parts.mime)) {
+    let dimensions = { width: 600, height: 400 };
+    try { dimensions = await imageElementDimensions(src); } catch { /* keep fallback */ }
+    return { dataUri: src, ...dimensions };
+  }
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const element = new Image();
+      element.crossOrigin = 'anonymous';
+      element.onload = () => resolve(element);
+      element.onerror = reject;
+      element.src = src;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth || 600;
+    canvas.height = image.naturalHeight || 400;
+    canvas.getContext('2d').drawImage(image, 0, 0);
+    return { dataUri: canvas.toDataURL('image/png'), width: canvas.width, height: canvas.height };
+  } catch {
+    return null;
+  }
+}
+
+function pdfImageBlock(img) {
+  return img
+    ? { image: img.dataUri, width: Math.min(PDF_CONTENT_WIDTH, img.width || PDF_CONTENT_WIDTH), margin: [0, 6, 0, 6] }
+    : { text: '[Image]', italics: true, color: PDF_MUTED, margin: [0, 4, 0, 4] };
+}
+
+async function pdfList(node) {
+  const ordered = node.tagName === 'OL';
+  const hasChecks = [...node.children].some((li) => li.getAttribute?.('data-checked') != null);
+  const items = [];
+  for (const li of node.children) {
+    if (li.tagName !== 'LI') continue;
+    const checked = li.getAttribute('data-checked');
+    const ownRuns = [];
+    for (const child of li.childNodes) {
+      if (['UL', 'OL'].includes(child.tagName)) continue;
+      ownRuns.push(...pdfInline(child));
+    }
+    const prefix = checked != null ? [{ text: checked === 'true' ? '☑  ' : '☐  ' }] : [];
+    const content = [...prefix, ...ownRuns];
+    const nestedLists = [...li.children].filter((child) => ['UL', 'OL'].includes(child.tagName));
+    if (nestedLists.length) {
+      const stack = [{ text: content.length ? content : ' ' }];
+      for (const nested of nestedLists) stack.push(await pdfList(nested));
+      items.push({ stack });
+    } else {
+      items.push({ text: content.length ? content : ' ' });
+    }
+  }
+  // Task lists carry their own ☑/☐ glyphs, so render them bullet-free.
+  if (hasChecks) return { stack: items, margin: [0, 2, 0, 8] };
+  return { [ordered ? 'ol' : 'ul']: items, margin: [0, 2, 0, 8] };
+}
+
+async function pdfTable(node) {
+  const body = [];
+  for (const row of node.querySelectorAll('tr')) {
+    const cells = [];
+    for (const cell of row.children) {
+      const isHead = cell.tagName === 'TH';
+      cells.push({ text: pdfInline(cell), bold: isHead, fillColor: isHead ? '#f1f3f8' : undefined });
+    }
+    if (cells.length) body.push(cells);
+  }
+  if (!body.length) return { text: '' };
+  const columns = Math.max(...body.map((row) => row.length));
+  body.forEach((row) => { while (row.length < columns) row.push({ text: '' }); });
+  return {
+    table: { headerRows: node.querySelector('th') ? 1 : 0, widths: Array(columns).fill('*'), body },
+    layout: PDF_TABLE_LAYOUT,
+    margin: [0, 4, 0, 10],
+  };
+}
+
+// HTML block nodes → ordered list of pdfmake content nodes.
+async function pdfBlocks(root) {
+  const out = [];
+  for (const node of root.children) {
+    const tag = node.tagName;
+    if (/^H[1-6]$/.test(tag)) {
+      out.push({ text: pdfInline(node), style: `h${tag[1]}` });
+    } else if (tag === 'UL' || tag === 'OL') {
+      out.push(await pdfList(node));
+    } else if (tag === 'BLOCKQUOTE') {
+      out.push({
+        table: { widths: ['*'], body: [[{ text: pdfInline(node), italics: true, color: PDF_MUTED }]] },
+        layout: PDF_QUOTE_LAYOUT, margin: [0, 4, 0, 8],
+      });
+    } else if (tag === 'PRE') {
+      const codeCell = { text: node.textContent || '', color: '#e5e7eb', fontSize: 9.5, preserveLeadingSpaces: true };
+      if (registeredPdfFonts.has(CODE_FONT.pdf)) codeCell.font = CODE_FONT.pdf;
+      out.push({
+        table: { widths: ['*'], body: [[codeCell]] },
+        layout: PDF_CODE_LAYOUT, margin: [0, 4, 0, 10],
+      });
+    } else if (tag === 'TABLE') {
+      out.push(await pdfTable(node));
+    } else if (tag === 'HR') {
+      out.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: PDF_CONTENT_WIDTH, y2: 0, lineWidth: 0.5, lineColor: '#d7dce5' }], margin: [0, 8, 0, 8] });
+    } else if (tag === 'IMG') {
+      out.push(pdfImageBlock(await pdfImage(node.getAttribute('src'))));
+    } else {
+      const runs = pdfInline(node);
+      if (runs.length) out.push({ text: runs, margin: [0, 0, 0, 8] });
+      // Images nested inside a paragraph/div are emitted after its text.
+      for (const image of node.querySelectorAll?.('img') || []) {
+        out.push(pdfImageBlock(await pdfImage(image.getAttribute('src'))));
+      }
+    }
+  }
+  return out;
+}
+
+// pdfmake's bundled Roboto files are its most thoroughly tested browser fonts.
+// Custom document fonts are still embedded for runs that explicitly use them,
+// but the body default must remain dependable for every note and WebView.
+const PDF_DEFAULT_FONT = 'Roboto';
+const ROBOTO_FONT_DEFINITION = {
+  normal: 'Roboto-Regular.ttf',
+  bold: 'Roboto-Medium.ttf',
+  italics: 'Roboto-Italic.ttf',
+  bolditalics: 'Roboto-MediumItalic.ttf',
+};
+
+function pdfDocumentBlob(pdfMake, docDefinition, fonts, vfs) {
+  return new Promise((resolve, reject) => {
+    let stream;
+    try {
+      // Supplying fonts and VFS to this document avoids races through pdfmake's
+      // mutable global registry. getStream also makes synchronous parser errors
+      // catchable, unlike getBlob's internal promise/callback path.
+      stream = pdfMake.createPdf(docDefinition, undefined, fonts, vfs).getStream();
+    } catch (error) {
+      reject(error);
+      return;
+    }
+
+    const chunks = [];
+    let settled = false;
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+    stream.on('data', (chunk) => chunks.push(chunk));
+    stream.on('error', fail);
+    stream.on('end', () => {
+      if (settled) return;
+      settled = true;
+      resolve(new Blob(chunks, { type: 'application/pdf' }));
+    });
+    try {
+      stream.end();
+    } catch (error) {
+      fail(error);
+    }
+  });
+}
+
+function replacePdfFonts(value, font = PDF_DEFAULT_FONT) {
+  if (!value || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    value.forEach((entry) => replacePdfFonts(entry, font));
+    return;
+  }
+  if (value.font) value.font = font;
+  Object.values(value).forEach((entry) => replacePdfFonts(entry, font));
+}
+
+async function buildPdfRasterFallback(title, root) {
   const [{ jsPDF }] = await Promise.all([import('jspdf'), import('html2canvas')]);
   const host = document.createElement('article');
   host.setAttribute('aria-hidden', 'true');
-  host.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;box-sizing:border-box;padding:54px 62px;background:#fff;color:#172033;font:16px/1.65 Arial,sans-serif;';
-  host.innerHTML = `<style>h1{font-size:34px;line-height:1.2}h2{font-size:27px}h3{font-size:22px}img{max-width:100%;height:auto}table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:6px 8px}blockquote{border-left:3px solid #6d5dfc;padding-left:12px;color:#4b5563}pre{white-space:pre-wrap;background:#f3f4f6;padding:12px}</style><h1>${escapeHtml(title)}</h1>${root.innerHTML}`;
+  host.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;box-sizing:border-box;padding:54px 62px;background:#fff;color:#172033;font:16px/1.65 Inter,Arial,sans-serif;';
+  host.innerHTML = `<style>h1{font-size:34px;line-height:1.2}h2{font-size:27px}h3{font-size:22px}img{max-width:100%;height:auto}table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:6px 8px}blockquote{border-left:3px solid #6d5dfc;padding-left:12px;color:#4b5563}pre{white-space:pre-wrap;background:#f3f4f6;padding:12px}ul[data-type="taskList"]{list-style:none;padding-left:0}</style><h1>${escapeHtml(title)}</h1>${root.innerHTML}`;
   document.body.appendChild(host);
   try {
     const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
     await pdf.html(host, {
-      x: 12, y: 12, width: 186, windowWidth: 794, autoPaging: 'text',
+      x: 12,
+      y: 12,
+      width: 186,
+      windowWidth: 794,
+      autoPaging: 'text',
       html2canvas: { scale: 0.75, useCORS: true, logging: false, backgroundColor: '#ffffff' },
     });
     return pdf.output('blob');
   } finally {
     host.remove();
+  }
+}
+
+async function buildPdf(title, root) {
+  const [pdfMakeMod, robotoVfsMod] = await Promise.all([
+    import('pdfmake/build/pdfmake'),
+    import('pdfmake/build/vfs_fonts'),
+  ]);
+  const pdfMake = pdfMakeMod.default || pdfMakeMod;
+  const robotoVfs = robotoVfsMod.default || robotoVfsMod;
+
+  // Embed only explicitly selected custom families. Roboto is supplied by
+  // pdfmake's own prebuilt VFS and remains the reliable document default.
+  const needed = [...new Set(usedPdfFonts(root))];
+  const { vfs: customVfs, fonts: customFonts, loaded } = await loadDocumentFonts(needed);
+  const vfs = { ...robotoVfs, ...customVfs };
+  const fonts = { Roboto: ROBOTO_FONT_DEFINITION, ...customFonts };
+  registeredPdfFonts = new Set(['Roboto', ...loaded]);
+
+  const styles = {
+    docTitle: { fontSize: 24, bold: true, margin: [0, 0, 0, 14] },
+    h1: { fontSize: 20, bold: true, margin: [0, 12, 0, 6] },
+    h2: { fontSize: 16, bold: true, margin: [0, 10, 0, 5] },
+    h3: { fontSize: 13.5, bold: true, margin: [0, 8, 0, 4] },
+    h4: { fontSize: 12, bold: true, margin: [0, 8, 0, 4] },
+    h5: { fontSize: 11, bold: true, margin: [0, 6, 0, 3] },
+    h6: { fontSize: 10.5, bold: true, color: PDF_MUTED, margin: [0, 6, 0, 3] },
+  };
+  const footer = (currentPage, pageCount) => ({
+    text: `${currentPage} / ${pageCount}`,
+    alignment: 'center', fontSize: 8, color: '#9aa3af', margin: [0, 10, 0, 0],
+  });
+
+  const body = await pdfBlocks(root);
+  const docDefinition = {
+    info: { title, creator: 'Kandoo' },
+    pageSize: 'A4',
+    pageMargins: [54, 56, 54, 60],
+    defaultStyle: { font: PDF_DEFAULT_FONT, fontSize: 11, lineHeight: 1.35, color: PDF_TEXT },
+    styles,
+    content: [{ text: title, style: 'docTitle' }, ...body],
+    footer,
+  };
+
+  try {
+    return await pdfDocumentBlob(pdfMake, docDefinition, fonts, vfs);
+  } catch (error) {
+    if (loaded.length) {
+      // fontkit can reject otherwise valid third-party TTFs for particular glyph
+      // combinations. Preserve a usable export by retrying with bundled Roboto.
+      console.warn('Custom PDF font failed; retrying with Roboto.', error);
+      registeredPdfFonts = new Set(['Roboto']);
+      replacePdfFonts(docDefinition.content);
+      try {
+        return await pdfDocumentBlob(
+          pdfMake,
+          docDefinition,
+          { Roboto: ROBOTO_FONT_DEFINITION },
+          robotoVfs,
+        );
+      } catch (robotoError) {
+        console.warn('Text PDF rendering failed; using raster fallback.', robotoError);
+      }
+    } else {
+      console.warn('Text PDF rendering failed; using raster fallback.', error);
+    }
+    return buildPdfRasterFallback(title, root);
   }
 }
 

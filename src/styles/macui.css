@@ -1559,6 +1559,21 @@ html.is-panel-window #root {
   font-size: 0.75rem;
   text-align: center;
 }
+.note-tb-panel__group {
+  padding: 8px 8px 3px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  position: sticky;
+  top: 0;
+  background: var(--bg-elevated, var(--theme-bg-modal));
+  z-index: 1;
+}
+.note-tb-panel__group:first-child {
+  padding-top: 2px;
+}
 .note-tb-panel__option {
   position: relative;
   min-width: 0;
