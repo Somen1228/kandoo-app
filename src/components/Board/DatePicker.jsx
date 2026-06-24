@@ -19,7 +19,7 @@ function tomorrowStr() {
   const d = new Date(); d.setDate(d.getDate() + 1); return toDueString(d);
 }
 
-export default function DatePicker({ value, onChange, onPointerDown, style = {} }) {
+export default function DatePicker({ value, onChange, onPointerDown, style = {}, triggerClassName = '', tone = null }) {
   const [open, setOpen]           = useState(false);
   const [pending, setPending]     = useState(value || '');
   const [viewYear, setViewYear]   = useState(new Date().getFullYear());
@@ -105,7 +105,8 @@ export default function DatePicker({ value, onChange, onPointerDown, style = {} 
         ref={triggerRef}
         type="button"
         onClick={openPicker}
-        className={`mac-due-trigger${labelText ? ' has-date' : ''}`}
+        className={`mac-due-trigger${labelText ? ' has-date' : ''}${triggerClassName ? ` ${triggerClassName}` : ''}`}
+        data-tone={tone || undefined}
         aria-label="Set due date"
       >
         <VscCalendar />

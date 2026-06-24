@@ -155,7 +155,7 @@ const SECTIONS = [
     content: (
       <>
         <H2>Columns (Cards)</H2>
-        <P>Columns are the vertical swimlanes inside a board — typically representing a workflow stage like To-do / In Progress / Done.</P>
+        <P>Columns are the vertical swimlanes inside a board — typically representing a workflow stage like To-do / In Progress / In Review / Done.</P>
         <SubH>Create</SubH>
         <Steps items={[<>Click <strong>+ Add Card</strong> at the end of the board, type a title, pick a colour.</>]} />
         <SubH>Rename</SubH>
@@ -303,7 +303,7 @@ const SECTIONS = [
         <Steps items={[
           <>Linked task chips stay connected to the board task and show status, card, and due date.</>,
           <>Checking the chip toggles the real board task done/open.</>,
-          <>The right document sidebar shows linked tasks in the core To-do, In-Progress, and Done lanes. Drag tasks between lanes or right-click a task to move it elsewhere.</>,
+          <>The right document sidebar shows linked tasks in the core To-do, In-Progress, In-Review, and Done lanes. Drag tasks between lanes or right-click a task to move it elsewhere.</>,
           <>Opening a linked task jumps back to the task board and briefly highlights the task so you can locate it.</>,
         ]} />
 

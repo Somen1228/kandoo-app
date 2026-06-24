@@ -81,16 +81,26 @@ function ContextMenu({ x, y, items, onClose }) {
           <button
             key={i}
             role="menuitem"
+            disabled={item.disabled}
             onClick={() => {
+              if (item.disabled) return;
               item.onClick?.();
               onClose();
             }}
             className="w-full text-left px-3 py-1.5 text-sm flex items-center gap-2 transition-colors"
             style={{
-              color: item.danger ? 'var(--theme-danger)' : 'var(--theme-text-primary)',
+              color: item.disabled
+                ? 'var(--theme-text-muted)'
+                : item.danger
+                  ? 'var(--theme-danger)'
+                  : 'var(--theme-text-primary)',
               background: 'transparent',
+              cursor: item.disabled ? 'default' : 'pointer',
+              opacity: item.disabled ? 0.72 : 1,
+              fontWeight: item.disabled ? 700 : 400,
             }}
             onMouseEnter={(e) => {
+              if (item.disabled) return;
               e.currentTarget.style.background = item.danger
                 ? 'var(--theme-danger-bg)'
                 : 'var(--theme-bg-hover)';

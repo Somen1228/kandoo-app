@@ -8,14 +8,24 @@ import { generateTaskID } from "../../utils/taskIdGenerator";
 import { renderTaskValue } from "../../utils/richText";
 import { sanitizeHtml, markdownToHtml, isHtml, htmlToText } from "../../utils/htmlEditor";
 import { matchesTask, matchesCardTitle } from "../../utils/search";
-import { classifyTask, formatDueShort, dueTone, toDueString } from "../../utils/dueDate";
+import { classifyTask, dueTone, toDueString } from "../../utils/dueDate";
+import {
+  completionTimingLabel,
+  completionTimingTone,
+  getCompletionTiming,
+  isDoneColumnTitle,
+  markTaskCompleted,
+  markTaskOpen,
+  withDueHistory,
+} from "../../utils/taskLifecycle";
 import { CARD_HUES, resolveCardColor, normalizeCardColor, isDarkSurface } from "../../themes/cardPalettes";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useSettings } from "../../contexts/SettingsContext";
 import { uploadImage, deleteImage, isStorageUrl } from "../../services/imageStorage";
+import { isProtectedCoreColumn } from "../../utils/coreColumns";
 import {
   VscEdit, VscCheck, VscTrash, VscSave, VscCopy, VscClose,
-  VscBold, VscItalic, VscCalendar, VscNote, VscLink, VscPin, VscPinned, VscChevronDown,
+  VscBold, VscItalic, VscCalendar, VscNote, VscLink, VscPin, VscPinned, VscChevronDown, VscDebugRestart,
 } from "react-icons/vsc";
 import { IoDuplicateOutline } from "react-icons/io5";
 import { IoImageOutline } from "react-icons/io5";
@@ -31,9 +41,8 @@ import DatePicker from "./DatePicker.jsx";
 import NotePickerModal from "./NotePickerModal.jsx";
 import LinkedNotesPopover from "./LinkedNotesPopover.jsx";
 import PasteSplitModal from "./PasteSplitModal.jsx";
+import TaskTimelineModal from "./TaskTimelineModal.jsx";
 import PinIcon from "../icons/PinIcon.jsx";
-
-const PROTECTED_COLUMN_TITLES = new Set(["To-do", "In-Progress", "Done"]);
 
 // A task's note links live in `noteLinks` (array). Older tasks used a single
 // `noteLink` object — read both so nothing breaks during the transition.
@@ -312,8 +321,9 @@ function Card({
   updateCardTasks, updateCardNote, updateCards, searchTerm,
   query, filterMode = false, scheduleView = null, currentMatchTaskId = null,
   focusedTask = null,
-  quickAddSignal = 0, dragHandleProps = {}, onMoveToDone,
+  quickAddSignal = 0, dragHandleProps = {}, onMoveToDone, onMoveTask,
   navigateToNote, getNoteTitle, notes = [], layout = 'grid',
+  allCards = [],
   compact = false, collapsed = false, onToggleCollapsed,
 }) {
   const isNote = type === 'note';
@@ -337,6 +347,8 @@ function Card({
   const [linkedPopover, setLinkedPopover] = useState(null); // { taskId, x, y } | null
   const [pasteSplit, setPasteSplit] = useState(null); // { lines, text } | null
   const [flashTaskId, setFlashTaskId] = useState(null);
+  const [completingTaskId, setCompletingTaskId] = useState(null);
+  const [timelineTask, setTimelineTask] = useState(null);
   const [taskValue, setTaskValue]             = useState(""); // HTML string
   const [newTaskImages, setNewTaskImages]     = useState([]);
   const [newTaskDue, setNewTaskDue]           = useState(""); // "YYYY-MM-DD" or ""
@@ -360,8 +372,11 @@ function Card({
   const newToolbarRef  = useRef(null);
   const editFileInputRef = useRef(null);
   const newFileInputRef  = useRef(null);
+  const completionMoveTimerRef = useRef(null);
 
-  const isProtectedColumn = PROTECTED_COLUMN_TITLES.has(title);
+  const isProtectedColumn = isProtectedCoreColumn({ uid, title });
+  const isDoneColumn = isDoneColumnTitle(title);
+  const moveTargetCards = allCards.filter((card) => (card.type || 'todo') !== 'note' && card.uid !== uid);
 
   // Pre-fill due date with today when the add-task form opens, if the setting is on.
   useEffect(() => {
@@ -460,13 +475,20 @@ function Card({
     e.preventDefault();
     e.stopPropagation();
     const linkedCount = getNoteLinks(task).length;
+    const moveItems = moveTargetCards.map((targetCard) => ({
+      label: `Move to ${targetCard.title || 'Untitled'}`,
+      icon: '↳',
+      onClick: () => onMoveTask?.(uid, task.id, targetCard.uid),
+    }));
     setCtxMenu({
       x: e.clientX, y: e.clientY,
       items: [
-        { label: "Edit task",   icon: <VscEdit />,          onClick: () => startEditingTask(task.id, task.value, task.images) },
-        { label: task.done ? "Mark as undone" : "Mark as done", icon: <VscCheck />, onClick: () => toggleDoneTask(task.id) },
+        ...(!isDoneColumn ? [{ label: "Edit task", icon: <VscEdit />, onClick: () => startEditingTask(task.id, task.value, task.images) }] : []),
+        { label: task.done ? "Reopen task" : "Mark as done", icon: task.done ? <VscDebugRestart /> : <VscCheck />, onClick: () => toggleDoneTask(task.id) },
         { label: "Copy text",   icon: <VscCopy />,          onClick: () => copyTaskText(task.value) },
         { label: "Duplicate",   icon: <IoDuplicateOutline />, onClick: () => duplicateTask(task) },
+        { label: "Task timeline", icon: <VscCalendar />, onClick: () => setTimelineTask(task) },
+        ...(moveItems.length ? [{ divider: true }, { label: "Move to", icon: '⇄', disabled: true }, ...moveItems] : []),
         { divider: true },
         { label: linkedCount ? `Linked notes (${linkedCount})…` : "Link a note…", icon: <VscLink />, onClick: () => setNotePicker({ kind: 'task', taskId: task.id }) },
         { divider: true },
@@ -593,10 +615,14 @@ function Card({
     const clean = sanitizeHtml(taskValue);
     if (isEmptyTaskContent(clean, newTaskImages)) { setToggleAddTask(false); return; }
     const now = Date.now();
-    const newTask = {
+    let task = {
       id: generateTaskID(), value: clean, images: newTaskImages,
-      due: newTaskDue || null, createdAt: now, updatedAt: now,
+      due: null, createdAt: now, updatedAt: now,
       ...(newTaskNoteLinks.length ? { noteLinks: newTaskNoteLinks } : {}),
+    };
+    if (newTaskDue) task = withDueHistory(task, newTaskDue, now);
+    const newTask = {
+      ...task,
     };
     updateCardTasks(index, { ...tasks, [newTask.id]: newTask });
     setTaskValue("");
@@ -612,7 +638,8 @@ function Card({
     const now = Date.now();
     const newTasks = { ...tasks };
     lines.forEach(line => {
-      const task = { id: generateTaskID(), value: line, images: [], due: newTaskDue || null, createdAt: now, updatedAt: now };
+      let task = { id: generateTaskID(), value: line, images: [], due: null, createdAt: now, updatedAt: now };
+      if (newTaskDue) task = withDueHistory(task, newTaskDue, now);
       newTasks[task.id] = task;
     });
     updateCardTasks(index, newTasks);
@@ -667,9 +694,16 @@ function Card({
       deleteTask(taskId);
       return;
     }
+    const now = Date.now();
+    const currentTask = tasks[taskId];
+    const nextTask = withDueHistory(
+      { ...currentTask, value: clean, images: editingTaskImages, updatedAt: now },
+      editingTaskDue || null,
+      now
+    );
     updateCardTasks(index, {
       ...tasks,
-      [taskId]: { ...tasks[taskId], value: clean, images: editingTaskImages, due: editingTaskDue || null, updatedAt: Date.now() },
+      [taskId]: nextTask,
     });
     setEditingTaskId(null);
     setEditingTaskValue("");
@@ -697,16 +731,61 @@ function Card({
     toast.success('Note cleared');
   };
   const toggleDoneTask = (taskId) => {
-    const nowDone = !tasks[taskId]?.done;
-    const updated = {
-      ...tasks[taskId],
-      done: nowDone,
-      updatedAt: Date.now(),
-      completedAt: nowDone ? Date.now() : null,
-    };
+    if (completingTaskId === taskId) return;
+    const task = tasks[taskId];
+    const nowDone = !task?.done;
+    if (!nowDone && isDoneColumn && onMoveTask) {
+      const fallbackUid = allCards.find((card) => card.uid === task.previousCardUid && (card.type || 'todo') !== 'note')?.uid
+        || allCards.find((card) => (card.type || 'todo') !== 'note' && /^to-?do$/i.test((card.title || '').trim()))?.uid
+        || allCards.find((card) => (card.type || 'todo') !== 'note' && card.uid !== uid)?.uid;
+      const reopened = markTaskOpen(task);
+      if (fallbackUid) {
+        onMoveTask(uid, taskId, fallbackUid, reopened);
+      } else {
+        updateCardTasks(index, { ...tasks, [taskId]: reopened });
+      }
+      return;
+    }
+    const updated = nowDone
+      ? markTaskCompleted(task, { uid, title })
+      : markTaskOpen(task);
     updateCardTasks(index, { ...tasks, [taskId]: updated });
-    if (nowDone) onMoveToDone?.(taskId, updated);
+    if (nowDone && onMoveToDone) {
+      setCompletingTaskId(taskId);
+      if (completionMoveTimerRef.current) window.clearTimeout(completionMoveTimerRef.current);
+      completionMoveTimerRef.current = window.setTimeout(() => {
+        onMoveToDone(taskId, updated);
+        setCompletingTaskId((current) => (current === taskId ? null : current));
+        completionMoveTimerRef.current = null;
+      }, 520);
+    }
   };
+
+  useEffect(() => {
+    if (completingTaskId && !tasks[completingTaskId]) setCompletingTaskId(null);
+  }, [completingTaskId, tasks]);
+
+  useEffect(() => () => {
+    if (completionMoveTimerRef.current) window.clearTimeout(completionMoveTimerRef.current);
+  }, []);
+
+  const updateTaskDue = useCallback((taskId, nextDue) => {
+    const currentTask = tasks[taskId];
+    if (!currentTask) return;
+    const now = Date.now();
+    let nextTask = withDueHistory(
+      { ...currentTask, updatedAt: now },
+      nextDue || null,
+      now
+    );
+    if (nextTask.done && nextTask.completedAt) {
+      nextTask = {
+        ...nextTask,
+        completionTiming: getCompletionTiming(nextTask.due, nextTask.completedAt),
+      };
+    }
+    updateCardTasks(index, { ...tasks, [taskId]: nextTask });
+  }, [index, tasks, updateCardTasks]);
 
   // ── Image upload ───────────────────────────────────────────────────────────
 
@@ -948,7 +1027,7 @@ function Card({
                   isEditing={editingTaskId === task.id}
                   className={`mac-task ${task.done ? "is-done" : ""} ${
                     task.id === currentMatchTaskId ? "is-match" : ""
-                  } ${task.id === flashTaskId ? "is-focus-flash" : ""} ${editingTaskId === task.id ? "is-editing" : "cursor-grab active:cursor-grabbing"}`}
+                  } ${task.id === flashTaskId ? "is-focus-flash" : ""} ${completingTaskId === task.id ? "is-completing" : ""} ${editingTaskId === task.id ? "is-editing" : "cursor-grab active:cursor-grabbing"}`}
                   onContextMenu={e => openTaskContextMenu(e, task)}
                 >
                   {editingTaskId === task.id ? (
@@ -1095,11 +1174,25 @@ function Card({
 
                       <div className="mac-task__footer">
                         <div className="mac-task__meta">
-                          {task.due && (
-                            <span className="mac-chip" data-tone={dueTone(task)}>
-                              <VscCalendar style={{ fontSize: '0.85em' }} />
-                              {formatDueShort(task.due)}
+                          {isDoneColumn && task.completedAt && (
+                            <span className="mac-chip" data-tone="done">
+                              <VscCheck style={{ fontSize: '0.85em' }} />
+                              {new Date(task.completedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                             </span>
+                          )}
+                          {isDoneColumn && task.completedAt && (
+                            <span className="mac-chip" data-tone={completionTimingTone(task.completionTiming)}>
+                              {completionTimingLabel(task.completionTiming).replace('Completed ', '')}
+                            </span>
+                          )}
+                          {task.due && (
+                            <DatePicker
+                              value={task.due}
+                              onChange={(nextDue) => updateTaskDue(task.id, nextDue)}
+                              onPointerDown={e => e.stopPropagation()}
+                              triggerClassName="mac-due-trigger--task-chip"
+                              tone={dueTone(task)}
+                            />
                           )}
                           {(() => {
                             const links = getNoteLinks(task);
@@ -1140,23 +1233,36 @@ function Card({
                           })()}
                         </div>
                         <div className="mac-task__actions">
-                          <button
-                            className="mac-task__btn is-edit"
-                            onClick={() => startEditingTask(task.id, task.value, task.images)}
-                            title="Edit task"
-                            aria-label="Edit task"
-                            onPointerDown={e => e.stopPropagation()}
-                          >
-                            <VscEdit />
-                          </button>
+                          {isDoneColumn && task.completedAt && (
+                            <button
+                              className="mac-task__btn is-timeline"
+                              onClick={() => setTimelineTask(task)}
+                              title="View task timeline"
+                              aria-label="View task timeline"
+                              onPointerDown={e => e.stopPropagation()}
+                            >
+                              <VscCalendar />
+                            </button>
+                          )}
+                          {!isDoneColumn && (
+                            <button
+                              className="mac-task__btn is-edit"
+                              onClick={() => startEditingTask(task.id, task.value, task.images)}
+                              title="Edit task"
+                              aria-label="Edit task"
+                              onPointerDown={e => e.stopPropagation()}
+                            >
+                              <VscEdit />
+                            </button>
+                          )}
                           <button
                             className="mac-task__btn is-done"
                             onClick={() => toggleDoneTask(task.id)}
-                            title={task.done ? "Mark as undone" : "Mark as done"}
-                            aria-label="Toggle done"
+                            title={task.done ? "Reopen task" : "Mark as done"}
+                            aria-label={task.done ? "Reopen task" : "Mark as done"}
                             onPointerDown={e => e.stopPropagation()}
                           >
-                            <VscCheck />
+                            {task.done ? <VscDebugRestart /> : <VscCheck />}
                           </button>
                           <button
                             className="mac-task__btn is-del"
@@ -1443,6 +1549,15 @@ function Card({
           }}
           onManage={() => { const tid = linkedPopover.taskId; setLinkedPopover(null); setNotePicker({ kind: 'task', taskId: tid }); }}
           onClose={() => setLinkedPopover(null)}
+        />,
+        document.body
+      )}
+
+      {timelineTask && createPortal(
+        <TaskTimelineModal
+          task={timelineTask}
+          cardTitle={title}
+          onClose={() => setTimelineTask(null)}
         />,
         document.body
       )}

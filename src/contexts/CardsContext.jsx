@@ -17,6 +17,7 @@ import {
   stageBoards,
   storageKind,
 } from '../services/boardStorage';
+import { defaultCards, ensureCoreColumns } from '../utils/coreColumns';
 
 export const CardsContext = createContext();
 
@@ -25,12 +26,6 @@ const WORKSPACE_EVENT = 'kandoo://workspace-updated';
 const WINDOW_LABEL = (() => {
   try { return isTauri() ? getCurrentWindow().label : 'web'; } catch { return 'web'; }
 })();
-
-const defaultCards = [
-  { uid: 'col-todo',       title: 'To-do',       color: 'violet', isVisible: true, tasks: {} },
-  { uid: 'col-inprogress', title: 'In-Progress',  color: 'sky',    isVisible: true, tasks: {} },
-  { uid: 'col-done',       title: 'Done',         color: 'mint',   isVisible: true, tasks: {} },
-];
 
 const ensureCardUids = (boards) =>
   boards.map(b => ({
@@ -217,7 +212,7 @@ export const CardsProvider = ({ children }) => {
 
   const setBoards = useCallback((updater) => {
     setBoardsRaw(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
+      const next = ensureCoreColumns(typeof updater === 'function' ? updater(prev) : updater);
       if (!skipHistoryRef.current) {
         if (pendingSnapshotRef.current === null) pendingSnapshotRef.current = prev;
         if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
@@ -342,7 +337,7 @@ export const CardsProvider = ({ children }) => {
         if (hydrated.length === 0) {
           hydrated = [{ id: uuidv4(), title: 'My workspace', cards: defaultCards }];
         }
-        hydrated = ensureCardUids(hydrated);
+        hydrated = ensureCoreColumns(ensureCardUids(hydrated));
         await saveBoards(hydrated, storageScope);
         if (cancelled) return;
         skipNextSaveRef.current = true;
@@ -353,7 +348,7 @@ export const CardsProvider = ({ children }) => {
       } catch (err) {
         console.error('[Kandoo] Failed to load workspace:', err);
         if (cancelled) return;
-        setBoardsRaw([{ id: uuidv4(), title: 'My workspace', cards: defaultCards }]);
+        setBoardsRaw(ensureCoreColumns([{ id: uuidv4(), title: 'My workspace', cards: defaultCards }]));
         setSaveState('error');
         toast.error('Could not open local storage. Export a backup before closing the app.');
       } finally {
@@ -390,7 +385,7 @@ export const CardsProvider = ({ children }) => {
       setSyncState('synced');
       skipNextSaveRef.current  = true;
       skipHistoryRef.current   = true;
-      setBoardsRaw(ensureCardUids(remoteBoards));
+      setBoardsRaw(ensureCoreColumns(ensureCardUids(remoteBoards)));
       queueMicrotask(() => { skipHistoryRef.current = false; });
     });
 
@@ -467,7 +462,7 @@ export const CardsProvider = ({ children }) => {
         const fresh = await loadStoredBoards(storageScope);
         if (cancelled) return;
         skipNextSaveRef.current = true;
-        setBoardsRaw(ensureCardUids(fresh));
+        setBoardsRaw(ensureCoreColumns(ensureCardUids(fresh)));
       } catch (err) {
         console.error('[Kandoo] Failed to sync from another window:', err);
       }
@@ -481,7 +476,7 @@ export const CardsProvider = ({ children }) => {
     if (!conflict || !userUid) return;
 
     if (strategy === 'cloud') {
-      const cloudBoards = ensureCardUids(conflict.boards || []);
+      const cloudBoards = ensureCoreColumns(ensureCardUids(conflict.boards || []));
       cloudRevisionRef.current = conflict.revision;
       localRevisionRef.current = conflict.revision;
       cloudConflictRef.current = null;
@@ -512,7 +507,7 @@ export const CardsProvider = ({ children }) => {
     }
 
     if (strategy === 'merge') {
-      const cloudBoards = ensureCardUids(conflict.boards || []);
+      const cloudBoards = ensureCoreColumns(ensureCardUids(conflict.boards || []));
       const { boards: mergedBoards, conflicts } = mergeWorkspaces(boardsRef.current, cloudBoards);
       if (conflicts.length > 0) {
         // Pause — surface per-task conflicts for the user to resolve
@@ -521,7 +516,7 @@ export const CardsProvider = ({ children }) => {
       }
       // No real content conflicts — compute what changed so we can tell the user
       const autoMergeSummary = buildMergeSummary(boardsRef.current, cloudBoards);
-      await applyMerge(ensureCardUids(mergedBoards), conflict.revision, autoMergeSummary);
+      await applyMerge(ensureCoreColumns(ensureCardUids(mergedBoards)), conflict.revision, autoMergeSummary);
     }
   }, [storageScope, userUid]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -533,20 +528,21 @@ export const CardsProvider = ({ children }) => {
     const { localBoards, cloudBoards, revision } = pendingMerge;
     const { boards: finalBoards } = mergeWorkspaces(localBoards, cloudBoards, choices);
     setPendingMerge(null);
-    await applyMerge(ensureCardUids(finalBoards), revision);
+    await applyMerge(ensureCoreColumns(ensureCardUids(finalBoards)), revision);
   }, [pendingMerge, userUid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const applyMerge = useCallback(async (merged, revision, summary = null) => {
     setSyncState('syncing');
     try {
-      const { workspace: saved } = await saveWorkspace(userUid, merged, revision, true);
+      const normalizedMerged = ensureCoreColumns(ensureCardUids(merged));
+      const { workspace: saved } = await saveWorkspace(userUid, normalizedMerged, revision, true);
       cloudRevisionRef.current = saved.revision;
       localRevisionRef.current = saved.revision;
       cloudConflictRef.current = null;
       setCloudConflict(null);
       skipNextSaveRef.current = true;
-      setBoardsRaw(merged);
-      await saveBoards(merged, storageScope);
+      setBoardsRaw(normalizedMerged);
+      await saveBoards(normalizedMerged, storageScope);
       setSyncState('synced');
 
       if (summary) {

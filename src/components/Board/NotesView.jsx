@@ -17,7 +17,7 @@ import { CARD_HUES, normalizeCardColor } from '../../themes/cardPalettes';
 
 const INDENT_WIDTH = 14;
 const CARD_HUE_HEX = Object.fromEntries(CARD_HUES.map((hue) => [hue.key, hue.hex]));
-const WORKFLOW_CARD_RE = /^(to-?do|in[-\s]?progress|done|completed|finished)$/i;
+const WORKFLOW_CARD_RE = /^(to-?do|in[-\s]?progress|in[-\s]?review|done|completed|finished)$/i;
 
 // ── Note-tree drag-and-drop helpers (flat array, order = sibling order) ───────
 

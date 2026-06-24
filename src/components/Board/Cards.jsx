@@ -39,6 +39,7 @@ import NotesView from "./NotesView";
 import { matchesTask, matchesCardTitle } from "../../utils/search";
 import { classifyTask } from "../../utils/dueDate";
 import { renderTaskValue } from "../../utils/richText";
+import { isDoneColumnTitle, markTaskCompleted, markTaskOpen } from "../../utils/taskLifecycle";
 import Modal from "./Modal";
 import { CardsContext } from "../../contexts/CardsContext";
 import { useSettings } from "../../contexts/SettingsContext";
@@ -400,6 +401,47 @@ function Cards({
     [boardId, setBoards]
   );
 
+  const moveTaskToCard = useCallback(
+    (fromCardUid, taskId, toCardUid, overrideTask = null) => {
+      if (!fromCardUid || !taskId || !toCardUid || fromCardUid === toCardUid) return false;
+      let movedToTitle = '';
+      setBoards((prevBoards) =>
+        prevBoards.map((b) => {
+          if (b.id !== boardId) return b;
+          const fromCard = b.cards.find((card) => card.uid === fromCardUid);
+          const toCard = b.cards.find((card) => card.uid === toCardUid);
+          const task = overrideTask || fromCard?.tasks?.[taskId];
+          if (!fromCard || !toCard || !task || (toCard.type || 'todo') === 'note') return b;
+
+          const targetIsDone = isDoneColumnTitle(toCard.title);
+          const sourceIsDone = isDoneColumnTitle(fromCard.title);
+          let movedTask = overrideTask || task;
+          if (targetIsDone) movedTask = markTaskCompleted(movedTask, fromCard);
+          else if (sourceIsDone || movedTask.done) movedTask = markTaskOpen(movedTask);
+
+          movedToTitle = toCard.title || 'Untitled card';
+          return {
+            ...b,
+            cards: b.cards.map((card) => {
+              if (card.uid === fromCardUid) {
+                const nextTasks = { ...(card.tasks || {}) };
+                delete nextTasks[taskId];
+                return { ...card, tasks: nextTasks };
+              }
+              if (card.uid === toCardUid) {
+                return { ...card, tasks: { ...(card.tasks || {}), [taskId]: movedTask } };
+              }
+              return card;
+            }),
+          };
+        })
+      );
+      if (movedToTitle) toast.success(`Moved task to ${movedToTitle}`);
+      return Boolean(movedToTitle);
+    },
+    [boardId, setBoards]
+  );
+
   const toggleCardPin = useCallback((cardUid) => {
     setBoards((prev) => prev.map((b) => {
       if (b.id !== boardId) return b;
@@ -487,13 +529,10 @@ function Cards({
           : choice.title.trim();
         if (!targetUid || (choice.mode === 'existing' && targetUid === fromCardUid)) return b;
 
-        const targetIsDone = /^(done|completed|finished)$/i.test((targetTitle || '').trim());
-        const movedTask = {
-          ...task,
-          done: targetIsDone,
-          updatedAt: Date.now(),
-          completedAt: targetIsDone ? Date.now() : null,
-        };
+        const targetIsDone = isDoneColumnTitle(targetTitle);
+        const movedTask = targetIsDone
+          ? markTaskCompleted(task, fromCard)
+          : markTaskOpen(task);
         movedToTitle = targetTitle || 'Untitled card';
         movedToUid = targetUid;
         moved = true;
@@ -555,10 +594,12 @@ function Cards({
       setBoards((prevBoards) =>
         prevBoards.map((b) => {
           if (b.id !== boardId) return b;
+          const fromCol = b.cards.find((card) => card.uid === fromCardUid);
           const doneCol = b.cards.find(
-            (c) => c.type !== 'note' && /^(done|completed|finished)$/i.test(c.title.trim())
+            (c) => c.type !== 'note' && isDoneColumnTitle(c.title)
           );
-          if (!doneCol || doneCol.uid === fromCardUid) return b;
+          if (!fromCol || !doneCol || doneCol.uid === fromCardUid) return b;
+          const completedTask = markTaskCompleted(taskData, fromCol);
           return {
             ...b,
             cards: b.cards.map((col) => {
@@ -567,7 +608,7 @@ function Cards({
                 return { ...col, tasks: rest };
               }
               if (col.uid === doneCol.uid) {
-                return { ...col, tasks: { ...col.tasks, [taskId]: taskData } };
+                return { ...col, tasks: { ...col.tasks, [taskId]: completedTask } };
               }
               return col;
             }),
@@ -608,7 +649,15 @@ function Cards({
     setActiveId(active.id);
     setActiveType(active.data.current?.type ?? null);
     setActiveOverCardUid(null);
-    activeDragDataRef.current = { ...active.data.current };
+    const activeData = active.data.current;
+    const originCard = activeData?.type === 'task'
+      ? board?.cards.find((card) => card.uid === activeData.cardUid)
+      : null;
+    activeDragDataRef.current = {
+      ...activeData,
+      originCardUid: originCard?.uid || activeData?.cardUid || null,
+      originCardTitle: originCard?.title || '',
+    };
   };
 
   const handleDragOver = useCallback(
@@ -629,7 +678,6 @@ function Cards({
       if (!over || active.id === over.id) return;
       if (activeData?.type !== "task") return;
 
-      const activeCardUid = activeData.cardUid;
       const overCardUid =
         overData?.type === "task"
           ? overData.cardUid
@@ -637,17 +685,29 @@ function Cards({
           ? (overData.cardUid ?? over.id)
           : null;
 
-      if (!overCardUid || activeCardUid === overCardUid) return;
+      if (!overCardUid) return;
 
       setBoards((prev) =>
         prev.map((b) => {
           if (b.id !== boardId) return b;
-          const srcIdx = b.cards.findIndex((c) => c.uid === activeCardUid);
+          const srcIdx = b.cards.findIndex((c) => c.tasks?.[active.id]);
           const tgtIdx = b.cards.findIndex((c) => c.uid === overCardUid);
           if (srcIdx < 0 || tgtIdx < 0) return b;
+          if (srcIdx === tgtIdx) return b;
 
-          const task = b.cards[srcIdx].tasks[active.id];
+          const sourceCard = b.cards[srcIdx];
+          const targetCard = b.cards[tgtIdx];
+          const task = sourceCard.tasks[active.id];
           if (!task) return b;
+          const origin = activeDragDataRef.current;
+          const originCard = b.cards.find((card) => card.uid === origin?.originCardUid)
+            || (origin?.originCardTitle ? { uid: origin.originCardUid, title: origin.originCardTitle } : null)
+            || sourceCard;
+          const movedTask = isDoneColumnTitle(targetCard.title)
+            ? markTaskCompleted(task, originCard)
+            : isDoneColumnTitle(sourceCard.title) || task.done
+              ? markTaskOpen(task)
+              : task;
 
           return {
             ...b,
@@ -660,7 +720,7 @@ function Cards({
                 const entries = Object.entries(card.tasks);
                 const overIdx = entries.findIndex(([id]) => id === over.id);
                 const insertAt = overIdx >= 0 ? overIdx : entries.length;
-                entries.splice(insertAt, 0, [active.id, task]);
+                entries.splice(insertAt, 0, [active.id, movedTask]);
                 return { ...card, tasks: Object.fromEntries(entries) };
               }
               return card;
@@ -896,9 +956,11 @@ function Cards({
                     quickAddSignal={visibleIndex === 0 ? quickAddSignal : 0}
                     dragHandleProps={dragHandleProps}
                     onMoveToDone={settings.autoMoveDone ? (taskId, taskData) => moveTaskToDone(card.uid, taskId, taskData) : undefined}
+                    onMoveTask={moveTaskToCard}
                     navigateToNote={navigateToNote}
                     getNoteTitle={getNoteTitle}
                     notes={notesCards}
+                    allCards={board.cards}
                     layout={boardLayout}
                     compact={isCompact}
                     collapsed={isCompact && collapsedCols.has(card.uid)}
