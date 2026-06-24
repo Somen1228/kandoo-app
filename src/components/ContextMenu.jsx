@@ -53,7 +53,7 @@ function ContextMenu({ x, y, items, onClose }) {
   return ReactDOM.createPortal(
     <div
       ref={menuRef}
-      className="fixed z-[60] rounded-lg shadow-xl py-1 min-w-[10rem]"
+      className="context-menu fixed z-[60] rounded-lg shadow-xl py-1 min-w-[10rem]"
       style={{
         left: pos.left,
         top: pos.top,

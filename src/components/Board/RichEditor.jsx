@@ -38,6 +38,7 @@ const RichEditor = forwardRef(function RichEditor({
   onCancel,
   onBlur,
   onMultilinePaste,
+  onImagePaste,
   onRequestLink,
   className = '',
   style,
@@ -261,6 +262,31 @@ const RichEditor = forwardRef(function RichEditor({
   const handlePaste = async (e) => {
     const cb = e.clipboardData || window.clipboardData;
     const text = cb.getData('text/plain');
+    const imageFiles = [
+      ...Array.from(cb.files || []),
+      ...Array.from(cb.items || [])
+        .filter((item) => item.kind === 'file')
+        .map((item) => item.getAsFile())
+        .filter(Boolean),
+    ].filter((file, index, files) =>
+      file.type?.startsWith('image/') &&
+      files.findIndex((candidate) =>
+        candidate.name === file.name &&
+        candidate.size === file.size &&
+        candidate.lastModified === file.lastModified
+      ) === index
+    );
+
+    if (imageFiles.length && onImagePaste) {
+      e.preventDefault();
+      await onImagePaste(imageFiles);
+      if (!text) {
+        updateEmptyState();
+        onChange?.(editorRef.current?.innerHTML || '');
+        return;
+      }
+    }
+
     if (!text) return; // let browser handle non-text payloads
     e.preventDefault();
 

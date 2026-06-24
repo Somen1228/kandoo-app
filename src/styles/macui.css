@@ -1139,6 +1139,58 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   margin: 4px 12px 12px !important;
 }
 
+.task-editor-shell {
+  margin: 6px 8px 8px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--theme-border));
+  border-radius: var(--board-corner);
+  background: color-mix(in srgb, var(--theme-bg-card) 92%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 18%, transparent);
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast), background var(--motion-fast);
+}
+.task-editor-shell:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--theme-border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.task-editor-shell > div:first-child {
+  padding: 5px 8px 2px !important;
+  border-bottom: none !important;
+  background: transparent;
+}
+.task-editor-shell > div:first-child button {
+  color: var(--theme-text-muted) !important;
+  opacity: 0.9;
+}
+.task-editor-shell > div:first-child button:hover {
+  color: var(--theme-text-primary) !important;
+}
+.task-rich-editor {
+  min-height: 46px;
+  padding: 8px 12px 10px;
+  line-height: 1.45;
+}
+.task-editor-shell--edit .task-rich-editor {
+  min-height: 54px;
+}
+.task-editor-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 12px 8px;
+}
+.task-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 9px;
+}
+.task-editor-actions button[title^="Attach image"] {
+  margin-right: 2px;
+}
+.task-editor-actions button[type="submit"] {
+  box-shadow: none !important;
+}
+
 /* Empty column state */
 .mac-col-empty {
   display: flex;
@@ -1194,6 +1246,23 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
 .mac-task:focus-within {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.mac-task.is-editing {
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.mac-task.is-editing:hover,
+.mac-task.is-editing:focus-within {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+.mac-task.is-editing .task-editor-shell {
+  margin: 0;
+  width: 100%;
 }
 .mac-task.is-done {
   opacity: 0.62;

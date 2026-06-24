@@ -352,6 +352,7 @@ function Card({
   const [viewingImages, setViewingImages]     = useState(null); // { images, index }
 
   const inputRef      = useRef(null);
+  const editFormRef   = useRef(null);
   const menuTriggerRef = useRef(null);
   const editEditorRef = useRef(null);
   const newEditorRef  = useRef(null);
@@ -621,7 +622,7 @@ function Card({
     toast.success(`Added ${lines.length} tasks`);
   };
 
-  const deleteTask = (taskId) => {
+  const deleteTask = useCallback((taskId) => {
     const removed = tasks[taskId];
     // "Confirm" mode asks first; "Undo" mode deletes immediately + offers a toast.
     if (settings.taskDeleteMode === 'confirm' && removed) {
@@ -639,7 +640,7 @@ function Card({
         },
       });
     }
-  };
+  }, [index, settings.taskDeleteMode, tasks, updateCardTasks]);
 
   const startEditingTask = (taskId, taskVal, taskImages = []) => {
     setEditingTaskId(taskId);
@@ -657,7 +658,7 @@ function Card({
     setEditingTaskDue("");
   };
 
-  const saveEditedTask = (taskId) => {
+  const saveEditedTask = useCallback((taskId) => {
     const clean = sanitizeHtml(editingTaskValue);
     // Emptied out → treat as a delete (routed through deleteTask so the user's
     // confirm/undo preference still applies) rather than saving a blank task.
@@ -674,7 +675,19 @@ function Card({
     setEditingTaskValue("");
     setEditingTaskImages([]);
     setEditingTaskDue("");
-  };
+  }, [deleteTask, editingTaskDue, editingTaskImages, editingTaskValue, index, tasks, updateCardTasks]);
+
+  useEffect(() => {
+    if (!editingTaskId) return undefined;
+    const handlePointerDown = (event) => {
+      if (uploading) return;
+      if (editFormRef.current?.contains(event.target)) return;
+      if (event.target.closest?.('[data-fmt-pop], .mac-date-popover, .context-menu, [role="dialog"]')) return;
+      saveEditedTask(editingTaskId);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [editingTaskId, saveEditedTask, uploading]);
 
   const handleDeleteCard = () => { setCtxMenu(null); setToDelete("card");  setShowDeleteWarning(true); };
   const deleteAllTasks   = () => { setCtxMenu(null); setToDelete("tasks"); Object.keys(tasks).length > 0 ? setShowDeleteWarning(true) : setDefaultModal(true); };
@@ -731,6 +744,16 @@ function Card({
   const handleNewUpload = async (e) => {
     const files = Array.from(e.target.files);
     e.target.value = '';
+    await processUpload(files, (urls) => setNewTaskImages(prev => [...prev, ...urls]));
+    newEditorRef.current?.focus();
+  };
+
+  const handleEditImagePaste = async (files) => {
+    await processUpload(files, (urls) => setEditingTaskImages(prev => [...prev, ...urls]));
+    editEditorRef.current?.focus();
+  };
+
+  const handleNewImagePaste = async (files) => {
     await processUpload(files, (urls) => setNewTaskImages(prev => [...prev, ...urls]));
     newEditorRef.current?.focus();
   };
@@ -931,13 +954,9 @@ function Card({
                   {editingTaskId === task.id ? (
                     /* ── Edit mode ── */
                     <form
+                      ref={editFormRef}
+                      className="task-editor-shell task-editor-shell--edit"
                       onSubmit={e => { e.preventDefault(); saveEditedTask(task.id); }}
-                      style={{
-                        background: 'var(--theme-bg-card)',
-                        borderRadius: 10, overflow: 'hidden',
-                        boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-                        margin: '2px 0',
-                      }}
                     >
                       <FormattingToolbar
                         ref={editToolbarRef}
@@ -951,23 +970,22 @@ function Card({
                         onSave={() => saveEditedTask(task.id)}
                         onCancel={cancelEditingTask}
                         onRequestLink={() => editToolbarRef.current?.openLink()}
+                        onImagePaste={handleEditImagePaste}
                         autoFocus
                         placeholder="Edit task…"
-                        className=""
+                        className="task-rich-editor"
                         style={{
                           background: 'transparent',
                           color: 'var(--theme-text-primary)',
-                          minHeight: '3.25rem',
                           fontFamily: 'inherit',
                           fontSize: '0.875rem',
-                          padding: '8px 12px',
                           outline: 'none', border: 'none',
                         }}
                       />
 
                       {/* Image thumbnails */}
                       {editingTaskImages.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 12px 8px' }}>
+                        <div className="task-editor-attachments">
                           {editingTaskImages.map((src, i) => (
                             <div key={i} style={{ position: 'relative' }}>
                               <img src={src} alt={`img-${i}`} style={thumbStyle(false)} />
@@ -992,11 +1010,7 @@ function Card({
                       )}
 
                       {/* Bottom action row */}
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: 6,
-                        padding: '6px 10px 8px',
-                        borderTop: '1px solid var(--theme-border)',
-                      }}>
+                      <div className="task-editor-actions">
                         <button
                           type="button"
                           onClick={() => !uploading && editFileInputRef.current?.click()}
@@ -1177,15 +1191,7 @@ function Card({
         <form
           onSubmit={addTask}
           ref={inputRef}
-          className={layout === 'lanes' ? 'lane-task-form' : undefined}
-          style={{
-            margin: '4px 8px 8px',
-            background: 'var(--theme-bg-card)',
-            border: '1.5px solid var(--theme-accent)',
-            borderRadius: 10,
-            overflow: 'hidden',
-            boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-          }}
+          className={`task-editor-shell task-editor-shell--new${layout === 'lanes' ? ' lane-task-form' : ''}`}
         >
           {/* Formatting toolbar */}
           <FormattingToolbar
@@ -1203,16 +1209,15 @@ function Card({
             onCancel={() => { setToggleAddTask(false); setTaskValue(''); setNewTaskImages([]); setNewTaskNoteLinks([]); }}
             onRequestLink={() => newToolbarRef.current?.openLink()}
             onMultilinePaste={(lines, text) => setPasteSplit({ lines, text })}
+            onImagePaste={handleNewImagePaste}
             autoFocus
             placeholder="New task…"
-            className=""
+            className="task-rich-editor"
             style={{
               background: 'transparent',
               color: 'var(--theme-text-primary)',
-              minHeight: '2.75rem',
               fontFamily: 'inherit',
               fontSize: '0.875rem',
-              padding: '8px 12px',
               outline: 'none',
               border: 'none',
             }}
@@ -1220,7 +1225,7 @@ function Card({
 
           {/* Image thumbnails */}
           {newTaskImages.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 12px 8px' }}>
+            <div className="task-editor-attachments">
               {newTaskImages.map((src, i) => (
                 <div key={i} style={{ position: 'relative' }}>
                   <img src={src} alt={`new-img-${i}`} style={thumbStyle(false)} />
@@ -1268,11 +1273,7 @@ function Card({
           )}
 
           {/* Bottom action row */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '6px 10px 8px',
-            borderTop: '1px solid var(--theme-border)',
-          }}>
+          <div className="task-editor-actions">
             {/* Image upload */}
             <button
               type="button"

@@ -126,6 +126,7 @@ export default function DatePicker({ value, onChange, onPointerDown, style = {} 
       {/* Popover portal */}
       {open && createPortal(
         <div
+          className="mac-date-popover"
           style={{
             position: 'fixed',
             top: popPos.top,
