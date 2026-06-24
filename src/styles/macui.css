@@ -1642,6 +1642,7 @@ html.is-panel-window #root {
   padding: 0 8px 0 10px;
   cursor: pointer;
   font-family: var(--font-ui);
+  font-weight: 500;
   flex: 0 0 auto;
   transition: background var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast);
 }
@@ -1674,13 +1675,27 @@ html.is-panel-window #root {
 .note-tb__menu-trigger--style { width: 104px; }
 .note-tb__menu-trigger--font { width: 132px; }
 .note-tb__menu-trigger--size { width: 68px; }
+.note-tb__menu-trigger--text-style {
+  width: 56px;
+  min-width: 56px;
+  justify-content: center;
+  padding: 0 8px;
+}
+.note-tb__menu-trigger--font-label {
+  width: 74px;
+  min-width: 74px;
+}
+.note-tb__menu-trigger--size-label {
+  width: 76px;
+  min-width: 76px;
+}
 .note-tb__menu-trigger--compact {
   width: 42px;
   min-width: 42px;
   justify-content: center;
   gap: 4px;
   padding: 0 6px;
-  font-weight: 750;
+  font-weight: 500;
 }
 .note-tb__menu-trigger--compact .note-tb__menu-trigger-label > svg {
   width: 0.95rem;
@@ -1689,6 +1704,59 @@ html.is-panel-window #root {
 .note-tb__menu-trigger--compact > svg {
   width: 0.68rem;
   height: 0.68rem;
+}
+.note-tb__size-control {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--board-corner);
+  background: color-mix(in srgb, var(--theme-bg-input) 88%, transparent);
+  overflow: hidden;
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast), background var(--motion-fast);
+}
+.note-tb__size-control:hover {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border-subtle));
+  background: var(--bg-hover);
+}
+.note-tb__size-control.is-open {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 11%, var(--theme-bg-input));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.note-tb__size-control .note-tb__menu-trigger {
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.note-tb__size-control .note-tb__menu-trigger:hover,
+.note-tb__size-control .note-tb__menu-trigger.is-open {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+.note-tb__size-control input {
+  width: 50px;
+  height: 100%;
+  border: none;
+  border-left: 1px solid var(--border-subtle);
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 500;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.note-tb__size-control input::-webkit-outer-spin-button,
+.note-tb__size-control input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
 }
 
 /* Branded vertical dropdowns replace the browser-native select menus. */
@@ -1718,7 +1786,7 @@ html.is-panel-window #root {
 }
 .note-tb-panel__head > span {
   font-size: 0.62rem;
-  font-weight: 750;
+  font-weight: 600;
   letter-spacing: 0.075em;
   text-transform: uppercase;
 }
@@ -1780,7 +1848,7 @@ html.is-panel-window #root {
 .note-tb-panel__group {
   padding: 8px 8px 3px;
   font-size: 0.62rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -1830,7 +1898,7 @@ html.is-panel-window #root {
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-hover));
   color: var(--accent);
   font-size: 0.82rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 .note-tb-panel__copy {
   min-width: 0;
@@ -1842,7 +1910,7 @@ html.is-panel-window #root {
   overflow: hidden;
   color: inherit;
   font-size: 0.75rem;
-  font-weight: 650;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1872,6 +1940,7 @@ html.is-panel-window #root {
 }
 .note-tb-panel[data-kind="size"] .note-tb-panel__copy strong {
   font-size: 0.82rem;
+  font-weight: 500;
 }
 .note-tb-panel[data-kind="size"] .note-tb-panel__copy small {
   font-size: 0.68rem;
@@ -2035,7 +2104,7 @@ html.is-panel-window #root {
   padding: 0 9px;
   color: var(--accent);
   font-size: 0.72rem;
-  font-weight: 750;
+  font-weight: 500;
   letter-spacing: 0.01em;
 }
 
@@ -2946,11 +3015,12 @@ html.is-panel-window #root {
 .note-inspector__head strong {
   color: var(--text-primary);
   font-size: 0.78rem;
+  font-weight: 500;
 }
 .note-inspector__head span {
   color: var(--text-muted);
   font-size: 0.64rem;
-  font-weight: 650;
+  font-weight: 500;
 }
 .note-inspector__head button {
   width: 26px;
@@ -2986,11 +3056,12 @@ html.is-panel-window #root {
 .note-task-lens__summary strong {
   color: var(--text-primary);
   font-size: 0.76rem;
+  font-weight: 500;
 }
 .note-task-lens__summary span {
   color: var(--text-muted);
   font-size: 0.66rem;
-  font-weight: 650;
+  font-weight: 500;
 }
 .note-task-lens__cards {
   min-width: 0;
@@ -3037,7 +3108,7 @@ html.is-panel-window #root {
   overflow: hidden;
   color: var(--text-primary);
   font-size: 0.7rem;
-  font-weight: 820;
+  font-weight: 500;
   letter-spacing: 0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3054,7 +3125,7 @@ html.is-panel-window #root {
   flex: 0 0 auto;
   color: var(--text-muted);
   font-size: 0.58rem;
-  font-weight: 720;
+  font-weight: 500;
 }
 .note-task-lens__group-empty {
   padding: 9px;
@@ -3063,7 +3134,7 @@ html.is-panel-window #root {
   background: transparent;
   color: var(--text-muted);
   font-size: 0.63rem;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1.35;
 }
 .note-task-lens__task {
@@ -3105,7 +3176,7 @@ html.is-panel-window #root {
   background: transparent;
   color: var(--theme-accent-contrast, #fff);
   font-size: 0.72rem;
-  font-weight: 900;
+  font-weight: 600;
   line-height: 1;
   cursor: pointer;
   transition: background var(--motion-fast), border-color var(--motion-fast), transform var(--motion-fast);
@@ -3127,14 +3198,14 @@ html.is-panel-window #root {
   white-space: nowrap;
   color: var(--text-primary);
   font-size: 0.68rem;
-  font-weight: 750;
+  font-weight: 500;
   line-height: 1.1;
 }
 .note-task-lens__task small {
   overflow: hidden;
   color: var(--text-muted);
   font-size: 0.58rem;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3155,7 +3226,7 @@ html.is-panel-window #root {
   color: var(--text-muted);
   font-size: 0.56rem;
   font-style: normal;
-  font-weight: 750;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

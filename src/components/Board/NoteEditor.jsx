@@ -476,6 +476,7 @@ export default function NoteEditor({
         >
           <SelectionBubble
             editor={editor}
+            defaultFontSize={settings.noteFontSize}
             onLink={() => setLinkDialogOpen(true)}
             onTask={(text) => insertLinkedTask(text, { replaceSelection: true })}
           />
@@ -505,7 +506,7 @@ export default function NoteEditor({
 }
 
 // ── Selection bubble ────────────────────────────────────────────────────────
-function SelectionBubble({ editor, onLink, onTask }) {
+function SelectionBubble({ editor, defaultFontSize, onLink, onTask }) {
   const [openPalette, setOpenPalette] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
   const [menuAnchor, setMenuAnchor] = useState(null);
@@ -531,6 +532,7 @@ function SelectionBubble({ editor, onLink, onTask }) {
   const styleLabel = TEXT_STYLES.find((option) => option.value === styleValue)?.label || 'Normal';
   const fontLabel = FONT_FAMILIES.find((option) => option.value === fontFamily)?.label || 'Default';
   const sizeLabel = fontSize ? `${parseInt(fontSize, 10)} px` : 'Size';
+  const sizeNumber = fontSize ? parseInt(fontSize, 10) : Number(defaultFontSize) || 16;
   const listLabel = LIST_STYLES.find((option) => option.value === listValue)?.label || 'List';
 
   const menuConfig = openMenu === 'style'
@@ -604,14 +606,21 @@ function SelectionBubble({ editor, onLink, onTask }) {
   return (
     <>
       <ToolbarMenuTrigger id="bubble-style" label="Aa" title={`Text style: ${styleLabel}`}
-        ariaLabel={`Text style: ${styleLabel}`} open={openMenu === 'style'} width="compact"
+        ariaLabel={`Text style: ${styleLabel}`} open={openMenu === 'style'} width="text-style"
         onClick={(event) => toggleMenu('style', event)} />
-      <ToolbarMenuTrigger id="bubble-font" label="F" title={`Font: ${fontLabel}`}
-        ariaLabel={`Font: ${fontLabel}`} open={openMenu === 'font'} width="compact"
+      <ToolbarMenuTrigger id="bubble-font" label="Font" title={`Font: ${fontLabel}`}
+        ariaLabel={`Font: ${fontLabel}`} open={openMenu === 'font'} width="font-label"
         onClick={(event) => toggleMenu('font', event)} />
-      <ToolbarMenuTrigger id="bubble-size" label={fontSize ? parseInt(fontSize, 10) : 'S'} title={`Font size: ${sizeLabel}`}
-        ariaLabel={`Font size: ${sizeLabel}`} open={openMenu === 'size'} width="compact"
-        onClick={(event) => toggleMenu('size', event)} />
+      <SizeTrigger
+        value={sizeNumber}
+        title={`Font size: ${sizeLabel}`}
+        open={openMenu === 'size'}
+        onOpen={(event) => toggleMenu('size', event)}
+        onCommit={(value) => {
+          if (!value) editor.chain().focus().unsetFontSize().run();
+          else editor.chain().focus().setFontSize(`${value}px`).run();
+        }}
+      />
 
       <Sep />
       <TBtn editor={editor} run="toggleBold" active="bold" title="Bold (⌘B)"><VscBold /></TBtn>
@@ -658,6 +667,70 @@ function SelectionBubble({ editor, onLink, onTask }) {
           onSelect={(value) => applyMenuValue(menuConfig.kind, value)} />
       )}
     </>
+  );
+}
+
+function SizeTrigger({ value, title, open, onOpen, onCommit }) {
+  const [draft, setDraft] = useState(value ? String(value) : '');
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setDraft(value ? String(value) : '');
+    setDirty(false);
+  }, [value]);
+
+  const commit = () => {
+    if (!dirty) return;
+    const trimmed = String(draft).trim();
+    if (!trimmed) {
+      onCommit('');
+      setDirty(false);
+      return;
+    }
+    const next = Math.max(8, Math.min(96, Number.parseInt(trimmed, 10) || 0));
+    if (!next) return;
+    setDraft(String(next));
+    onCommit(next);
+    setDirty(false);
+  };
+
+  return (
+    <span className={`note-tb__size-control${open ? ' is-open' : ''}`}>
+      <button type="button"
+        className={`note-tb__menu-trigger note-tb__menu-trigger--size-label${open ? ' is-open' : ''}`}
+        title={title} aria-haspopup="listbox" aria-expanded={open}
+        aria-label={title}
+        aria-controls="note-toolbar-menu-size" onClick={onOpen}>
+        <span className="note-tb__menu-trigger-label">Size</span>
+        <VscChevronDown aria-hidden="true" />
+      </button>
+      <input
+        type="number"
+        min="8"
+        max="96"
+        step="1"
+        value={draft}
+        placeholder=""
+        aria-label="Font size in pixels"
+        onMouseDown={(event) => event.stopPropagation()}
+        onChange={(event) => {
+          setDirty(true);
+          setDraft(event.target.value);
+        }}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            commit();
+            event.currentTarget.blur();
+          }
+          if (event.key === 'Escape') {
+            setDraft(value ? String(value) : '');
+            event.currentTarget.blur();
+          }
+        }}
+      />
+    </span>
   );
 }
 
