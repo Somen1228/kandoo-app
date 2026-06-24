@@ -1,8 +1,8 @@
-import { Suspense, lazy, useEffect, useRef, useState, useMemo, Fragment } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState, useMemo, useCallback, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import {
   VscAdd, VscTrash, VscChevronRight, VscChromeMaximize, VscChromeRestore,
-  VscArrowLeft, VscArrowRight, VscBook, VscDiscard, VscRedo,
+  VscArrowLeft, VscArrowRight, VscBook, VscDiscard, VscRedo, VscChecklist,
 } from 'react-icons/vsc';
 import { DndContext, MouseSensor, TouchSensor, useSensor, useSensors, closestCenter } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -10,9 +10,14 @@ import { restrictToFirstScrollableAncestor } from '@dnd-kit/modifiers';
 
 const NEST_THRESHOLD = 22; // px dragged right before a hover becomes a "nest inside"
 import { CSS } from '@dnd-kit/utilities';
-import { markdownToHtml, isHtml } from '../../utils/htmlEditor';
+import { markdownToHtml, isHtml, htmlToText } from '../../utils/htmlEditor';
+import { generateTaskID } from '../../utils/taskIdGenerator';
+import { classifyTask, formatDueShort } from '../../utils/dueDate';
+import { CARD_HUES, normalizeCardColor } from '../../themes/cardPalettes';
 
 const INDENT_WIDTH = 14;
+const CARD_HUE_HEX = Object.fromEntries(CARD_HUES.map((hue) => [hue.key, hue.hex]));
+const WORKFLOW_CARD_RE = /^(to-?do|in[-\s]?progress|done|completed|finished)$/i;
 
 // ── Note-tree drag-and-drop helpers (flat array, order = sibling order) ───────
 
@@ -78,6 +83,50 @@ function stripPageLink(html, uid) {
   } catch {
     return html;
   }
+}
+
+function extractLinkedTaskRefs(html) {
+  const refs = [];
+  if (!html || !html.includes('data-linked-task')) return refs;
+  try {
+    const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+    doc.body.querySelectorAll('[data-linked-task][data-task-id]').forEach((el) => {
+      const taskId = el.getAttribute('data-task-id');
+      const cardUid = el.getAttribute('data-card-uid');
+      if (taskId && cardUid) refs.push({ taskId, cardUid });
+    });
+  } catch { /* ignore malformed editor html */ }
+  return refs;
+}
+
+function buildTaskIndex(cards = []) {
+  const byPair = new Map();
+  const byId = new Map();
+  const byNoteUid = new Map();
+  cards.forEach((card) => {
+    if ((card.type || 'todo') === 'note') return;
+    Object.values(card.tasks || {}).forEach((task) => {
+      const text = htmlToText(task.value || '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim() || 'Untitled task';
+      const info = {
+        ...task,
+        taskId: task.id,
+        cardUid: card.uid,
+        cardTitle: card.title || 'Untitled card',
+        cardColor: card.color || null,
+        text,
+        dueLabel: task.due ? formatDueShort(task.due) : '',
+        bucket: classifyTask(task),
+      };
+      byPair.set(`${card.uid}:${task.id}`, info);
+      byId.set(task.id, info);
+      (task.noteLinks || []).forEach((link) => {
+        if (!link?.noteUid) return;
+        if (!byNoteUid.has(link.noteUid)) byNoteUid.set(link.noteUid, []);
+        byNoteUid.get(link.noteUid).push(info);
+      });
+    });
+  });
+  return { byPair, byId, byNoteUid };
 }
 
 // Compute the full new uid order for a drop:
@@ -577,11 +626,211 @@ function PageTitle({ value, onChange }) {
 }
 
 // ── Active-page canvas ──────────────────────────────────────────────────────
-function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateChild, onNavigate, onReparentChild, onChildMenu, onSendListToBoard, onBack, onForward, canBack, canForward }) {
+function TaskLens({ tasks, missingCount, boardCards = [], onOpenBoard, onToggleTask, onMoveTask, onTaskMenu }) {
+  const [dropTargetUid, setDropTargetUid] = useState(null);
+  const open = tasks.filter((task) => !task.done).length;
+  const done = tasks.filter((task) => task.done).length;
+  const overdue = tasks.filter((task) => task.bucket === 'overdue').length;
+  const workflowCards = boardCards.filter((boardCard) => WORKFLOW_CARD_RE.test((boardCard.title || '').trim()));
+  const groupMap = new Map(
+    workflowCards.map((boardCard) => {
+      const colorKey = normalizeCardColor(boardCard.color);
+      return [boardCard.uid, {
+        key: boardCard.uid,
+        title: boardCard.title || 'Untitled card',
+        color: CARD_HUE_HEX[colorKey] || CARD_HUE_HEX.sky,
+        canReceive: true,
+        tasks: [],
+      }];
+    })
+  );
+  tasks.forEach((task) => {
+    const key = task.cardUid || task.cardTitle || 'unknown';
+    if (!groupMap.has(key)) return;
+    groupMap.get(key).tasks.push(task);
+  });
+  const groups = Array.from(groupMap.values());
+
+  const dragTask = (event, task) => {
+    event.dataTransfer.effectAllowed = 'copyMove';
+    event.dataTransfer.setData('text/plain', task.text);
+    event.dataTransfer.setData('application/x-kandoo-task', JSON.stringify({
+      taskId: task.taskId,
+      cardUid: task.cardUid,
+      text: task.text,
+      cardTitle: task.cardTitle,
+      done: task.done,
+    }));
+  };
+
+  const dropTask = (event, targetCardUid) => {
+    event.preventDefault();
+    setDropTargetUid(null);
+    const payload = event.dataTransfer.getData('application/x-kandoo-task');
+    if (!payload || !targetCardUid) return;
+    try {
+      const task = JSON.parse(payload);
+      if (!task?.taskId || !task?.cardUid || task.cardUid === targetCardUid) return;
+      onMoveTask?.(task.taskId, task.cardUid, targetCardUid);
+    } catch { /* ignore invalid drag payload */ }
+  };
+
+  return (
+    <div className="note-task-lens">
+      <div className="note-task-lens__summary">
+        <strong>Board tasks</strong>
+        <span>
+          {open} open · {done} done
+          {overdue ? ` · ${overdue} overdue` : ''}
+          {missingCount ? ` · ${missingCount} missing` : ''}
+        </span>
+      </div>
+      <div className="note-task-lens__cards">
+        {tasks.length === 0 && missingCount === 0 && (
+          <div className="note-task-lens__empty">
+            No board tasks linked yet. Select note lines and use <strong>Send to board</strong>.
+          </div>
+        )}
+        {groups.map((group) => (
+          <section
+            key={group.key}
+            className={`note-task-lens__group${dropTargetUid === group.key ? ' is-drop-target' : ''}`}
+            style={{ '--card-hue': group.color }}
+            onDragOver={group.canReceive ? (event) => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = 'move';
+              if (dropTargetUid !== group.key) setDropTargetUid(group.key);
+            } : undefined}
+            onDragLeave={group.canReceive ? () => setDropTargetUid((uid) => (uid === group.key ? null : uid)) : undefined}
+            onDrop={group.canReceive ? (event) => dropTask(event, group.key) : undefined}
+          >
+            <div className="note-task-lens__group-head">
+              <span>
+                <i aria-hidden="true" />
+                {group.title}
+              </span>
+              <small>{group.tasks.filter((task) => !task.done).length} open · {group.tasks.length} linked</small>
+            </div>
+            {group.tasks.length === 0 ? (
+              <div className="note-task-lens__group-empty">No linked tasks in this card.</div>
+            ) : group.tasks.map((task) => (
+              <div
+                key={`${task.cardUid}:${task.taskId}`}
+                className={`note-task-lens__task${task.done ? ' is-done' : ''}`}
+                role="button"
+                tabIndex={0}
+                draggable
+                onDragStart={(event) => dragTask(event, task)}
+                onDragEnd={() => setDropTargetUid(null)}
+                onClick={() => onOpenBoard?.(task.taskId, task.cardUid)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onOpenBoard?.(task.taskId, task.cardUid);
+                  }
+                }}
+                onContextMenu={(event) => onTaskMenu?.(event, task)}
+                title={`${task.text} · ${task.cardTitle}`}
+              >
+                <div className="note-task-lens__task-main">
+                  <button
+                    type="button"
+                    className="note-task-lens__check"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onToggleTask?.(task.taskId, task.cardUid);
+                    }}
+                    title={task.done ? 'Mark open' : 'Mark done'}
+                    aria-label={task.done ? 'Mark open' : 'Mark done'}
+                  >
+                    {task.done ? '✓' : ''}
+                  </button>
+                  <span>
+                    <strong className="note-task-lens__text">{task.text}</strong>
+                    <small>{task.dueLabel ? task.dueLabel : task.bucket === 'overdue' ? 'Overdue' : 'No date'}</small>
+                  </span>
+                </div>
+                <div className="note-task-lens__task-actions">
+                  <em>{task.cardTitle}</em>
+                  <button
+                    type="button"
+                    className="note-task-lens__menu"
+                    onClick={(event) => onTaskMenu?.(event, task)}
+                    title="Task options"
+                    aria-label="Task options"
+                  >
+                    ⋯
+                  </button>
+                </div>
+              </div>
+            ))}
+          </section>
+        ))}
+        {missingCount > 0 && (
+          <div className="note-task-lens__missing">
+            {missingCount} linked task{missingCount === 1 ? '' : 's'} could not be found.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NoteInspector({ open, onToggle, tasks, missingCount, boardCards, onOpenBoard, onToggleTask, onMoveTask, onTaskMenu }) {
+  const taskCount = tasks.length + missingCount;
+  return (
+    <aside className={`note-inspector${open ? ' is-open' : ' is-collapsed'}`} aria-label="Document sidebar">
+      <div className="note-inspector__rail" aria-label="Document apps">
+        <button
+          type="button"
+          className={`note-inspector__app${open ? ' is-active' : ''}`}
+          onClick={onToggle}
+          title={open ? 'Hide linked tasks panel' : 'Show linked tasks panel'}
+          aria-label={open ? 'Hide linked tasks panel' : 'Show linked tasks panel'}
+          aria-expanded={open}
+        >
+          <VscChecklist />
+          {taskCount > 0 && <span>{taskCount}</span>}
+        </button>
+      </div>
+      {open && (
+        <div className="note-inspector__panel">
+          <div className="note-inspector__head">
+            <div>
+              <strong>Linked tasks</strong>
+              <span>Current note status</span>
+            </div>
+            <button type="button" onClick={onToggle} title="Collapse sidebar" aria-label="Collapse sidebar">
+              <VscChevronRight />
+            </button>
+          </div>
+          <TaskLens
+            tasks={tasks}
+            missingCount={missingCount}
+            boardCards={boardCards}
+            onOpenBoard={onOpenBoard}
+            onToggleTask={onToggleTask}
+            onMoveTask={onMoveTask}
+            onTaskMenu={onTaskMenu}
+          />
+        </div>
+      )}
+    </aside>
+  );
+}
+
+// ── Active-page canvas ──────────────────────────────────────────────────────
+function NoteCanvas({
+  index, card, allCards, taskIndex, notes, updateCardNote, updateCards,
+  onCreateChild, onNavigate, onReparentChild, onChildMenu, onSendListToBoard,
+  onOpenTaskBoard, onBack, onForward, canBack, canForward,
+}) {
   const dragChildRef = useRef(null);
   const [dropChildUid, setDropChildUid] = useState(null);
   const { settings } = useSettings();
   const [paperless, setPaperless] = useState(settings.noteDefaultView === 'wide');
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [taskContextMenu, setTaskContextMenu] = useState(null);
   const togglePaperless = () => setPaperless((p) => !p);
 
   const safeNote = card.note || { content: '', images: [], updatedAt: Date.now() };
@@ -599,6 +848,161 @@ function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateC
   const handleContent = (html) => updateCardNote(index, { ...safeNote, content: html, images: [] });
   const handleTitle = (newTitle) => updateCards((cards) => cards.map((c) => (c.uid === card.uid ? { ...c, title: newTitle } : c)));
   const metrics = noteMetrics(safeNote.content || '');
+  const linkedRefs = useMemo(() => extractLinkedTaskRefs(initialContent), [initialContent]);
+  const linkedTasks = useMemo(() => {
+    const seen = new Set();
+    const fromInline = linkedRefs
+      .map((ref) => taskIndex.byPair.get(`${ref.cardUid}:${ref.taskId}`) || taskIndex.byId.get(ref.taskId));
+    const fromBacklinks = taskIndex.byNoteUid.get(card.uid) || [];
+    return [...fromInline, ...fromBacklinks]
+      .filter((task) => {
+        if (!task || seen.has(task.taskId)) return false;
+        seen.add(task.taskId);
+        return true;
+      });
+  }, [card.uid, linkedRefs, taskIndex]);
+  const missingLinkedTaskCount = Math.max(0, linkedRefs.length - linkedTasks.length);
+  const boardCards = useMemo(() => allCards.filter((candidate) => (candidate.type || 'todo') !== 'note'), [allCards]);
+
+  const createLinkedTask = useCallback((label) => {
+    const text = (label || '').trim();
+    if (!text) return null;
+    const now = Date.now();
+    const taskId = generateTaskID();
+    const existingTarget = allCards.find((candidate) =>
+      (candidate.type || 'todo') !== 'note' && /^(to-?do|backlog|todo)$/i.test((candidate.title || '').trim())
+    ) || allCards.find((candidate) => (candidate.type || 'todo') !== 'note');
+    const cardUid = existingTarget?.uid || (
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `card-${Math.random().toString(36).slice(2)}`
+    );
+    const task = {
+      id: taskId,
+      value: text,
+      images: [],
+      due: null,
+      done: false,
+      createdAt: now,
+      updatedAt: now,
+      noteLinks: [{ noteUid: card.uid }],
+    };
+    updateCards((cards) => {
+      if (existingTarget) {
+        return cards.map((candidate) =>
+          candidate.uid === existingTarget.uid
+            ? { ...candidate, tasks: { ...(candidate.tasks || {}), [taskId]: task } }
+            : candidate
+        );
+      }
+      return [
+        ...cards,
+        {
+          uid: cardUid,
+          type: 'todo',
+          title: 'To-do',
+          color: 'sky',
+          isVisible: true,
+          tasks: { [taskId]: task },
+        },
+      ];
+    });
+    return { taskId, cardUid };
+  }, [allCards, card.uid, updateCards]);
+
+  const toggleLinkedTask = useCallback((taskId, cardUid) => {
+    updateCards((cards) => cards.map((candidate) => {
+      if (candidate.uid !== cardUid || !candidate.tasks?.[taskId]) return candidate;
+      const task = candidate.tasks[taskId];
+      return {
+        ...candidate,
+        tasks: {
+          ...candidate.tasks,
+          [taskId]: { ...task, done: !task.done, updatedAt: Date.now() },
+        },
+      };
+    }));
+  }, [updateCards]);
+
+  const deleteLinkedTask = useCallback((taskId, cardUid) => {
+    updateCards((cards) => cards.map((candidate) => {
+      if (candidate.uid !== cardUid || !candidate.tasks?.[taskId]) return candidate;
+      const nextTasks = { ...candidate.tasks };
+      delete nextTasks[taskId];
+      return { ...candidate, tasks: nextTasks };
+    }));
+    toast.success('Task deleted');
+  }, [updateCards]);
+
+  const moveLinkedTask = useCallback((taskId, fromCardUid, toCardUid) => {
+    if (!taskId || !fromCardUid || !toCardUid || fromCardUid === toCardUid) return;
+    let movedToTitle = '';
+    updateCards((cards) => {
+      const fromCard = cards.find((candidate) => candidate.uid === fromCardUid);
+      const toCard = cards.find((candidate) => candidate.uid === toCardUid);
+      const task = fromCard?.tasks?.[taskId];
+      if (!fromCard || !toCard || !task || (toCard.type || 'todo') === 'note') return cards;
+      movedToTitle = toCard.title || 'Untitled card';
+      const targetIsDone = /^(done|completed|finished)$/i.test((toCard.title || '').trim());
+      const movedTask = {
+        ...task,
+        done: targetIsDone,
+        updatedAt: Date.now(),
+        completedAt: targetIsDone ? Date.now() : null,
+      };
+      return cards.map((candidate) => {
+        if (candidate.uid === fromCardUid) {
+          const nextTasks = { ...(candidate.tasks || {}) };
+          delete nextTasks[taskId];
+          return { ...candidate, tasks: nextTasks };
+        }
+        if (candidate.uid === toCardUid) {
+          return { ...candidate, tasks: { ...(candidate.tasks || {}), [taskId]: movedTask } };
+        }
+        return candidate;
+      });
+    });
+    if (movedToTitle) toast.success(`Moved to ${movedToTitle}`);
+  }, [updateCards]);
+
+  const getLinkedTask = useCallback(
+    (taskId, cardUid) => taskIndex.byPair.get(`${cardUid}:${taskId}`) || taskIndex.byId.get(taskId) || null,
+    [taskIndex]
+  );
+
+  const copyTaskTitle = useCallback(async (task) => {
+    try {
+      await navigator.clipboard.writeText(task.text || '');
+      toast.success('Task title copied');
+    } catch {
+      toast.error('Could not copy task title');
+    }
+  }, []);
+
+  const openTaskContextMenu = useCallback((event, task) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setTaskContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      items: [
+        { label: task.done ? 'Mark open' : 'Mark done', onClick: () => toggleLinkedTask(task.taskId, task.cardUid) },
+        { label: 'Open board task', onClick: () => onOpenTaskBoard?.(task.taskId, task.cardUid) },
+        { label: 'Copy task title', onClick: () => copyTaskTitle(task) },
+        { divider: true },
+        {
+          label: 'Send to other board…',
+          onClick: () => onSendListToBoard?.({
+            items: [{ text: task.text, checked: task.done }],
+            noteUid: card.uid,
+            moveTask: { taskId: task.taskId, cardUid: task.cardUid },
+          }),
+        },
+        { divider: true },
+        { label: 'Delete task', danger: true, onClick: () => deleteLinkedTask(task.taskId, task.cardUid) },
+      ],
+    });
+  }, [card.uid, copyTaskTitle, deleteLinkedTask, onOpenTaskBoard, onSendListToBoard, toggleLinkedTask]);
 
   // Pages referenced by an inline block in *this* page's content (created via
   // `/page`) render where they were typed — exclude them from the top list.
@@ -617,11 +1021,13 @@ function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateC
   const childPages = notes.filter((n) => (n.parentUid || null) === card.uid && !inlineChildUids.has(n.uid));
 
   return (
-    <div
-      key={card.uid}
-      className={paperless ? 'note-canvas' : 'note-canvas note-paper'}
-    >
-      <div className="note-canvas__nav">
+    <div className={`note-document-shell${paperless ? ' is-wide' : ' is-paper'}${inspectorOpen ? ' has-inspector' : ''}`}>
+      <div className="note-document-main">
+        <div
+          key={card.uid}
+          className={paperless ? 'note-canvas' : 'note-canvas note-paper'}
+        >
+          <div className="note-canvas__nav">
         <button type="button" className="note-nav-btn" onClick={onBack} disabled={!canBack} title="Back" aria-label="Back">
           <VscArrowLeft />
         </button>
@@ -664,6 +1070,11 @@ function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateC
           onCreatePage={() => ({ uid: onCreateChild(card.uid, false), title: 'Untitled' })}
           onNavigatePage={onNavigate}
           onSendListToBoard={(items) => onSendListToBoard?.({ items, noteUid: card.uid })}
+          onCreateLinkedTask={createLinkedTask}
+          getLinkedTask={getLinkedTask}
+          onToggleLinkedTask={toggleLinkedTask}
+          onOpenLinkedTask={onOpenTaskBoard}
+          linkedTaskVersion={`${linkedTasks.length}:${linkedTasks.map((task) => `${task.taskId}-${task.done}-${task.updatedAt}`).join('|')}:${missingLinkedTaskCount}`}
           placeholder="Type ‘/’ for commands, or just start writing. Markdown shortcuts and drag-and-drop images work too."
           childPagesSlot={childPages.length > 0 ? (
             <div className="note-children">
@@ -702,14 +1113,36 @@ function NoteCanvas({ index, card, notes, updateCardNote, updateCards, onCreateC
           ) : null}
         />
       </Suspense>
+        </div>
+      </div>
+      <NoteInspector
+        open={inspectorOpen}
+        onToggle={() => setInspectorOpen((value) => !value)}
+        tasks={linkedTasks}
+        missingCount={missingLinkedTaskCount}
+        boardCards={boardCards}
+        onOpenBoard={onOpenTaskBoard}
+        onToggleTask={toggleLinkedTask}
+        onMoveTask={moveLinkedTask}
+        onTaskMenu={openTaskContextMenu}
+      />
+      {taskContextMenu && (
+        <ContextMenu
+          x={taskContextMenu.x}
+          y={taskContextMenu.y}
+          items={taskContextMenu.items}
+          onClose={() => setTaskContextMenu(null)}
+        />
+      )}
     </div>
   );
 }
 
 // ── Main view (tree + canvas) ───────────────────────────────────────────────
-function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onDeleteNote, updateCardNote, updateCards, onSendListToBoard }) {
+function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onDeleteNote, updateCardNote, updateCards, onSendListToBoard, onOpenTaskBoard }) {
   const activeCard = notes.find((n) => n.uid === activeUid) || null;
   const activeIndex = activeCard ? allCards.findIndex((c) => c.uid === activeCard.uid) : -1;
+  const taskIndex = useMemo(() => buildTaskIndex(allCards), [allCards]);
   const [collapsed, setCollapsed] = useState(() => new Set());
   const [pageContextMenu, setPageContextMenu] = useState(null);
   const [iconPicker, setIconPicker] = useState(null); // { uid, anchor: { x, y } }
@@ -1256,12 +1689,15 @@ function NotesView({ allCards, notes, activeUid, onSelectNote, onCreateNote, onD
           <NoteCanvas
             index={activeIndex}
             card={activeCard}
+            allCards={allCards}
+            taskIndex={taskIndex}
             notes={notes}
             updateCardNote={updateCardNote}
             updateCards={updateCards}
             onCreateChild={onCreateNote}
             onNavigate={onSelectNote}
             onSendListToBoard={onSendListToBoard}
+            onOpenTaskBoard={onOpenTaskBoard}
             onReparentChild={movePage}
             onChildMenu={openChildPageMenu}
             onBack={goBack}

@@ -25,7 +25,7 @@ import {
   SortableContext, arrayMove, sortableKeyboardCoordinates,
   useSortable, verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { CSS as DndCSS } from "@dnd-kit/utilities";
 import Cards from "../components/Board/Cards";
 import { CardsContext } from "../contexts/CardsContext";
 import { useAuth } from "../contexts/AuthContext";
@@ -47,6 +47,14 @@ import BottomSheet from "../components/BottomSheet";
 const SIDEBAR_MIN = 210;
 const SIDEBAR_MAX = 360;
 
+const escapeDataAttributeValue = (value) => {
+  const text = String(value ?? "");
+  if (typeof window !== "undefined" && window.CSS?.escape) {
+    return window.CSS.escape(text);
+  }
+  return text.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+};
+
 function SortableBoardNavItem({ id, disabled = false, children }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
@@ -59,7 +67,7 @@ function SortableBoardNavItem({ id, disabled = false, children }) {
       ref={setNodeRef}
       className="mac-board-sortable"
       style={{
-        transform: CSS.Transform.toString(transform),
+        transform: DndCSS.Transform.toString(transform),
         transition,
         opacity: isDragging ? 0.55 : 1,
         position: "relative",
@@ -226,7 +234,7 @@ function Board() {
   // Scroll current match into view + brief flash
   useEffect(() => {
     if (!currentMatchTaskId) return;
-    const el = document.querySelector(`[data-task-id="${CSS.escape(currentMatchTaskId)}"]`);
+    const el = document.querySelector(`[data-task-id="${escapeDataAttributeValue(currentMatchTaskId)}"]`);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [currentMatchTaskId]);
 

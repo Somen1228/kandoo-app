@@ -34,6 +34,11 @@ const COMMANDS = [
     run: (e, r) => e.chain().focus().deleteRange(r).toggleOrderedList().run() },
   { title: 'To-do list', desc: 'Checklist with checkboxes', kw: ['todo', 'task', 'checkbox', 'check'], icon: <VscChecklist />,
     run: (e, r) => e.chain().focus().deleteRange(r).toggleTaskList().run() },
+  { title: 'Kandoo task', desc: 'Create a live linked board task', kw: ['task', 'kandoo', 'board', 'todo'], icon: <VscChecklist />,
+    run: (e, r, ctx) => {
+      e.chain().focus().deleteRange(r).run();
+      ctx?.onTask?.();
+    } },
   { title: 'Quote', desc: 'Capture a quotation', kw: ['quote', 'blockquote'], icon: <VscQuote />,
     run: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run() },
   { title: 'Code block', desc: 'Syntax-highlighted code', kw: ['code', 'codeblock', 'pre'], icon: <VscCode />,
@@ -58,7 +63,11 @@ const COMMANDS = [
 // ── SlashMenu list (rendered inside the portal) ─────────────────────────────
 const SlashMenu = forwardRef(function SlashMenu({ items, onSelect }, ref) {
   const [selected, setSelected] = useState(0);
+  const activeRef = useRef(null);
   useEffect(() => setSelected(0), [items]);
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [selected, items]);
 
   useImperativeHandle(ref, () => ({
     onKeyDown: (event) => {
@@ -75,6 +84,7 @@ const SlashMenu = forwardRef(function SlashMenu({ items, onSelect }, ref) {
       {items.map((item, i) => (
         <button
           key={item.title}
+          ref={i === selected ? activeRef : null}
           className={`slash-menu__item${i === selected ? ' is-active' : ''}`}
           onMouseEnter={() => setSelected(i)}
           onMouseDown={(e) => { e.preventDefault(); onSelect(item); }}
@@ -152,7 +162,7 @@ export function SlashMenuPortal({ state }) {
 export const SlashCommand = Extension.create({
   name: 'slashCommand',
   addOptions() {
-    return { onImage: null, onCreatePage: null, onInsertTable: null, onLink: null, onOpen: null, onUpdate: null, onClose: null };
+    return { onImage: null, onCreatePage: null, onInsertTable: null, onLink: null, onTask: null, onOpen: null, onUpdate: null, onClose: null };
   },
   addProseMirrorPlugins() {
     const ext = this;
@@ -179,6 +189,7 @@ export const SlashCommand = Extension.create({
             onCreatePage: ext.options.onCreatePage,
             onInsertTable: ext.options.onInsertTable,
             onLink: ext.options.onLink,
+            onTask: ext.options.onTask,
           };
           item.run(editor, range, ctx);
         },
@@ -189,6 +200,7 @@ export const SlashCommand = Extension.create({
               onCreatePage: ext.options.onCreatePage,
               onInsertTable: ext.options.onInsertTable,
               onLink: ext.options.onLink,
+              onTask: ext.options.onTask,
             };
             ext.options.onOpen?.({
               items: props.items,
@@ -206,6 +218,7 @@ export const SlashCommand = Extension.create({
               onCreatePage: ext.options.onCreatePage,
               onInsertTable: ext.options.onInsertTable,
               onLink: ext.options.onLink,
+              onTask: ext.options.onTask,
             };
             ext.options.onUpdate?.({
               items: props.items,

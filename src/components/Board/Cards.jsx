@@ -213,6 +213,7 @@ function Cards({
 }) {
   const [activeNoteUid, setActiveNoteUid] = useState(null);
   const [sendToBoard, setSendToBoard] = useState(null); // { items, noteUid } | null
+  const [focusedTask, setFocusedTask] = useState(null); // { taskId, cardUid, nonce } | null
   const { boards, setBoards, defaultCards } = useContext(CardsContext);
   const { settings, setSetting } = useSettings();
   const board = boards.find((b) => b.id === boardId);
@@ -468,7 +469,77 @@ function Cards({
   // Confirm handler from the picker: add to an existing card or a new one.
   const confirmSendToBoard = useCallback((choice) => {
     if (!sendToBoard) return;
-    const { items, noteUid } = sendToBoard;
+    const { items, noteUid, moveTask } = sendToBoard;
+    if (moveTask) {
+      const { taskId, cardUid: fromCardUid } = moveTask;
+      let movedToTitle = '';
+      let movedToUid = '';
+      let moved = false;
+      setBoards((prev) => prev.map((b) => {
+        if (b.id !== boardId) return b;
+        const fromCard = b.cards.find((card) => card.uid === fromCardUid);
+        const task = fromCard?.tasks?.[taskId];
+        if (!fromCard || !task) return b;
+
+        const targetUid = choice.mode === 'existing' ? choice.cardUid : uuidv4();
+        const targetTitle = choice.mode === 'existing'
+          ? b.cards.find((card) => card.uid === choice.cardUid)?.title
+          : choice.title.trim();
+        if (!targetUid || (choice.mode === 'existing' && targetUid === fromCardUid)) return b;
+
+        const targetIsDone = /^(done|completed|finished)$/i.test((targetTitle || '').trim());
+        const movedTask = {
+          ...task,
+          done: targetIsDone,
+          updatedAt: Date.now(),
+          completedAt: targetIsDone ? Date.now() : null,
+        };
+        movedToTitle = targetTitle || 'Untitled card';
+        movedToUid = targetUid;
+        moved = true;
+
+        if (choice.mode === 'new') {
+          return {
+            ...b,
+            cards: b.cards.map((card) => {
+              if (card.uid !== fromCardUid) return card;
+              const nextTasks = { ...(card.tasks || {}) };
+              delete nextTasks[taskId];
+              return { ...card, tasks: nextTasks };
+            }).concat({
+              uid: targetUid,
+              type: 'todo',
+              title: movedToTitle,
+              color: pickCardColorKey(b.cards.map((card) => card.color)),
+              isVisible: true,
+              tasks: { [taskId]: movedTask },
+            }),
+          };
+        }
+
+        return {
+          ...b,
+          cards: b.cards.map((card) => {
+            if (card.uid === fromCardUid) {
+              const nextTasks = { ...(card.tasks || {}) };
+              delete nextTasks[taskId];
+              return { ...card, tasks: nextTasks };
+            }
+            if (card.uid === targetUid) {
+              return { ...card, tasks: { ...(card.tasks || {}), [taskId]: movedTask } };
+            }
+            return card;
+          }),
+        };
+      }));
+      if (moved) {
+        toast.success(`Moved task to ${movedToTitle}`);
+        setSection?.('todos');
+        setFocusedTask({ taskId, cardUid: movedToUid, nonce: Date.now() });
+      }
+      setSendToBoard(null);
+      return;
+    }
     if (choice.mode === 'existing') addTasksToCardUid(choice.cardUid, items, noteUid);
     else createCardWithTasks(choice.title.trim(), items, noteUid);
     const n = items.length;
@@ -476,7 +547,7 @@ function Cards({
       action: { label: 'View', onClick: () => setSection?.('todos') },
     });
     setSendToBoard(null);
-  }, [sendToBoard, addTasksToCardUid, createCardWithTasks, setSection]);
+  }, [sendToBoard, addTasksToCardUid, boardId, createCardWithTasks, setBoards, setSection]);
 
   // Move a completed task to the Done column (called by Card when autoMoveDone is on)
   const moveTaskToDone = useCallback(
@@ -764,6 +835,11 @@ function Cards({
           updateCardNote={updateCardNote}
           updateCards={updateCards}
           onSendListToBoard={setSendToBoard}
+          onOpenTaskBoard={(taskId, cardUid) => {
+            setSection?.('todos');
+            onClearSchedule?.();
+            if (taskId) setFocusedTask({ taskId, cardUid, nonce: Date.now() });
+          }}
         />
       ) : (
         <div className="mac-board-scroll">
@@ -816,6 +892,7 @@ function Cards({
                     filterMode={filterMode}
                     scheduleView={scheduleView}
                     currentMatchTaskId={currentMatchTaskId}
+                    focusedTask={focusedTask?.cardUid === card.uid ? focusedTask : null}
                     quickAddSignal={visibleIndex === 0 ? quickAddSignal : 0}
                     dragHandleProps={dragHandleProps}
                     onMoveToDone={settings.autoMoveDone ? (taskId, taskData) => moveTaskToDone(card.uid, taskId, taskData) : undefined}
@@ -914,7 +991,11 @@ function Cards({
       {sendToBoard && (
         <SendToBoardModal
           count={sendToBoard.items.length}
-          cards={board.cards.filter((c) => (c.type || 'todo') === 'todo')}
+          items={sendToBoard.items}
+          cards={board.cards.filter((c) =>
+            (c.type || 'todo') === 'todo' && c.uid !== sendToBoard.moveTask?.cardUid
+          )}
+          variant={sendToBoard.moveTask ? 'move' : 'create'}
           onConfirm={confirmSendToBoard}
           onClose={() => setSendToBoard(null)}
         />

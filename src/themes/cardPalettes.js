@@ -13,10 +13,11 @@
 // never reads as an alert and never drowns out the real status badges sitting
 // on it. Evenly spaced around the wheel so the five stay distinct.
 export const CARD_HUES = [
-  { key: 'rose',   label: 'Berry',  hex: '#d4607f' },
+  { key: 'gray', label: 'Gray', hex: '#8a8a8a' },
   { key: 'amber',  label: 'Amber',  hex: '#e0964a' },
   { key: 'mint',   label: 'Teal',   hex: '#2bb394' },
   { key: 'sky',    label: 'Sky',    hex: '#4f8fdb' },
+  { key: 'rose',   label: 'Berry',  hex: '#d4607f' },
   { key: 'violet', label: 'Violet', hex: '#9173e0' },
 ];
 

@@ -64,7 +64,7 @@ function CardColorPicker({ x, y, currentColor, isDark, onPick, onClose }) {
   const activeKey = normalizeCardColor(currentColor);
 
   // Clamp to viewport
-  const W = 200, H = 96;
+  const W = 250, H = 96;
   const left = Math.min(x, window.innerWidth  - W - 8);
   const top  = Math.min(y, window.innerHeight - H - 8);
 
@@ -311,6 +311,7 @@ function Card({
   isVisible, tasks, note,
   updateCardTasks, updateCardNote, updateCards, searchTerm,
   query, filterMode = false, scheduleView = null, currentMatchTaskId = null,
+  focusedTask = null,
   quickAddSignal = 0, dragHandleProps = {}, onMoveToDone,
   navigateToNote, getNoteTitle, notes = [], layout = 'grid',
   compact = false, collapsed = false, onToggleCollapsed,
@@ -335,6 +336,7 @@ function Card({
   const [newTaskNoteLinks, setNewTaskNoteLinks] = useState([]); // pending links for the task being created
   const [linkedPopover, setLinkedPopover] = useState(null); // { taskId, x, y } | null
   const [pasteSplit, setPasteSplit] = useState(null); // { lines, text } | null
+  const [flashTaskId, setFlashTaskId] = useState(null);
   const [taskValue, setTaskValue]             = useState(""); // HTML string
   const [newTaskImages, setNewTaskImages]     = useState([]);
   const [newTaskDue, setNewTaskDue]           = useState(""); // "YYYY-MM-DD" or ""
@@ -560,6 +562,20 @@ function Card({
   useEffect(() => {
     if (quickAddSignal > 0) setToggleAddTask(true);
   }, [quickAddSignal]);
+
+  useEffect(() => {
+    if (!focusedTask?.taskId || focusedTask.cardUid !== uid) return undefined;
+    setFlashTaskId(focusedTask.taskId);
+    const scrollTimer = window.setTimeout(() => {
+      const selector = `[data-task-id="${String(focusedTask.taskId).replace(/"/g, '\\"')}"]`;
+      document.querySelector(selector)?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+    }, 80);
+    const clearTimer = window.setTimeout(() => setFlashTaskId(null), 2600);
+    return () => {
+      window.clearTimeout(scrollTimer);
+      window.clearTimeout(clearTimer);
+    };
+  }, [focusedTask?.cardUid, focusedTask?.nonce, focusedTask?.taskId, uid]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -909,7 +925,7 @@ function Card({
                   isEditing={editingTaskId === task.id}
                   className={`mac-task ${task.done ? "is-done" : ""} ${
                     task.id === currentMatchTaskId ? "is-match" : ""
-                  } ${editingTaskId === task.id ? "is-editing" : "cursor-grab active:cursor-grabbing"}`}
+                  } ${task.id === flashTaskId ? "is-focus-flash" : ""} ${editingTaskId === task.id ? "is-editing" : "cursor-grab active:cursor-grabbing"}`}
                   onContextMenu={e => openTaskContextMenu(e, task)}
                 >
                   {editingTaskId === task.id ? (

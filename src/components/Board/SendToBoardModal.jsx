@@ -5,13 +5,14 @@ import { VscClose, VscChecklist, VscAdd } from 'react-icons/vsc';
  * Picker shown when sending a note checklist to the board.
  * Lets the user drop the tasks into an existing to-do card or a brand-new one.
  */
-export default function SendToBoardModal({ count, cards, onConfirm, onClose }) {
+export default function SendToBoardModal({ count, items = [], cards, variant = 'create', onConfirm, onClose }) {
   const hasCards = cards.length > 0;
   const [mode, setMode] = useState(hasCards ? 'existing' : 'new');
   const [selectedUid, setSelectedUid] = useState(hasCards ? cards[0].uid : null);
   const [newTitle, setNewTitle] = useState('');
   const overlayRef = useRef(null);
   const newInputRef = useRef(null);
+  const isMove = variant === 'move';
 
   useEffect(() => {
     const fn = (e) => { if (e.key === 'Escape') onClose(); };
@@ -43,10 +44,10 @@ export default function SendToBoardModal({ count, cards, onConfirm, onClose }) {
       }}
     >
       <div style={{
-        width: 420,
+        width: 460,
         background: 'var(--theme-bg-modal)',
         border: '1px solid var(--theme-border)',
-        borderRadius: 16,
+        borderRadius: 'var(--board-corner)',
         boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
@@ -61,10 +62,12 @@ export default function SendToBoardModal({ count, cards, onConfirm, onClose }) {
             </span>
             <div>
               <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--theme-text-primary)' }}>
-                Send to board
+                {isMove ? 'Move task' : 'Send to board'}
               </div>
               <div style={{ fontSize: '0.78rem', color: 'var(--theme-text-muted)', marginTop: 2 }}>
-                {count} task{count === 1 ? '' : 's'} from this note
+                {isMove
+                  ? 'Choose where this linked task should live on the board.'
+                  : `${count} task${count === 1 ? '' : 's'} from this note. They will stay linked back to Task Lens.`}
               </div>
             </div>
           </div>
@@ -78,10 +81,65 @@ export default function SendToBoardModal({ count, cards, onConfirm, onClose }) {
 
         {/* Body */}
         <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {items.length > 0 && (
+            <div style={{
+              border: '1px solid var(--theme-border)',
+              borderRadius: 'var(--board-corner)',
+              background: 'color-mix(in srgb, var(--theme-bg-input) 72%, transparent)',
+              padding: 10,
+            }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                marginBottom: 8,
+                fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.06em',
+                color: 'var(--theme-text-muted)', textTransform: 'uppercase',
+              }}>
+                <span>{isMove ? 'Task to move' : 'Tasks to create'}</span>
+                <span>{count}</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 116, overflowY: 'auto' }}>
+                {items.slice(0, 6).map((item, index) => (
+                  <div
+                    key={`${item.text}-${index}`}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      minHeight: 28,
+                      padding: '5px 8px',
+                      border: '1px solid color-mix(in srgb, var(--theme-border) 70%, transparent)',
+                      borderRadius: 'var(--board-corner)',
+                      background: 'var(--theme-bg-modal)',
+                      color: 'var(--theme-text-primary)',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                    }}
+                  >
+                    <span style={{
+                      width: 16, height: 16, flexShrink: 0,
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      border: '1.5px solid var(--theme-border)',
+                      color: item.checked ? 'var(--theme-accent)' : 'transparent',
+                      fontSize: '0.72rem',
+                    }}>
+                      {item.checked ? '✓' : ''}
+                    </span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.text}
+                    </span>
+                  </div>
+                ))}
+                {items.length > 6 && (
+                  <div style={{ color: 'var(--theme-text-muted)', fontSize: '0.72rem', padding: '2px 8px' }}>
+                    +{items.length - 6} more
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {hasCards && (
             <>
               <div style={{ fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.06em', color: 'var(--theme-text-muted)' }}>
-                ADD TO EXISTING CARD
+                {isMove ? 'MOVE TO CARD' : 'ADD TO EXISTING CARD'}
               </div>
               <div style={{
                 display: 'flex', flexDirection: 'column', gap: 6,
@@ -137,7 +195,7 @@ export default function SendToBoardModal({ count, cards, onConfirm, onClose }) {
               transition: 'all 0.12s',
             }}
           >
-            <VscAdd style={{ color: 'var(--theme-accent)' }} /> Create a new card
+            <VscAdd style={{ color: 'var(--theme-accent)' }} /> {isMove ? 'Move to a new card' : 'Create a new card'}
           </button>
           {mode === 'new' && (
             <input
@@ -185,7 +243,7 @@ export default function SendToBoardModal({ count, cards, onConfirm, onClose }) {
               boxShadow: '0 2px 8px color-mix(in srgb, var(--theme-accent) 40%, transparent)',
             }}
           >
-            Add {count} task{count === 1 ? '' : 's'}
+            {isMove ? 'Move task' : `Add ${count} task${count === 1 ? '' : 's'}`}
           </button>
         </div>
       </div>

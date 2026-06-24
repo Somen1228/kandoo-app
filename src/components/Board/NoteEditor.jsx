@@ -9,6 +9,7 @@ import Color from '@tiptap/extension-color';
 import Highlight from '@tiptap/extension-highlight';
 import FontFamily from '@tiptap/extension-font-family';
 import TextAlign from '@tiptap/extension-text-align';
+import OrderedList from '@tiptap/extension-ordered-list';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import TaskList from '@tiptap/extension-task-list';
@@ -21,6 +22,7 @@ import TableCell from '@tiptap/extension-table-cell';
 import { createLowlight, common } from 'lowlight';
 import { SlashCommand, SlashMenuPortal } from './slashCommand';
 import { PageLink } from './pageLink';
+import { LinkedTask, LINKED_TASK_REFRESH_EVENT } from './linkedTask';
 import { ResizableImage } from './ResizableImage';
 import ContextMenu from '../ContextMenu';
 import { toast } from '../../utils/toast';
@@ -31,7 +33,7 @@ import { DOCUMENT_FONTS, FONT_CATEGORIES } from '../../utils/documentFonts';
 import '../../utils/loadEditorFonts';
 import {
   VscBold, VscItalic, VscLink, VscClearAll,
-  VscChevronDown, VscCheck, VscSearch,
+  VscChevronDown, VscCheck, VscSearch, VscListUnordered,
 } from 'react-icons/vsc';
 import {
   RiUnderline, RiStrikethrough, RiFontColor, RiMarkPenLine,
@@ -74,11 +76,56 @@ const TEXT_STYLES = [
   { label: 'Heading 2', value: 'h2', hint: 'Medium section' },
   { label: 'Heading 3', value: 'h3', hint: 'Small section' },
 ];
+const LIST_STYLES = [
+  { label: 'Bullet list', value: 'bullet', hint: '•  •  •' },
+  { label: 'Checklist', value: 'check', hint: '☑  ☐' },
+  { label: 'Numbered list', value: 'decimal', hint: '1  2  3' },
+  { label: 'Alphabetic', value: 'lower-alpha', hint: 'a  b  c' },
+  { label: 'Upper alphabetic', value: 'upper-alpha', hint: 'A  B  C' },
+  { label: 'Roman', value: 'lower-roman', hint: 'i  ii  iii' },
+  { label: 'Upper roman', value: 'upper-roman', hint: 'I  II  III' },
+];
+
+const OrderedListWithStyle = OrderedList.extend({
+  addAttributes() {
+    return {
+      ...(this.parent?.() || {}),
+      listStyleType: {
+        default: null,
+        parseHTML: (element) =>
+          element.style.listStyleType || element.getAttribute('data-list-style') || null,
+        renderHTML: (attributes) => (
+          attributes.listStyleType
+            ? {
+                style: `list-style-type: ${attributes.listStyleType}`,
+                'data-list-style': attributes.listStyleType,
+              }
+            : {}
+        ),
+      },
+    };
+  },
+});
 
 // Collect every item of the list (bullet, ordered, or checklist) that encloses
 // a clicked row. Uses each item's own first-line text and, for checklists, its
 // checked state — so any list can be pushed to the board as tasks.
 const LIST_NODE_TYPES = new Set(['taskList', 'bulletList', 'orderedList']);
+function normalizeTaskLine(line) {
+  return (line || '')
+    .replace(/^[\s\u00a0]*([-*•‣◦▪▫]+|\d+[.)]|[a-zA-Z][.)]|[ivxlcdmIVXLCDM]+[.)])\s+/, '')
+    .replace(/^[\s\u00a0]*\[[ xX]\]\s+/, '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .trim();
+}
+
+function taskItemsFromText(text, { checked = false } = {}) {
+  return (text || '')
+    .split(/\r?\n+/)
+    .map((line) => ({ text: normalizeTaskLine(line), checked }))
+    .filter((item) => item.text);
+}
+
 function extractListItems(editor, liDom) {
   let pos;
   try { pos = editor.view.posAtDOM(liDom, 0); } catch { return []; }
@@ -96,7 +143,20 @@ function extractListItems(editor, liDom) {
   return items;
 }
 
-export default function NoteEditor({ content, onChange, placeholder, paperless, notes, onCreatePage, onNavigatePage, onSendListToBoard, childPagesSlot }) {
+function extractCurrentBlockItems(editor) {
+  const { $from } = editor.state.selection;
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    const node = $from.node(depth);
+    if (node.isTextblock) return taskItemsFromText(node.textContent);
+  }
+  return [];
+}
+
+export default function NoteEditor({
+  content, onChange, placeholder, paperless, notes, onCreatePage, onNavigatePage,
+  onSendListToBoard, onCreateLinkedTask, getLinkedTask, onToggleLinkedTask,
+  onOpenLinkedTask, linkedTaskVersion, childPagesSlot,
+}) {
   const fileRef = useRef(null);
   const editorRef = useRef(null);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -109,6 +169,12 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
   const handleSlashUpdate = useCallback((s) => setSlashState(s), []);
   const handleSlashClose  = useCallback(() => setSlashState(null), []);
   const { settings } = useSettings();
+  const linkedTaskRef = useRef({ getLinkedTask, onToggleLinkedTask, onOpenLinkedTask });
+
+  useEffect(() => {
+    linkedTaskRef.current = { getLinkedTask, onToggleLinkedTask, onOpenLinkedTask };
+    window.dispatchEvent(new Event(LINKED_TASK_REFRESH_EVENT));
+  }, [getLinkedTask, linkedTaskVersion, onOpenLinkedTask, onToggleLinkedTask]);
 
   // Live title lookup for pageLink nodes (kept current as pages are renamed).
   const titlesRef = useRef({});
@@ -150,6 +216,55 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
     }
   };
 
+  const insertLinkedTask = useCallback((rawLabel, { replaceSelection = false } = {}) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const fallback = typeof rawLabel === 'string' ? rawLabel.trim() : '';
+    const labels = fallback ? taskItemsFromText(fallback).map((item) => item.text) : [];
+    if (!labels.length) {
+      const prompted = window.prompt('Task title', '')?.trim();
+      if (prompted) labels.push(prompted);
+    }
+    if (!labels.length) return;
+
+    const linkedNodes = [];
+    for (const label of labels) {
+      const created = onCreateLinkedTask?.(label);
+      if (!created?.taskId || !created?.cardUid) {
+        toast.error('Could not create linked task');
+        return;
+      }
+      linkedNodes.push({
+        type: 'linkedTask',
+        attrs: {
+          taskId: created.taskId,
+          cardUid: created.cardUid,
+          label,
+        },
+      });
+    }
+
+    const content = linkedNodes.length === 1
+      ? linkedNodes[0]
+      : linkedNodes.map((node) => ({ type: 'paragraph', content: [node] }));
+
+    const chain = editor.chain().focus();
+    if (replaceSelection) chain.deleteSelection();
+    chain.insertContent(content).run();
+    toast.success(`Linked ${linkedNodes.length} task${linkedNodes.length === 1 ? '' : 's'} to this note`);
+  }, [onCreateLinkedTask]);
+
+  const sendItemsToBoard = useCallback((items) => {
+    const clean = (items || [])
+      .map((item) => ({ ...item, text: normalizeTaskLine(item.text) }))
+      .filter((item) => item.text);
+    if (!clean.length) {
+      toast.warning('No task lines found');
+      return;
+    }
+    onSendListToBoard?.(clean);
+  }, [onSendListToBoard]);
+
   const openEditorContextMenu = (view, event) => {
     event.preventDefault();
     const editor = editorRef.current;
@@ -186,18 +301,15 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
     const selectedText = selection.empty
       ? ''
       : editor.state.doc.textBetween(selection.from, selection.to, '\n');
+    const selectedItems = taskItemsFromText(selectedText);
+    const blockItems = selection.empty ? extractCurrentBlockItems(editor) : [];
     let items;
 
-    // Reusable "Send list to board" action — available on any list, whether or
-    // not there's a selection (right-clicking a list with text selected is common).
-    const sendListAction = (li) => ({
-      label: 'Send list to board…',
-      onClick: () => {
-        const list = extractListItems(editor, li);
-        if (!list.length) { toast.warning('This list is empty'); return; }
-        onSendListToBoard?.(list);
-      },
+    const sendItemsAction = (sourceItems, label = 'Send to board…') => ({
+      label,
+      onClick: () => sendItemsToBoard(sourceItems),
     });
+    const sendListAction = (li) => sendItemsAction(extractListItems(editor, li), 'Send whole list to board…');
 
     if (imageNode) {
       items = [
@@ -227,12 +339,12 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
         { label: 'Italic', shortcut: '⌘I', onClick: () => editor.chain().focus().toggleItalic().run() },
         { label: 'Underline', shortcut: '⌘U', onClick: () => editor.chain().focus().toggleUnderline().run() },
         { label: 'Add hyperlink…', onClick: () => setLinkDialogOpen(true) },
+        { label: selectedItems.length > 1 ? 'Turn into Kandoo tasks' : 'Turn into Kandoo task', onClick: () => insertLinkedTask(selectedText, { replaceSelection: true }) },
         { divider: true },
         { label: 'Clear formatting', onClick: () => editor.chain().focus().unsetAllMarks().clearNodes().run() },
+        { divider: true },
+        sendItemsAction(selectedItems, selectedItems.length > 1 ? 'Send selection as tasks…' : 'Send selection to board…'),
       ];
-      if (listItem) {
-        items.push({ divider: true }, sendListAction(listItem));
-      }
     } else if (listItem) {
       items = [];
       if (taskItem) {
@@ -255,10 +367,13 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
         { divider: true },
         { label: 'Undo', shortcut: '⌘Z', onClick: () => editor.chain().focus().undo().run() },
         { label: 'Redo', shortcut: '⌘⇧Z', onClick: () => editor.chain().focus().redo().run() },
+      ];
+      if (blockItems.length) items.push({ divider: true }, sendItemsAction(blockItems, 'Send current line to board…'));
+      items.push(
         { divider: true },
         { label: 'Insert image…', onClick: () => fileRef.current?.click() },
         { label: 'Insert table…', onClick: () => setTableDialogOpen(true) },
-      ];
+      );
     }
 
     setEditorContextMenu({ x: event.clientX, y: event.clientY, items });
@@ -268,7 +383,7 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit.configure({ codeBlock: false }),
+      StarterKit.configure({ codeBlock: false, orderedList: false }),
       Underline,
       TextStyle,
       Color,
@@ -276,12 +391,18 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
       FontSize,
       Highlight.configure({ multicolor: true }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      OrderedListWithStyle,
       Link.configure({
         openOnClick: false,
         autolink: true,
         HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: '_blank' },
       }),
       ResizableImage.configure({ allowBase64: true }),
+      LinkedTask.configure({
+        getTask: (taskId, cardUid) => linkedTaskRef.current.getLinkedTask?.(taskId, cardUid),
+        onToggle: (taskId, cardUid) => linkedTaskRef.current.onToggleLinkedTask?.(taskId, cardUid),
+        onOpen: (taskId, cardUid) => linkedTaskRef.current.onOpenLinkedTask?.(taskId, cardUid),
+      }),
       Placeholder.configure({ placeholder: placeholder || 'Start writing…' }),
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -295,6 +416,7 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
         onCreatePage,
         onInsertTable: () => setTableDialogOpen(true),
         onLink: () => setLinkDialogOpen(true),
+        onTask: () => insertLinkedTask(),
         onOpen:   handleSlashOpen,
         onUpdate: handleSlashUpdate,
         onClose:  handleSlashClose,
@@ -352,7 +474,11 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
             return editor.isFocused && !empty;
           }}
         >
-          <SelectionBubble editor={editor} onLink={() => setLinkDialogOpen(true)} />
+          <SelectionBubble
+            editor={editor}
+            onLink={() => setLinkDialogOpen(true)}
+            onTask={(text) => insertLinkedTask(text, { replaceSelection: true })}
+          />
         </BubbleMenu>
       )}
       {/* Child pages belong to the page body. */}
@@ -379,7 +505,7 @@ export default function NoteEditor({ content, onChange, placeholder, paperless, 
 }
 
 // ── Selection bubble ────────────────────────────────────────────────────────
-function SelectionBubble({ editor, onLink }) {
+function SelectionBubble({ editor, onLink, onTask }) {
   const [openPalette, setOpenPalette] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
   const [menuAnchor, setMenuAnchor] = useState(null);
@@ -397,9 +523,15 @@ function SelectionBubble({ editor, onLink }) {
 
   const fontFamily = editor.getAttributes('textStyle').fontFamily || '';
   const fontSize = editor.getAttributes('textStyle').fontSize || '';
+  const listValue = editor.isActive('taskList') ? 'check'
+    : editor.isActive('bulletList') ? 'bullet'
+      : editor.isActive('orderedList')
+        ? editor.getAttributes('orderedList').listStyleType || 'decimal'
+        : '';
   const styleLabel = TEXT_STYLES.find((option) => option.value === styleValue)?.label || 'Normal';
   const fontLabel = FONT_FAMILIES.find((option) => option.value === fontFamily)?.label || 'Default';
   const sizeLabel = fontSize ? `${parseInt(fontSize, 10)} px` : 'Size';
+  const listLabel = LIST_STYLES.find((option) => option.value === listValue)?.label || 'List';
 
   const menuConfig = openMenu === 'style'
     ? { title: 'Text style', kind: 'style', value: styleValue, options: TEXT_STYLES }
@@ -414,7 +546,24 @@ function SelectionBubble({ editor, onLink }) {
               hint: value ? 'px' : 'Theme',
             })),
           }
-        : null;
+        : openMenu === 'list'
+          ? { title: 'List type', kind: 'list', value: listValue, options: LIST_STYLES }
+          : null;
+
+  const applyListValue = (value) => {
+    if (value === 'bullet') {
+      editor.chain().focus().toggleBulletList().run();
+      return;
+    }
+    if (value === 'check') {
+      editor.chain().focus().toggleTaskList().run();
+      return;
+    }
+    if (editor.isActive('bulletList')) editor.chain().focus().toggleBulletList().run();
+    if (editor.isActive('taskList')) editor.chain().focus().toggleTaskList().run();
+    if (!editor.isActive('orderedList')) editor.chain().focus().toggleOrderedList().run();
+    editor.chain().focus().updateAttributes('orderedList', { listStyleType: value }).run();
+  };
 
   const applyMenuValue = (kind, value) => {
     if (kind === 'style') applyStyle(value);
@@ -426,6 +575,7 @@ function SelectionBubble({ editor, onLink }) {
       if (value) editor.chain().focus().setFontSize(value).run();
       else editor.chain().focus().unsetFontSize().run();
     }
+    if (kind === 'list') applyListValue(value);
     setOpenMenu(null);
     setMenuAnchor(null);
   };
@@ -446,16 +596,21 @@ function SelectionBubble({ editor, onLink }) {
     setMenuAnchor(null);
   };
 
+  const selectedText = () => {
+    const { from, to } = editor.state.selection;
+    return editor.state.doc.textBetween(from, to, '\n').trim();
+  };
+
   return (
     <>
-      <ToolbarMenuTrigger id="bubble-style" label={styleLabel} title="Text style"
-        open={openMenu === 'style'} width="style"
+      <ToolbarMenuTrigger id="bubble-style" label="Aa" title={`Text style: ${styleLabel}`}
+        ariaLabel={`Text style: ${styleLabel}`} open={openMenu === 'style'} width="compact"
         onClick={(event) => toggleMenu('style', event)} />
-      <ToolbarMenuTrigger id="bubble-font" label={fontLabel} title="Font family"
-        open={openMenu === 'font'} width="font"
+      <ToolbarMenuTrigger id="bubble-font" label="F" title={`Font: ${fontLabel}`}
+        ariaLabel={`Font: ${fontLabel}`} open={openMenu === 'font'} width="compact"
         onClick={(event) => toggleMenu('font', event)} />
-      <ToolbarMenuTrigger id="bubble-size" label={sizeLabel} title="Font size"
-        open={openMenu === 'size'} width="size"
+      <ToolbarMenuTrigger id="bubble-size" label={fontSize ? parseInt(fontSize, 10) : 'S'} title={`Font size: ${sizeLabel}`}
+        ariaLabel={`Font size: ${sizeLabel}`} open={openMenu === 'size'} width="compact"
         onClick={(event) => toggleMenu('size', event)} />
 
       <Sep />
@@ -466,6 +621,10 @@ function SelectionBubble({ editor, onLink }) {
       <TBtn editor={editor} run="toggleCode" active="code" title="Inline code"><RiCodeSSlashLine /></TBtn>
 
       <Sep />
+      <ToolbarMenuTrigger id="bubble-list" label={<VscListUnordered aria-hidden="true" />}
+        title={`List options: ${listLabel}`} ariaLabel={`List options: ${listLabel}`}
+        open={openMenu === 'list'} width="compact"
+        onClick={(event) => toggleMenu('list', event)} />
       <ColorControl
         title="Text colour"
         icon={<RiFontColor />}
@@ -489,6 +648,7 @@ function SelectionBubble({ editor, onLink }) {
         onApply={(color) => editor.chain().focus().setHighlight({ color }).run()}
         onClear={() => editor.chain().focus().unsetHighlight().run()}
       />
+      <button className="note-tb__btn note-tb__btn--task" title="Turn selection into Kandoo task" onClick={() => onTask?.(selectedText())}>Task</button>
       <button className={`note-tb__btn${editor.isActive('link') ? ' is-active' : ''}`} title="Link" onClick={onLink}><VscLink /></button>
       <button className="note-tb__btn" title="Clear formatting" onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}><VscClearAll /></button>
 
@@ -501,13 +661,14 @@ function SelectionBubble({ editor, onLink }) {
   );
 }
 
-function ToolbarMenuTrigger({ id, label, title, open, width, onClick }) {
+function ToolbarMenuTrigger({ id, label, title, ariaLabel, open, width, onClick }) {
   return (
     <button type="button"
       className={`note-tb__menu-trigger note-tb__menu-trigger--${width}${open ? ' is-open' : ''}`}
       title={title} aria-haspopup="listbox" aria-expanded={open}
+      aria-label={ariaLabel || title}
       aria-controls={`note-toolbar-menu-${id}`} onClick={onClick}>
-      <span>{label}</span>
+      <span className="note-tb__menu-trigger-label">{label}</span>
       <VscChevronDown aria-hidden="true" />
     </button>
   );

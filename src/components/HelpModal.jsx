@@ -294,13 +294,24 @@ const SECTIONS = [
           <><strong>/table</strong> — insert a table.</>,
           <><strong>/image</strong> — open image picker.</>,
           <><strong>/link</strong> — insert or edit a hyperlink.</>,
+          <><strong>/task</strong> — create a live linked Kandoo task inside the note.</>,
           <><strong>/divider</strong> — horizontal rule.</>,
+        ]} />
+
+        <SubH>Task Lens</SubH>
+        <P>Create linked tasks from notes with <Kbd>/task</Kbd>, by selecting text and clicking <strong>Task</strong>, or by right-clicking selected text and choosing <strong>Turn into Kandoo task</strong>.</P>
+        <Steps items={[
+          <>Linked task chips stay connected to the board task and show status, card, and due date.</>,
+          <>Checking the chip toggles the real board task done/open.</>,
+          <>The right document sidebar shows linked tasks in the core To-do, In-Progress, and Done lanes. Drag tasks between lanes or right-click a task to move it elsewhere.</>,
+          <>Opening a linked task jumps back to the task board and briefly highlights the task so you can locate it.</>,
         ]} />
 
         <SubH>Selection formatting</SubH>
         <Steps items={[
           <>Select text to open the floating format bubble.</>,
-          <>Use it for text style, font family, size, bold, italic, underline, strikethrough, inline code, colour, highlight, and links.</>,
+          <>Use it for text style, font family, size, bold, italic, underline, strikethrough, inline code, list styles, colour, highlight, links, and turning text into tasks.</>,
+          <>The list dropdown supports bullets, checklists, numbers, alphabetic lists, and roman numeral lists.</>,
           <>Use right-click for contextual actions like table rows/columns, image resize/crop, list-to-board, paste, and link actions.</>,
           <>Use <Kbd>/</Kbd> for insertions such as tables, images, pages, headings, lists, quotes, code blocks, and dividers.</>,
         ]} />
