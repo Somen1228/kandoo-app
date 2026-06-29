@@ -334,7 +334,7 @@ function Card({
   pinnedCardCount = 0, maxPinnedCards = 3, onTogglePin,
   isVisible, tasks, note,
   updateCardTasks, updateCardNote, updateCards, searchTerm,
-  query, filterMode = false, scheduleView = null, currentMatchTaskId = null,
+  query, filterMode = false, labelFilter = null, scheduleView = null, currentMatchTaskId = null,
   focusedTask = null,
   quickAddSignal = 0, dragHandleProps = {}, onMoveToDone, onMoveTask,
   navigateToNote, getNoteTitle, notes = [], layout = 'grid',
@@ -1081,6 +1081,11 @@ function Card({
               let visibleTasks = (filterMode && query && !query.isEmpty && !cardTitleMatches)
                 ? allTasks.filter((t) => matchesTask(t, query))
                 : allTasks;
+              if (labelFilter) {
+                visibleTasks = visibleTasks.filter((t) =>
+                  Array.isArray(t.labels) && t.labels.some((l) => l.name === labelFilter)
+                );
+              }
               if (scheduleView) {
                 visibleTasks = visibleTasks.filter((t) => classifyTask(t) === scheduleView);
               }

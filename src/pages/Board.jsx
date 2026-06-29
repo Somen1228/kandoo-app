@@ -130,6 +130,7 @@ function Board() {
   const [showMoreSheet, setShowMoreSheet]         = useState(false);
   const [showTour, setShowTour] = useState(() => localStorage.getItem('kandoo-tour-auto') !== '0');
   const [filterMode, setFilterMode]               = useState(false);
+  const [labelFilter, setLabelFilter]             = useState(null);
   const [currentMatchIdx, setCurrentMatchIdx]     = useState(0);
   const [showCrossBoardDropdown, setShowCrossBoardDropdown] = useState(false);
   const suppressBoardClickRef = useRef(false);
@@ -315,8 +316,7 @@ function Board() {
   const filterByLabel = (name) => {
     setSection("todos");
     setScheduleView(null);
-    setSearchTerm(name);
-    setFilterMode(true);
+    setLabelFilter(name);
   };
   const openLabelMenu = (e, label) => {
     e.preventDefault();
@@ -330,9 +330,9 @@ function Board() {
           if (next != null) renameLabel(label.id, next);
         } },
         { divider: true },
-        ...LABEL_COLORS.map((color) => ({
-          label: label.color === color ? "✓ Colour" : "Colour",
-          icon: <span style={{ width: 11, height: 11, borderRadius: "50%", background: color, display: "inline-block" }} />,
+        ...LABEL_COLORS.map((color, i) => ({
+          label: `${label.color === color ? "✓ " : ""}${{ '#e5484d': 'Red', '#e8a13a': 'Orange', '#5baa5b': 'Green', '#4f86df': 'Blue', '#8b5cf6': 'Purple', '#ec4899': 'Pink', '#06b6d4': 'Cyan', '#64748b': 'Gray' }[color] || `Color ${i + 1}`}`,
+          icon: <span style={{ width: 11, height: 11, borderRadius: "50%", background: color, display: "inline-block", flexShrink: 0 }} />,
           onClick: () => recolorLabel(label.id, color),
         })),
         { divider: true },
@@ -441,6 +441,7 @@ function Board() {
     if (showWarningModal) { setShowWarningModal(false); setBoardToDelete(null); return; }
     if (editingBoardId) { setEditingBoardId(null); return; }
     if (searchTerm) { setSearchTerm(""); return; }
+    if (labelFilter) { setLabelFilter(null); return; }
     if (scheduleView) { setScheduleView(null); return; }
   }, { enableOnFormTags: ["input"] });
 
@@ -696,8 +697,8 @@ function Board() {
             <div className="mac-sidebar__section">
               <div className="mac-sidebar__label">Tasks</div>
               <button
-                className={`mac-nav-item${section === "todos" && !scheduleView ? " is-active" : ""}`}
-                onClick={() => { setSection("todos"); setScheduleView(null); }}
+                className={`mac-nav-item${section === "todos" && !scheduleView && !labelFilter ? " is-active" : ""}`}
+                onClick={() => { setSection("todos"); setScheduleView(null); setLabelFilter(null); }}
               >
                 <span className="mac-nav-item__icon"><VscInbox /></span>
                 <span className="mac-nav-item__label">All Tasks</span>
@@ -709,7 +710,7 @@ function Board() {
                 <button
                   key={s.id}
                   className={`mac-nav-item${section === "todos" && scheduleView === s.id ? " is-active" : ""}`}
-                  onClick={() => { setSection("todos"); setScheduleView((v) => (v === s.id ? null : s.id)); }}
+                  onClick={() => { setSection("todos"); setScheduleView((v) => (v === s.id ? null : s.id)); setLabelFilter(null); }}
                 >
                   <span className="mac-nav-item__icon">
                     <span className="mac-nav-item__dot" style={{ background: s.dot }} />
@@ -748,7 +749,7 @@ function Board() {
               {!labelsCollapsed && (
                 <div className="mac-labels-list">
                   {labels.map((l) => {
-                    const active = section === "todos" && filterMode && searchTerm === l.name;
+                    const active = section === "todos" && labelFilter === l.name;
                     return (
                       <button
                         key={l.id}
@@ -1017,6 +1018,7 @@ function Board() {
             searchTerm={searchTerm}
             query={query}
             filterMode={filterMode}
+            labelFilter={labelFilter}
             currentMatchTaskId={currentMatchTaskId}
             quickAddSignal={quickAddSignal}
             section={section}

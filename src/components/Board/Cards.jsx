@@ -207,7 +207,7 @@ function CardDragPreview({ card, layout }) {
 }
 
 function Cards({
-  boardId, searchTerm, query, filterMode = false, currentMatchTaskId = null,
+  boardId, searchTerm, query, filterMode = false, labelFilter = null, currentMatchTaskId = null,
   quickAddSignal, section = "todos", setSection, scheduleView = null,
   onClearSchedule, taskCount = 0, storageLabel = "saved locally",
   otherBoardsWithMatches = [], totalMatches = 0, activeMatchCount = 0,
@@ -820,6 +820,11 @@ function Cards({
       if (scheduleView && !Object.values(card.tasks || {}).some((task) => classifyTask(task) === scheduleView)) {
         return false;
       }
+      if (labelFilter && !Object.values(card.tasks || {}).some((task) =>
+        Array.isArray(task.labels) && task.labels.some((l) => l.name === labelFilter)
+      )) {
+        return false;
+      }
       if (filterMode && query && !query.isEmpty && !matchesCardTitle(card, query)) {
         return Object.values(card.tasks || {}).some((task) => matchesTask(task, query));
       }
@@ -950,6 +955,7 @@ function Cards({
                     searchTerm={searchTerm}
                     query={query}
                     filterMode={filterMode}
+                    labelFilter={labelFilter}
                     scheduleView={scheduleView}
                     currentMatchTaskId={currentMatchTaskId}
                     focusedTask={focusedTask?.cardUid === card.uid ? focusedTask : null}
