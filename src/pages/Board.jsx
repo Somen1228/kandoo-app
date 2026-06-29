@@ -16,6 +16,7 @@ import { useHotkeys } from "react-hotkeys-hook";
 import { useLeaderChords, LEADER_LABEL } from "../hooks/useLeaderChords";
 import { useViewport } from "../hooks/useViewport";
 import { useDueNotifications } from "../hooks/useDueNotifications";
+import { newLabelId, nextLabelColor, LABEL_COLORS } from "../utils/labels";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
@@ -96,7 +97,7 @@ function Board() {
   } = useContext(CardsContext);
   const { user, isGuest, logout, exitOfflineMode } = useAuth();
   const { currentThemeId, allThemes, setTheme } = useTheme();
-  const { settings } = useSettings();
+  const { settings, setSetting } = useSettings();
   const isDesktopApp = isTauri();
 
   // Desktop / in-app reminders for tasks due today or overdue.
@@ -240,6 +241,104 @@ function Board() {
       n += Object.keys(card.tasks || {}).length;
     }
     return n;
+  };
+
+  // ── Labels (sidebar section) ────────────────────────────────────────────────
+  const labels = settings.labels || [];
+  const [labelsCollapsed, setLabelsCollapsed] = useState(
+    () => localStorage.getItem("kandoo-labels-collapsed") === "1"
+  );
+  useEffect(() => {
+    localStorage.setItem("kandoo-labels-collapsed", labelsCollapsed ? "1" : "0");
+  }, [labelsCollapsed]);
+  const [addingLabel, setAddingLabel] = useState(false);
+  const [labelDraft, setLabelDraft] = useState("");
+
+  // Task count per label id, across every board.
+  const labelCounts = useMemo(() => {
+    const counts = {};
+    for (const b of boards) {
+      for (const card of b.cards || []) {
+        if ((card.type || "todo") === "note") continue;
+        for (const t of Object.values(card.tasks || {})) {
+          if (!Array.isArray(t.labels)) continue;
+          for (const l of t.labels) counts[l.id] = (counts[l.id] || 0) + 1;
+        }
+      }
+    }
+    return counts;
+  }, [boards]);
+
+  const createLabel = () => {
+    const name = labelDraft.trim();
+    setAddingLabel(false);
+    setLabelDraft("");
+    if (!name || labels.some((l) => l.name.toLowerCase() === name.toLowerCase())) return;
+    setSetting("labels", [...labels, { id: newLabelId(), name, color: nextLabelColor(labels) }]);
+  };
+
+  // Edits propagate to the denormalised copies on every task so chips stay in sync.
+  const mutateTaskLabels = (fn) => {
+    setBoards((prev) => prev.map((b) => ({
+      ...b,
+      cards: (b.cards || []).map((c) => {
+        if ((c.type || "todo") === "note" || !c.tasks) return c;
+        let changed = false;
+        const tasks = {};
+        for (const [tid, t] of Object.entries(c.tasks)) {
+          if (!Array.isArray(t.labels) || !t.labels.length) { tasks[tid] = t; continue; }
+          const next = fn(t.labels);
+          if (next === t.labels) { tasks[tid] = t; continue; }
+          changed = true;
+          if (next.length) tasks[tid] = { ...t, labels: next };
+          else { const { labels: _drop, ...rest } = t; tasks[tid] = rest; }
+        }
+        return changed ? { ...c, tasks } : c;
+      }),
+    })));
+  };
+
+  const renameLabel = (id, name) => {
+    const clean = name.trim();
+    if (!clean) return;
+    setSetting("labels", labels.map((l) => (l.id === id ? { ...l, name: clean } : l)));
+    mutateTaskLabels((ls) => ls.map((l) => (l.id === id ? { ...l, name: clean } : l)));
+  };
+  const recolorLabel = (id, color) => {
+    setSetting("labels", labels.map((l) => (l.id === id ? { ...l, color } : l)));
+    mutateTaskLabels((ls) => ls.map((l) => (l.id === id ? { ...l, color } : l)));
+  };
+  const deleteLabel = (id) => {
+    setSetting("labels", labels.filter((l) => l.id !== id));
+    mutateTaskLabels((ls) => ls.filter((l) => l.id !== id));
+  };
+  const filterByLabel = (name) => {
+    setSection("todos");
+    setScheduleView(null);
+    setSearchTerm(name);
+    setFilterMode(true);
+  };
+  const openLabelMenu = (e, label) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({
+      x: e.clientX, y: e.clientY,
+      items: [
+        { label: "Filter by this label", onClick: () => filterByLabel(label.name) },
+        { label: "Rename…", onClick: () => {
+          const next = window.prompt("Rename label", label.name);
+          if (next != null) renameLabel(label.id, next);
+        } },
+        { divider: true },
+        ...LABEL_COLORS.map((color) => ({
+          label: label.color === color ? "✓ Colour" : "Colour",
+          icon: <span style={{ width: 11, height: 11, borderRadius: "50%", background: color, display: "inline-block" }} />,
+          onClick: () => recolorLabel(label.id, color),
+        })),
+        { divider: true },
+        { label: "Delete label", danger: true, onClick: () => deleteLabel(label.id) },
+      ],
+    });
   };
 
   // Reset index when query changes or matches set shifts
@@ -621,6 +720,74 @@ function Board() {
                   )}
                 </button>
               ))}
+            </div>
+
+            {/* Labels */}
+            <div className="mac-sidebar__section">
+              <div className="mac-sidebar__label mac-sidebar__label--labels">
+                <button
+                  type="button"
+                  className="mac-labels-toggle"
+                  onClick={() => setLabelsCollapsed((c) => !c)}
+                  aria-expanded={!labelsCollapsed}
+                >
+                  <VscChevronDown
+                    className="mac-labels-chevron"
+                    style={{ transform: labelsCollapsed ? "rotate(-90deg)" : "none" }}
+                  />
+                  <span>Labels</span>
+                </button>
+                <button
+                  className="mac-sidebar__add"
+                  onClick={() => { setLabelsCollapsed(false); setAddingLabel(true); }}
+                  title="New label"
+                  aria-label="New label"
+                >+</button>
+              </div>
+
+              {!labelsCollapsed && (
+                <div className="mac-labels-list">
+                  {labels.map((l) => {
+                    const active = section === "todos" && filterMode && searchTerm === l.name;
+                    return (
+                      <button
+                        key={l.id}
+                        className={`mac-nav-item${active ? " is-active" : ""}`}
+                        onClick={() => filterByLabel(l.name)}
+                        onContextMenu={(e) => openLabelMenu(e, l)}
+                        title={`Filter by “${l.name}”`}
+                      >
+                        <span className="mac-nav-item__icon">
+                          <span className="mac-nav-item__dot" style={{ background: l.color }} />
+                        </span>
+                        <span className="mac-nav-item__label">{l.name}</span>
+                        {labelCounts[l.id] > 0 && (
+                          <span className="mac-nav-item__count">{labelCounts[l.id]}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+
+                  {addingLabel && (
+                    <input
+                      className="mac-labels-input"
+                      autoFocus
+                      value={labelDraft}
+                      onChange={(e) => setLabelDraft(e.target.value)}
+                      onBlur={createLabel}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { e.preventDefault(); createLabel(); }
+                        if (e.key === "Escape") { setAddingLabel(false); setLabelDraft(""); }
+                      }}
+                      placeholder="New label…"
+                    />
+                  )}
+
+                  {!labels.length && !addingLabel && (
+                    <div className="mac-labels-empty">No labels yet</div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Notes */}

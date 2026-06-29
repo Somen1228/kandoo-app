@@ -19,7 +19,7 @@ const INDENT_WIDTH = 14;
 const CARD_HUE_HEX = Object.fromEntries(CARD_HUES.map((hue) => [hue.key, hue.hex]));
 const WORKFLOW_CARD_RE = /^(to-?do|in[-\s]?progress|in[-\s]?review|done|completed|finished)$/i;
 
-// ── Note-tree drag-and-drop helpers (flat array, order = sibling order) ───────
+// ── Note-tree drag-and-drop helpers (flat array, order = sibling order) ───────\
 
 // Flatten the visible tree (collapsed subtrees omitted) into an ordered list.
 function flattenNoteTree(notes, collapsed) {

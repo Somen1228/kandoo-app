@@ -4766,3 +4766,50 @@ html.reduce-motion *::after {
 .recurrence-btn.is-on { color: var(--accent); }
 .recurrence-btn__label { white-space: nowrap; }
 .mac-recurrence-chip { gap: 4px; }
+
+/* ── Sidebar: Labels section ─────────────────────────────────────────────── */
+.mac-labels-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  font-family: var(--font-ui);
+  padding: 0;
+}
+.mac-labels-toggle:hover { color: var(--text-secondary); }
+.mac-labels-chevron {
+  font-size: 0.85rem;
+  opacity: 0.7;
+  transition: transform var(--motion-fast);
+}
+.mac-labels-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 244px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.mac-labels-input {
+  margin: 3px 8px 5px;
+  padding: 6px 9px;
+  background: var(--bg-input, var(--theme-bg-input));
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 0.84rem;
+  outline: none;
+}
+.mac-labels-input:focus { border-color: var(--accent); }
+.mac-labels-empty {
+  padding: 5px 12px;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+}
