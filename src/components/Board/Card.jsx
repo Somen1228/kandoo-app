@@ -65,6 +65,103 @@ function isEmptyTaskContent(html, images) {
   return text.length === 0 && (images?.length ?? 0) === 0;
 }
 
+function TaskLabelChips({ labels }) {
+  const [popover, setPopover] = useState(null);
+  const popoverRef = useRef(null);
+
+  useEffect(() => {
+    if (!popover) return undefined;
+    const close = (event) => {
+      if (popoverRef.current?.contains(event.target)) return;
+      setPopover(null);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setPopover(null);
+    };
+    const closeOnScroll = () => setPopover(null);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', closeOnEscape);
+    window.addEventListener('scroll', closeOnScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', closeOnEscape);
+      window.removeEventListener('scroll', closeOnScroll, true);
+    };
+  }, [popover]);
+
+  if (!Array.isArray(labels) || labels.length === 0) return null;
+  const [first, ...rest] = labels;
+  const filterByLabel = (e, name) => {
+    e.stopPropagation();
+    window.dispatchEvent(new CustomEvent('kandoo:set-label-filter', { detail: name }));
+    setPopover(null);
+  };
+  const openLabels = (e) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const width = 220;
+    setPopover({
+      left: Math.min(Math.max(8, rect.right - width), window.innerWidth - width - 8),
+      top: Math.min(rect.bottom + 6, window.innerHeight - 220),
+      width,
+    });
+  };
+
+  return (
+    <>
+      <span className="mac-task-labels" title={labels.map((label) => label.name).join(', ')}>
+        <button
+          type="button"
+          className="mac-label-chip"
+          style={{ '--label-color': first.color }}
+          title={`Filter by “${first.name}” across boards`}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => filterByLabel(e, first.name)}
+        >
+          <span className="mac-label-chip__dot" />
+          <span className="mac-label-chip__name">{first.name}</span>
+        </button>
+        {rest.length > 0 && (
+          <button
+            type="button"
+            className="mac-label-chip mac-label-chip--more"
+            title={labels.map((label) => label.name).join(', ')}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={openLabels}
+          >
+            +{rest.length}
+          </button>
+        )}
+      </span>
+      {popover && createPortal(
+        <div
+          ref={popoverRef}
+          className="mac-label-popover"
+          style={{ left: popover.left, top: popover.top, width: popover.width }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <div className="mac-label-popover__title">Labels</div>
+          <div className="mac-label-popover__list">
+            {labels.map((label) => (
+              <button
+                key={label.id || label.name}
+                type="button"
+                className="mac-label-popover__item"
+                style={{ '--label-color': label.color }}
+                onClick={(e) => filterByLabel(e, label.name)}
+              >
+                <span className="mac-label-chip__dot" />
+                <span>{label.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 function CardColorPicker({ x, y, currentColor, isDark, onPick, onClose }) {
   const ref = useRef(null);
 
@@ -1290,23 +1387,7 @@ function Card({
 
                       <div className="mac-task__footer">
                         <div className="mac-task__meta">
-                          {Array.isArray(task.labels) && task.labels.map((l) => (
-                            <button
-                              key={l.id}
-                              type="button"
-                              className="mac-label-chip"
-                              style={{ '--label-color': l.color }}
-                              title={`Filter by “${l.name}” across boards`}
-                              onPointerDown={(e) => e.stopPropagation()}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                window.dispatchEvent(new CustomEvent('kandoo:set-search', { detail: l.name }));
-                              }}
-                            >
-                              <span className="mac-label-chip__dot" />
-                              {l.name}
-                            </button>
-                          ))}
+                          <TaskLabelChips labels={task.labels} />
                           {task.subtasks?.length > 0 && (
                             <span
                               className="mac-chip"

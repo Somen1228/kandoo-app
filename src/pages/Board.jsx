@@ -254,6 +254,8 @@ function Board() {
   }, [labelsCollapsed]);
   const [addingLabel, setAddingLabel] = useState(false);
   const [labelDraft, setLabelDraft] = useState("");
+  const [editingLabelId, setEditingLabelId] = useState(null);
+  const [labelEditDraft, setLabelEditDraft] = useState("");
 
   // Task count per label id, across every board.
   const labelCounts = useMemo(() => {
@@ -301,9 +303,29 @@ function Board() {
 
   const renameLabel = (id, name) => {
     const clean = name.trim();
-    if (!clean) return;
+    if (!clean) return false;
+    if (labels.some((l) => l.id !== id && l.name.toLowerCase() === clean.toLowerCase())) return false;
     setSetting("labels", labels.map((l) => (l.id === id ? { ...l, name: clean } : l)));
     mutateTaskLabels((ls) => ls.map((l) => (l.id === id ? { ...l, name: clean } : l)));
+    if (labelFilter && labels.find((l) => l.id === id)?.name === labelFilter) setLabelFilter(clean);
+    return true;
+  };
+  const startRenamingLabel = (label) => {
+    setAddingLabel(false);
+    setEditingLabelId(label.id);
+    setLabelEditDraft(label.name);
+  };
+  const finishRenamingLabel = () => {
+    if (!editingLabelId) return;
+    const original = labels.find((l) => l.id === editingLabelId);
+    const clean = labelEditDraft.trim();
+    if (original && clean && clean !== original.name) renameLabel(editingLabelId, clean);
+    setEditingLabelId(null);
+    setLabelEditDraft("");
+  };
+  const cancelRenamingLabel = () => {
+    setEditingLabelId(null);
+    setLabelEditDraft("");
   };
   const recolorLabel = (id, color) => {
     setSetting("labels", labels.map((l) => (l.id === id ? { ...l, color } : l)));
@@ -325,10 +347,7 @@ function Board() {
       x: e.clientX, y: e.clientY,
       items: [
         { label: "Filter by this label", onClick: () => filterByLabel(label.name) },
-        { label: "Rename…", onClick: () => {
-          const next = window.prompt("Rename label", label.name);
-          if (next != null) renameLabel(label.id, next);
-        } },
+        { label: "Rename…", onClick: () => startRenamingLabel(label) },
         { divider: true },
         ...LABEL_COLORS.map((color, i) => ({
           label: `${label.color === color ? "✓ " : ""}${{ '#e5484d': 'Red', '#e8a13a': 'Orange', '#5baa5b': 'Green', '#4f86df': 'Blue', '#8b5cf6': 'Purple', '#ec4899': 'Pink', '#06b6d4': 'Cyan', '#64748b': 'Gray' }[color] || `Color ${i + 1}`}`,
@@ -529,11 +548,16 @@ function Board() {
 
   const handleSearch = (e) => setSearchTerm(e.target.value);
 
-  // Clicking a task's label chip filters every board by that label.
+  // Clicking a task's label chip uses the same isolated label filter as the
+  // sidebar. It intentionally does not write into the search box.
   useEffect(() => {
-    const onSet = (e) => { setSearchTerm(e.detail || ""); setFilterMode(true); };
-    window.addEventListener("kandoo:set-search", onSet);
-    return () => window.removeEventListener("kandoo:set-search", onSet);
+    const onSet = (e) => {
+      setSection("todos");
+      setScheduleView(null);
+      setLabelFilter(e.detail || null);
+    };
+    window.addEventListener("kandoo:set-label-filter", onSet);
+    return () => window.removeEventListener("kandoo:set-label-filter", onSet);
   }, []);
 
   const selectBoard = (id) => {
@@ -750,13 +774,32 @@ function Board() {
                 <div className="mac-labels-list">
                   {labels.map((l) => {
                     const active = section === "todos" && labelFilter === l.name;
+                    if (editingLabelId === l.id) {
+                      return (
+                        <div key={l.id} className="mac-labels-edit-row">
+                          <span className="mac-nav-item__dot" style={{ background: l.color }} />
+                          <input
+                            className="mac-labels-input mac-labels-input--inline"
+                            autoFocus
+                            value={labelEditDraft}
+                            onChange={(e) => setLabelEditDraft(e.target.value)}
+                            onBlur={finishRenamingLabel}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") { e.preventDefault(); finishRenamingLabel(); }
+                              if (e.key === "Escape") { e.preventDefault(); cancelRenamingLabel(); }
+                            }}
+                          />
+                        </div>
+                      );
+                    }
                     return (
                       <button
                         key={l.id}
                         className={`mac-nav-item${active ? " is-active" : ""}`}
                         onClick={() => filterByLabel(l.name)}
+                        onDoubleClick={() => startRenamingLabel(l)}
                         onContextMenu={(e) => openLabelMenu(e, l)}
-                        title={`Filter by “${l.name}”`}
+                        title="Click to filter · double-click to rename"
                       >
                         <span className="mac-nav-item__icon">
                           <span className="mac-nav-item__dot" style={{ background: l.color }} />
