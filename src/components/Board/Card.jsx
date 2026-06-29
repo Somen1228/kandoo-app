@@ -8,7 +8,7 @@ import { generateTaskID } from "../../utils/taskIdGenerator";
 import { renderTaskValue } from "../../utils/richText";
 import { sanitizeHtml, markdownToHtml, isHtml, htmlToText } from "../../utils/htmlEditor";
 import { matchesTask, matchesCardTitle } from "../../utils/search";
-import { classifyTask, dueTone, toDueString } from "../../utils/dueDate";
+import { classifyTask, dueTone, toDueString, formatDueShort } from "../../utils/dueDate";
 import {
   completionTimingLabel,
   completionTimingTone,
@@ -25,7 +25,7 @@ import { uploadImage, deleteImage, isStorageUrl } from "../../services/imageStor
 import { isProtectedCoreColumn } from "../../utils/coreColumns";
 import {
   VscEdit, VscCheck, VscTrash, VscSave, VscCopy, VscClose,
-  VscBold, VscItalic, VscCalendar, VscNote, VscLink, VscPin, VscPinned, VscChevronDown, VscDebugRestart,
+  VscBold, VscItalic, VscCalendar, VscNote, VscLink, VscPin, VscPinned, VscChevronDown, VscDebugRestart, VscChecklist, VscSync,
 } from "react-icons/vsc";
 import { IoDuplicateOutline } from "react-icons/io5";
 import { IoImageOutline } from "react-icons/io5";
@@ -38,6 +38,12 @@ import ImageModal from "./ImageModal.jsx";
 import RichEditor from "./RichEditor.jsx";
 import NoteCard from "./NoteCard.jsx";
 import DatePicker from "./DatePicker.jsx";
+import PrioritySelector from "./PrioritySelector.jsx";
+import SubtaskEditor from "./SubtaskEditor.jsx";
+import LabelPicker from "./LabelPicker.jsx";
+import RecurrenceButton from "./RecurrenceButton.jsx";
+import { getPriority, PRIORITIES } from "../../utils/taskPriority";
+import { advanceDue, recurrenceLabel } from "../../utils/recurrence";
 import NotePickerModal from "./NotePickerModal.jsx";
 import LinkedNotesPopover from "./LinkedNotesPopover.jsx";
 import PasteSplitModal from "./PasteSplitModal.jsx";
@@ -141,7 +147,7 @@ const TOOLBAR_BTN = {
   display: 'flex', alignItems: 'center', lineHeight: 1,
   transition: 'color 0.12s, background 0.12s',
 };
-const FormattingToolbar = forwardRef(function FormattingToolbar({ editorRef, onLinkNote }, ref) {
+const FormattingToolbar = forwardRef(function FormattingToolbar({ editorRef, onLinkNote, priority, onPriority, recurrence, onRecurrence }, ref) {
   const apply = (cmd) => editorRef.current?.exec(cmd);
   const mod = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform) ? '⌘' : 'Ctrl';
   const [pop, setPop] = useState(null); // { type: 'menu' | 'link', x, y } | null
@@ -237,6 +243,15 @@ const FormattingToolbar = forwardRef(function FormattingToolbar({ editorRef, onL
       >
         <VscLink />
       </button>
+
+      {/* Task metadata lives up here so the footer stays uncluttered. */}
+      {(onPriority || onRecurrence) && (
+        <>
+          <div style={{ flex: 1 }} />
+          {onPriority && <PrioritySelector value={priority} onChange={onPriority} />}
+          {onRecurrence && <RecurrenceButton value={recurrence} onChange={onRecurrence} />}
+        </>
+      )}
 
       {pop && createPortal(
         <div
@@ -352,10 +367,18 @@ function Card({
   const [taskValue, setTaskValue]             = useState(""); // HTML string
   const [newTaskImages, setNewTaskImages]     = useState([]);
   const [newTaskDue, setNewTaskDue]           = useState(""); // "YYYY-MM-DD" or ""
+  const [newTaskPriority, setNewTaskPriority] = useState(null); // 'high'|'medium'|'low'|null
+  const [newTaskSubtasks, setNewTaskSubtasks] = useState([]);
+  const [newTaskLabels, setNewTaskLabels]     = useState([]);
+  const [newTaskRecurrence, setNewTaskRecurrence] = useState(null);
   const [editingTaskId, setEditingTaskId]     = useState(null);
   const [editingTaskValue, setEditingTaskValue]   = useState(""); // HTML string
   const [editingTaskImages, setEditingTaskImages] = useState([]);
   const [editingTaskDue, setEditingTaskDue]       = useState(""); // "YYYY-MM-DD" or ""
+  const [editingTaskPriority, setEditingTaskPriority] = useState(null);
+  const [editingTaskSubtasks, setEditingTaskSubtasks] = useState([]);
+  const [editingTaskLabels, setEditingTaskLabels]     = useState([]);
+  const [editingTaskRecurrence, setEditingTaskRecurrence] = useState(null);
   // (done state is now persisted as task.done — see toggleDoneTask)
   const [showDeleteWarning, setShowDeleteWarning] = useState(false);
   const [toDelete, setToDelete]               = useState("");
@@ -490,6 +513,13 @@ function Card({
         { label: "Task timeline", icon: <VscCalendar />, onClick: () => setTimelineTask(task) },
         ...(moveItems.length ? [{ divider: true }, { label: "Move to", icon: '⇄', disabled: true }, ...moveItems] : []),
         { divider: true },
+        { label: "Priority", disabled: true },
+        ...PRIORITIES.map((p) => ({
+          label: `${task.priority === p.id ? '✓ ' : ''}${p.label}`,
+          icon: <span style={{ width: 10, height: 10, borderRadius: '50%', background: p.color, display: 'inline-block' }} />,
+          onClick: () => setTaskPriority(task.id, task.priority === p.id ? null : p.id),
+        })),
+        { divider: true },
         { label: linkedCount ? `Linked notes (${linkedCount})…` : "Link a note…", icon: <VscLink />, onClick: () => setNotePicker({ kind: 'task', taskId: task.id }) },
         { divider: true },
         { label: "Delete task", icon: <VscTrash />, danger: true, onClick: () => deleteTask(task.id) },
@@ -618,6 +648,10 @@ function Card({
     let task = {
       id: generateTaskID(), value: clean, images: newTaskImages,
       due: null, createdAt: now, updatedAt: now,
+      ...(newTaskPriority ? { priority: newTaskPriority } : {}),
+      ...(newTaskSubtasks.length ? { subtasks: newTaskSubtasks.filter((s) => s.text.trim()) } : {}),
+      ...(newTaskLabels.length ? { labels: newTaskLabels } : {}),
+      ...(newTaskRecurrence ? { recurrence: newTaskRecurrence } : {}),
       ...(newTaskNoteLinks.length ? { noteLinks: newTaskNoteLinks } : {}),
     };
     if (newTaskDue) task = withDueHistory(task, newTaskDue, now);
@@ -628,6 +662,10 @@ function Card({
     setTaskValue("");
     setNewTaskImages([]);
     setNewTaskNoteLinks([]);
+    setNewTaskPriority(null);
+    setNewTaskSubtasks([]);
+    setNewTaskLabels([]);
+    setNewTaskRecurrence(null);
     setNewTaskDue(settings.quickAddDueToday ? toDueString(new Date()) : "");
     newEditorRef.current?.setHtml('');
     newEditorRef.current?.focus();
@@ -676,6 +714,10 @@ function Card({
     setEditingTaskValue(initialHtml);
     setEditingTaskImages(taskImages || []);
     setEditingTaskDue(tasks[taskId]?.due || "");
+    setEditingTaskPriority(tasks[taskId]?.priority || null);
+    setEditingTaskSubtasks(tasks[taskId]?.subtasks || []);
+    setEditingTaskLabels(tasks[taskId]?.labels || []);
+    setEditingTaskRecurrence(tasks[taskId]?.recurrence || null);
   };
 
   const cancelEditingTask = () => {
@@ -683,7 +725,28 @@ function Card({
     setEditingTaskValue("");
     setEditingTaskImages([]);
     setEditingTaskDue("");
+    setEditingTaskPriority(null);
+    setEditingTaskSubtasks([]);
+    setEditingTaskLabels([]);
+    setEditingTaskRecurrence(null);
   };
+
+  // Set/clear a task's priority directly (context menu) without entering edit mode.
+  const setTaskPriority = useCallback((taskId, level) => {
+    const current = tasks[taskId];
+    if (!current) return;
+    const next = { ...current, updatedAt: Date.now() };
+    if (level) next.priority = level; else delete next.priority;
+    updateCardTasks(index, { ...tasks, [taskId]: next });
+  }, [index, tasks, updateCardTasks]);
+
+  // Toggle a single subtask's done state directly from the task display.
+  const toggleSubtask = useCallback((taskId, subtaskId) => {
+    const current = tasks[taskId];
+    if (!current?.subtasks?.length) return;
+    const subtasks = current.subtasks.map((s) => (s.id === subtaskId ? { ...s, done: !s.done } : s));
+    updateCardTasks(index, { ...tasks, [taskId]: { ...current, subtasks, updatedAt: Date.now() } });
+  }, [index, tasks, updateCardTasks]);
 
   const saveEditedTask = useCallback((taskId) => {
     const clean = sanitizeHtml(editingTaskValue);
@@ -696,11 +759,13 @@ function Card({
     }
     const now = Date.now();
     const currentTask = tasks[taskId];
-    const nextTask = withDueHistory(
-      { ...currentTask, value: clean, images: editingTaskImages, updatedAt: now },
-      editingTaskDue || null,
-      now
-    );
+    const base = { ...currentTask, value: clean, images: editingTaskImages, updatedAt: now };
+    if (editingTaskPriority) base.priority = editingTaskPriority; else delete base.priority;
+    const cleanSubtasks = (editingTaskSubtasks || []).filter((s) => s.text.trim());
+    if (cleanSubtasks.length) base.subtasks = cleanSubtasks; else delete base.subtasks;
+    if (editingTaskLabels?.length) base.labels = editingTaskLabels; else delete base.labels;
+    if (editingTaskRecurrence) base.recurrence = editingTaskRecurrence; else delete base.recurrence;
+    const nextTask = withDueHistory(base, editingTaskDue || null, now);
     updateCardTasks(index, {
       ...tasks,
       [taskId]: nextTask,
@@ -709,7 +774,11 @@ function Card({
     setEditingTaskValue("");
     setEditingTaskImages([]);
     setEditingTaskDue("");
-  }, [deleteTask, editingTaskDue, editingTaskImages, editingTaskValue, index, tasks, updateCardTasks]);
+    setEditingTaskPriority(null);
+    setEditingTaskSubtasks([]);
+    setEditingTaskLabels([]);
+    setEditingTaskRecurrence(null);
+  }, [deleteTask, editingTaskDue, editingTaskImages, editingTaskLabels, editingTaskPriority, editingTaskRecurrence, editingTaskSubtasks, editingTaskValue, index, tasks, updateCardTasks]);
 
   useEffect(() => {
     if (!editingTaskId) return undefined;
@@ -734,6 +803,16 @@ function Card({
     if (completingTaskId === taskId) return;
     const task = tasks[taskId];
     const nowDone = !task?.done;
+    // Recurring task completed → advance its due date and keep it open instead of
+    // marking it done / moving it to the Done column.
+    if (nowDone && task?.recurrence) {
+      const nowTs = Date.now();
+      const nextDue = advanceDue(task.due, task.recurrence);
+      const next = withDueHistory({ ...task, done: false, updatedAt: nowTs }, nextDue, nowTs);
+      updateCardTasks(index, { ...tasks, [taskId]: next });
+      toast.success(`Repeats ${formatDueShort(nextDue)}`);
+      return;
+    }
     if (!nowDone && isDoneColumn && onMoveTask) {
       const fallbackUid = allCards.find((card) => card.uid === task.previousCardUid && (card.type || 'todo') !== 'note')?.uid
         || allCards.find((card) => (card.type || 'todo') !== 'note' && /^to-?do$/i.test((card.title || '').trim()))?.uid
@@ -1025,7 +1104,7 @@ function Card({
                   task={task}
                   cardUid={uid}
                   isEditing={editingTaskId === task.id}
-                  className={`mac-task ${task.done ? "is-done" : ""} ${
+                  className={`mac-task ${task.priority ? `is-prio-${task.priority}` : ""} ${task.done ? "is-done" : ""} ${
                     task.id === currentMatchTaskId ? "is-match" : ""
                   } ${task.id === flashTaskId ? "is-focus-flash" : ""} ${completingTaskId === task.id ? "is-completing" : ""} ${editingTaskId === task.id ? "is-editing" : "cursor-grab active:cursor-grabbing"}`}
                   onContextMenu={e => openTaskContextMenu(e, task)}
@@ -1041,6 +1120,10 @@ function Card({
                         ref={editToolbarRef}
                         editorRef={editEditorRef}
                         onLinkNote={() => setNotePicker({ kind: 'task', taskId: task.id })}
+                        priority={editingTaskPriority}
+                        onPriority={setEditingTaskPriority}
+                        recurrence={editingTaskRecurrence}
+                        onRecurrence={setEditingTaskRecurrence}
                       />
                       <RichEditor
                         ref={editEditorRef}
@@ -1087,6 +1170,14 @@ function Card({
                           ))}
                         </div>
                       )}
+
+                      {/* Subtasks */}
+                      <SubtaskEditor subtasks={editingTaskSubtasks} onChange={setEditingTaskSubtasks} />
+
+                      {/* Labels */}
+                      <div style={{ padding: '0 12px 6px' }}>
+                        <LabelPicker value={editingTaskLabels} onChange={setEditingTaskLabels} />
+                      </div>
 
                       {/* Bottom action row */}
                       <div className="task-editor-actions">
@@ -1156,6 +1247,26 @@ function Card({
                         </div>
                       </div>
 
+                      {/* Subtask checklist — toggle done directly */}
+                      {task.subtasks?.length > 0 && (
+                        <ul className="mac-subtasks">
+                          {task.subtasks.map((st) => (
+                            <li key={st.id} className={`mac-subtask${st.done ? ' is-done' : ''}`}>
+                              <button
+                                type="button"
+                                className="mac-subtask__check"
+                                onPointerDown={e => e.stopPropagation()}
+                                onClick={e => { e.stopPropagation(); toggleSubtask(task.id, st.id); }}
+                                aria-label={st.done ? 'Mark subtask undone' : 'Mark subtask done'}
+                              >
+                                {st.done ? <VscCheck /> : <span className="mac-subtask__box" />}
+                              </button>
+                              <span className="mac-subtask__text">{st.text}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
                       {/* Image thumbnails in display mode */}
                       {task.images?.length > 0 && (
                         <div className="mac-task__attachments" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px', justifyContent: 'flex-start' }}>
@@ -1174,6 +1285,49 @@ function Card({
 
                       <div className="mac-task__footer">
                         <div className="mac-task__meta">
+                          {Array.isArray(task.labels) && task.labels.map((l) => (
+                            <button
+                              key={l.id}
+                              type="button"
+                              className="mac-label-chip"
+                              style={{ '--label-color': l.color }}
+                              title={`Filter by “${l.name}” across boards`}
+                              onPointerDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.dispatchEvent(new CustomEvent('kandoo:set-search', { detail: l.name }));
+                              }}
+                            >
+                              <span className="mac-label-chip__dot" />
+                              {l.name}
+                            </button>
+                          ))}
+                          {task.subtasks?.length > 0 && (
+                            <span
+                              className="mac-chip"
+                              data-tone={task.subtasks.every((s) => s.done) ? 'done' : undefined}
+                              title="Subtasks complete"
+                            >
+                              <VscChecklist style={{ fontSize: '0.85em' }} />
+                              {task.subtasks.filter((s) => s.done).length}/{task.subtasks.length}
+                            </span>
+                          )}
+                          {task.recurrence && (
+                            <span className="mac-chip mac-recurrence-chip" title={`Repeats ${recurrenceLabel(task.recurrence)}`}>
+                              <VscSync style={{ fontSize: '0.82em' }} />
+                              {recurrenceLabel(task.recurrence)}
+                            </span>
+                          )}
+                          {task.priority && getPriority(task.priority) && (
+                            <span
+                              className="mac-priority-chip"
+                              style={{ '--prio-color': getPriority(task.priority).color, '--prio-bg': getPriority(task.priority).bg }}
+                              title={`${getPriority(task.priority).label} priority`}
+                            >
+                              <span className="mac-priority-chip__dot" />
+                              {getPriority(task.priority).label}
+                            </span>
+                          )}
                           {isDoneColumn && task.completedAt && (
                             <span className="mac-chip" data-tone="done">
                               <VscCheck style={{ fontSize: '0.85em' }} />
@@ -1304,6 +1458,10 @@ function Card({
             ref={newToolbarRef}
             editorRef={newEditorRef}
             onLinkNote={() => setNotePicker({ kind: 'new' })}
+            priority={newTaskPriority}
+            onPriority={setNewTaskPriority}
+            recurrence={newTaskRecurrence}
+            onRecurrence={setNewTaskRecurrence}
           />
 
           {/* Text editor */}
@@ -1377,6 +1535,14 @@ function Card({
               ))}
             </div>
           )}
+
+          {/* Subtasks */}
+          <SubtaskEditor subtasks={newTaskSubtasks} onChange={setNewTaskSubtasks} />
+
+          {/* Labels */}
+          <div style={{ padding: '0 12px 6px' }}>
+            <LabelPicker value={newTaskLabels} onChange={setNewTaskLabels} />
+          </div>
 
           {/* Bottom action row */}
           <div className="task-editor-actions">

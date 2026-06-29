@@ -15,6 +15,7 @@ import { v4 as uuidv4 } from "uuid";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useLeaderChords, LEADER_LABEL } from "../hooks/useLeaderChords";
 import { useViewport } from "../hooks/useViewport";
+import { useDueNotifications } from "../hooks/useDueNotifications";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
@@ -28,6 +29,7 @@ import {
 import { CSS as DndCSS } from "@dnd-kit/utilities";
 import Cards from "../components/Board/Cards";
 import { CardsContext } from "../contexts/CardsContext";
+import { useSettings } from "../contexts/SettingsContext";
 import { useAuth } from "../contexts/AuthContext";
 import { useTheme } from "../contexts/ThemeContext";
 import { kandooMascots } from "../assets/kandoo/mascots";
@@ -94,7 +96,19 @@ function Board() {
   } = useContext(CardsContext);
   const { user, isGuest, logout, exitOfflineMode } = useAuth();
   const { currentThemeId, allThemes, setTheme } = useTheme();
+  const { settings } = useSettings();
   const isDesktopApp = isTauri();
+
+  // Desktop / in-app reminders for tasks due today or overdue.
+  useDueNotifications(boards, settings.notifyDue !== false);
+  useEffect(() => {
+    const onReminder = (e) => {
+      const n = e.detail?.count || 0;
+      if (n > 0) toast(`${n} task${n === 1 ? '' : 's'} due today or overdue`, { duration: 6000 });
+    };
+    window.addEventListener("kandoo:due-reminder", onReminder);
+    return () => window.removeEventListener("kandoo:due-reminder", onReminder);
+  }, []);
   const [activeBoard, setActiveBoard] = useState(boards[0]?.id || null);
   const [editingBoardId, setEditingBoardId] = useState(null);
   const [newBoardTitle, setNewBoardTitle] = useState("");
@@ -414,6 +428,13 @@ function Board() {
   };
 
   const handleSearch = (e) => setSearchTerm(e.target.value);
+
+  // Clicking a task's label chip filters every board by that label.
+  useEffect(() => {
+    const onSet = (e) => { setSearchTerm(e.detail || ""); setFilterMode(true); };
+    window.addEventListener("kandoo:set-search", onSet);
+    return () => window.removeEventListener("kandoo:set-search", onSet);
+  }, []);
 
   const selectBoard = (id) => {
     setActiveBoard(id);

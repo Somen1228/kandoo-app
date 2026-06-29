@@ -32,6 +32,10 @@ export const SETTINGS_DEFAULTS = {
   autoMoveDone: true,         // move completed tasks to Done column
   boardLayoutScope: 'per-board', // 'per-board' | 'global'
   globalBoardLayout: 'grid',     // 'grid' | 'columns' | 'lanes'
+  // Labels — workspace-wide registry of { id, name, color } used by the picker.
+  labels: [],
+  // Notify (desktop / in-app) about tasks that are due today or overdue.
+  notifyDue: true,
 };
 
 export function SettingsProvider({ children }) {

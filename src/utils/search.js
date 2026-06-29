@@ -49,9 +49,16 @@ export function matchesTask(task, query) {
 
   const text = plainText(task.value).toLowerCase();
   const id   = (task.id || '').toLowerCase();
+  // Label names are searchable too, so a label term filters across boards.
+  const labelText = Array.isArray(task.labels)
+    ? task.labels.map((l) => (l?.name || '')).join(' ').toLowerCase()
+    : '';
+  const subtaskText = Array.isArray(task.subtasks)
+    ? task.subtasks.map((s) => (s?.text || '')).join(' ').toLowerCase()
+    : '';
   for (const term of query.terms) {
     const t = term.toLowerCase();
-    if (!text.includes(t) && !id.includes(t)) return false;
+    if (!text.includes(t) && !id.includes(t) && !labelText.includes(t) && !subtaskText.includes(t)) return false;
   }
   return true;
 }
