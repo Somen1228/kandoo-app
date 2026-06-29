@@ -1,4 +1,4 @@
-import { parseDue, toDueString, startOfToday } from './dueDate';
+import { hasDueTime, parseDue, toDueString, startOfToday } from './dueDate';
 
 // A task's `recurrence` is 'daily' | 'weekly' | 'monthly' | null. Completing a
 // recurring task advances its due date to the next occurrence instead of moving
@@ -18,10 +18,17 @@ export function advanceDue(dueStr, freq) {
   const parsed = parseDue(dueStr);
   const today = startOfToday();
   const base = parsed && parsed > today ? parsed : today;
-  const d = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+  const keepTime = hasDueTime(dueStr);
+  const d = new Date(
+    base.getFullYear(),
+    base.getMonth(),
+    base.getDate(),
+    keepTime ? base.getHours() : 0,
+    keepTime ? base.getMinutes() : 0
+  );
   if (freq === 'daily') d.setDate(d.getDate() + 1);
   else if (freq === 'weekly') d.setDate(d.getDate() + 7);
   else if (freq === 'monthly') d.setMonth(d.getMonth() + 1);
   else return dueStr || toDueString(today);
-  return toDueString(d);
+  return toDueString(d, keepTime);
 }

@@ -16,8 +16,9 @@ export function getCompletionTiming(due, completedAt = Date.now()) {
   const dueDate = parseDue(due);
   if (!dueDate) return 'unscheduled';
   const completedDay = dayStartMs(completedAt);
-  if (completedDay == null) return 'unscheduled';
-  const delta = Math.round((completedDay - dueDate.getTime()) / DAY_MS);
+  const dueDay = dayStartMs(dueDate);
+  if (completedDay == null || dueDay == null) return 'unscheduled';
+  const delta = Math.round((completedDay - dueDay) / DAY_MS);
   if (delta < 0) return 'early';
   if (delta === 0) return 'on-time';
   return 'late';

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { toDueString, parseDue } from '../../utils/dueDate';
+import { composeDue, formatDueShort, getDueDatePart, getDueTimePart, toDueString, parseDue } from '../../utils/dueDate';
 import { VscCalendar, VscClose, VscChevronLeft, VscChevronRight } from 'react-icons/vsc';
 
 const DAYS    = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -87,13 +87,21 @@ export default function DatePicker({ value, onChange, onPointerDown, style = {},
 
   const TODAY_STR    = todayStr();
   const TOMORROW_STR = tomorrowStr();
+  const pendingDate  = getDueDatePart(pending);
+  const pendingTime  = getDueTimePart(pending);
 
-  // Trigger label — manual format avoids locale-dependent wrapping (e.g. "21\nJun")
-  const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const parsed    = parseDue(value);
-  const labelText = parsed
-    ? `${SHORT_MONTHS[parsed.getMonth()]} ${parsed.getDate()}`
-    : null;
+  const labelText = parsed ? formatDueShort(value) : null;
+
+  const setDatePart = (datePart) => setPending(composeDue(datePart, pendingTime) || '');
+  const setTimePart = (timePart) => {
+    const datePart = pendingDate || TODAY_STR;
+    setPending(composeDue(datePart, timePart) || datePart);
+  };
+  const clearTime = () => {
+    if (!pendingDate) return;
+    setPending(pendingDate);
+  };
 
   return (
     <div
@@ -151,13 +159,13 @@ export default function DatePicker({ value, onChange, onPointerDown, style = {},
                 { label: 'Today',    str: TODAY_STR },
                 { label: 'Tomorrow', str: TOMORROW_STR },
               ].map(({ label, str }) => {
-                const active = pending === str;
+                const active = pendingDate === str;
                 return (
                   <button
                     key={label}
                     type="button"
                     onMouseDown={e => e.stopPropagation()}
-                    onClick={() => quick(str)}
+                    onClick={() => quick(composeDue(str, pendingTime) || str)}
                     style={{
                       flex: 1, padding: '7px 0',
                       borderRadius: 20,
@@ -208,7 +216,7 @@ export default function DatePicker({ value, onChange, onPointerDown, style = {},
               {cells.map((day, i) => {
                 if (!day) return <div key={i} />;
                 const cellStr    = toDueString(new Date(viewYear, viewMonth, day));
-                const isSelected = pending === cellStr;
+                const isSelected = pendingDate === cellStr;
                 const isToday    = cellStr === TODAY_STR;
 
                 return (
@@ -216,7 +224,7 @@ export default function DatePicker({ value, onChange, onPointerDown, style = {},
                     key={i}
                     type="button"
                     onMouseDown={e => e.stopPropagation()}
-                    onClick={() => setPending(cellStr)}
+                    onClick={() => setDatePart(cellStr)}
                     style={{
                       padding: '7px 0', textAlign: 'center',
                       borderRadius: '50%', aspectRatio: '1',
@@ -237,6 +245,66 @@ export default function DatePicker({ value, onChange, onPointerDown, style = {},
                   </button>
                 );
               })}
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr auto',
+              gap: 8,
+              alignItems: 'center',
+              padding: '8px 14px 12px',
+              borderTop: '1px solid var(--theme-border)',
+            }}>
+              <label style={{
+                display: 'grid',
+                gap: 5,
+                color: 'var(--theme-text-secondary)',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}>
+                Time
+                <input
+                  type="time"
+                  value={pendingTime}
+                  onMouseDown={e => e.stopPropagation()}
+                  onClick={e => e.stopPropagation()}
+                  onChange={(e) => setTimePart(e.target.value)}
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    border: '1.5px solid var(--theme-border)',
+                    borderRadius: 10,
+                    background: 'var(--theme-bg-secondary)',
+                    color: 'var(--theme-text-primary)',
+                    padding: '7px 10px',
+                    font: 'inherit',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onMouseDown={e => e.stopPropagation()}
+                onClick={clearTime}
+                disabled={!pendingTime}
+                style={{
+                  alignSelf: 'end',
+                  border: '1.5px solid var(--theme-border)',
+                  borderRadius: 10,
+                  background: 'transparent',
+                  color: pendingTime ? 'var(--theme-text-secondary)' : 'var(--theme-text-muted)',
+                  padding: '8px 10px',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  cursor: pendingTime ? 'pointer' : 'default',
+                  opacity: pendingTime ? 1 : 0.55,
+                }}
+              >
+                No time
+              </button>
             </div>
 
             {/* Footer */}

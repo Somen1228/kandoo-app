@@ -28,6 +28,7 @@ toast.success = (message, opts = {}) => add('success', message, opts);
 toast.error   = (message, opts = {}) => add('error',   message, opts);
 toast.warning = (message, opts = {}) => add('warning', message, opts);
 toast.info    = (message, opts = {}) => add('info',    message, opts);
+toast.due     = (message, opts = {}) => add('due',     message, opts);
 toast.loading = (message, opts = {}) => add('loading', message, { duration: Infinity, ...opts });
 
 toast.dismiss = (id) => dispatch({ kind: 'remove', id });

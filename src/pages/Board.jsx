@@ -102,14 +102,6 @@ function Board() {
 
   // Desktop / in-app reminders for tasks due today or overdue.
   useDueNotifications(boards, settings.notifyDue !== false);
-  useEffect(() => {
-    const onReminder = (e) => {
-      const n = e.detail?.count || 0;
-      if (n > 0) toast(`${n} task${n === 1 ? '' : 's'} due today or overdue`, { duration: 6000 });
-    };
-    window.addEventListener("kandoo:due-reminder", onReminder);
-    return () => window.removeEventListener("kandoo:due-reminder", onReminder);
-  }, []);
   const [activeBoard, setActiveBoard] = useState(boards[0]?.id || null);
   const [editingBoardId, setEditingBoardId] = useState(null);
   const [newBoardTitle, setNewBoardTitle] = useState("");
@@ -143,6 +135,33 @@ function Board() {
   // ── Shell state ─────────────────────────────────────────────────────────
   const [section, setSection] = useState("todos");          // 'todos' | 'notes'
   const [scheduleView, setScheduleView] = useState(null);   // null | overdue | today | upcoming | done
+  useEffect(() => {
+    const onReminder = (e) => {
+      const count = e.detail?.count || 0;
+      if (count <= 0) return;
+      const overdueCount = e.detail?.overdueCount || 0;
+      const firstTask = e.detail?.tasks?.[0];
+      const focusBucket = overdueCount > 0 ? 'overdue' : 'today';
+      const title = count === 1
+        ? `${firstTask?.title || 'A task'} is due${firstTask?.cardTitle ? ` · ${firstTask.cardTitle}` : ''}`
+        : `${count} tasks need attention${overdueCount ? ` · ${overdueCount} overdue` : ''}`;
+
+      toast.due(title, {
+        duration: 9000,
+        action: {
+          label: 'View',
+          onClick: () => {
+            setSection('todos');
+            setScheduleView(focusBucket);
+            setLabelFilter(null);
+            setSearchTerm('');
+          },
+        },
+      });
+    };
+    window.addEventListener("kandoo:due-reminder", onReminder);
+    return () => window.removeEventListener("kandoo:due-reminder", onReminder);
+  }, []);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(
     () => localStorage.getItem("kandoo-sidebar-collapsed") === "1"
   );

@@ -20,6 +20,7 @@ const TOAST_MASCOTS = Object.freeze({
   success,
   error,
   warning,
+  due: warning,
   loading,
   info: calm,
   default: calm,
