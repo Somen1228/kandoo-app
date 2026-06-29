@@ -4089,6 +4089,48 @@ html.reduce-motion *::after {
 }
 .settings-inline-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 
+/* Conflict recovery */
+.conflict-recovery-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.conflict-recovery-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+.conflict-recovery-item__meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.conflict-recovery-item__meta strong {
+  color: var(--text-primary);
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+.conflict-recovery-item__meta span {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+.conflict-recovery-item__meta small {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+.conflict-recovery-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 /* Shortcuts list */
 .settings-shortcuts { display: flex; flex-direction: column; gap: 16px; }
 .settings-shortcuts__label {

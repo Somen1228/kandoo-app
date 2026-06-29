@@ -266,9 +266,84 @@ function DiffSummary({ localBoards, cloudBoards }) {
   );
 }
 
+function countWorkspaceTasks(boards = []) {
+  return boards.reduce((sum, board) => (
+    sum + (board.cards || []).reduce((cardSum, card) => (
+      cardSum + Object.keys(card.tasks || {}).length
+    ), 0)
+  ), 0);
+}
+
+function formatConflictTimelineTime(value) {
+  if (!value) return 'Unknown time';
+  try {
+    return new Date(value).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    return 'Unknown time';
+  }
+}
+
+function ConflictRecoveryList({ entries, onRestore, onDelete }) {
+  if (!entries?.length) {
+    return (
+      <p className="settings-row__desc" style={{ margin: 0 }}>
+        Kandoo will keep recovery points here whenever you resolve a sync conflict.
+      </p>
+    );
+  }
+
+  return (
+    <div className="conflict-recovery-list">
+      {entries.map((entry) => (
+        <div className="conflict-recovery-item" key={entry.id}>
+          <div className="conflict-recovery-item__meta">
+            <strong>{formatConflictTimelineTime(entry.createdAt)}</strong>
+            <span>
+              Resolved by {entry.strategy === 'local'
+                ? 'uploading this device'
+                : entry.strategy === 'cloud'
+                  ? 'loading cloud'
+                  : 'merging both'}
+            </span>
+            <small>
+              This device: {countWorkspaceTasks(entry.localBoards)} task{countWorkspaceTasks(entry.localBoards) !== 1 ? 's' : ''}
+              {' · '}
+              Cloud: {countWorkspaceTasks(entry.cloudBoards)} task{countWorkspaceTasks(entry.cloudBoards) !== 1 ? 's' : ''}
+            </small>
+          </div>
+          <div className="conflict-recovery-item__actions">
+            <button className="settings-btn" onClick={() => onRestore(entry, 'local')}>
+              Restore this device
+            </button>
+            <button className="settings-btn" onClick={() => onRestore(entry, 'cloud')}>
+              Restore cloud
+            </button>
+            <button className="settings-btn" onClick={() => onDelete(entry.id)} title="Remove recovery point">
+              Delete
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function AccountPanel({ onOpenHelp }) {
   const { user, isGuest, logout, exitOfflineMode, updateDisplayName, updatePhotoURL, changeEmail, changePassword, deleteAccount } = useAuth();
-  const { boards, syncState, cloudConflict, resolveSyncConflict } = useContext(CardsContext);
+  const {
+    boards,
+    syncState,
+    cloudConflict,
+    resolveSyncConflict,
+    conflictTimeline,
+    restoreConflictTimelineEntry,
+    deleteConflictTimelineEntry,
+  } = useContext(CardsContext);
   const [editingName, setEditingName]   = useState(false);
   const [newName, setNewName]           = useState('');
   const [showEmailForm, setShowEmailForm]   = useState(false);
@@ -344,6 +419,13 @@ function AccountPanel({ onOpenHelp }) {
   const resolve = async (strategy) => {
     try { await resolveSyncConflict(strategy); }
     catch (error) { toast.error(error.message || 'Could not resolve sync conflict'); }
+  };
+
+  const restoreTimeline = async (entry, side) => {
+    const sideLabel = side === 'cloud' ? 'cloud version' : 'this device’s pre-resolution version';
+    const ok = window.confirm(`Restore ${sideLabel} from ${formatConflictTimelineTime(entry.createdAt)}? This will replace your current workspace and sync the restored version.`);
+    if (!ok) return;
+    await restoreConflictTimelineEntry(entry.id, side);
   };
 
   return (
@@ -539,6 +621,16 @@ function AccountPanel({ onOpenHelp }) {
               primary
             />
           </div>
+        </Section>
+      )}
+
+      {user && (
+        <Section title="Conflict recovery">
+          <ConflictRecoveryList
+            entries={conflictTimeline}
+            onRestore={restoreTimeline}
+            onDelete={deleteConflictTimelineEntry}
+          />
         </Section>
       )}
       {cropSrc && (

@@ -18,6 +18,12 @@ import {
   storageKind,
 } from '../services/boardStorage';
 import { defaultCards, ensureCoreColumns } from '../utils/coreColumns';
+import {
+  addConflictTimelineEntry,
+  createConflictTimelineEntry,
+  readConflictTimeline,
+  removeConflictTimelineEntry,
+} from '../utils/conflictTimeline';
 
 export const CardsContext = createContext();
 
@@ -177,6 +183,7 @@ export const CardsProvider = ({ children }) => {
   const [cloudConflict, setCloudConflict] = useState(null);
   const [pendingMerge,  setPendingMerge] = useState(null); // {localBoards, cloudBoards, conflicts, revision}
   const [history,       setHistory]      = useState({ past: [], future: [] });
+  const [conflictTimeline, setConflictTimeline] = useState(() => readConflictTimeline(storageScope));
 
   const saveTimeoutRef      = useRef(null);
   const cloudRevisionRef    = useRef(0);
@@ -197,6 +204,27 @@ export const CardsProvider = ({ children }) => {
   const historyRef          = useRef(history);
   useEffect(() => { boardsRef.current  = boards;  }, [boards]);
   useEffect(() => { historyRef.current = history; }, [history]);
+
+  useEffect(() => {
+    setConflictTimeline(readConflictTimeline(storageScope));
+  }, [storageScope]);
+
+  const clearConflictState = useCallback(() => {
+    cloudConflictRef.current = null;
+    pendingCloudRef.current  = null;
+    setCloudConflict(null);
+    setPendingMerge(null);
+  }, []);
+
+  const recordConflictResolution = useCallback((payload) => {
+    const entry = createConflictTimelineEntry(payload);
+    setConflictTimeline(addConflictTimelineEntry(storageScope, entry));
+    return entry;
+  }, [storageScope]);
+
+  const deleteConflictTimelineEntry = useCallback((id) => {
+    setConflictTimeline(removeConflictTimelineEntry(storageScope, id));
+  }, [storageScope]);
 
   const flushPendingSnapshot = useCallback(() => {
     if (snapshotTimerRef.current) {
@@ -288,9 +316,10 @@ export const CardsProvider = ({ children }) => {
                 JSON.stringify(localBoards) !== JSON.stringify(remote.boards);
 
               // If cloud was force-pushed during a conflict resolution on another device,
-              // its forcedRevision === revision. Silently accept it — no need to re-conflict.
+              // accept that resolved cloud lineage instead of asking every device to
+              // resolve the same conflict again.
               const cloudWasForceReset = remote.forcedRevision > 0 &&
-                remote.forcedRevision === remote.revision;
+                remote.revision >= remote.forcedRevision;
 
               if (localDiffers && !cloudWasForceReset) {
                 // Both sides have genuinely diverged — present conflict UI.
@@ -369,14 +398,12 @@ export const CardsProvider = ({ children }) => {
       // Ignore echoes of our own saves.
       if (revision <= localRevisionRef.current) return;
 
-      const cloudWasForceReset = forcedRevision > 0 && forcedRevision === revision;
+      const cloudWasForceReset = forcedRevision > 0 && revision >= forcedRevision;
 
       // If another device force-reset the cloud during conflict resolution, auto-accept.
       if (cloudConflictRef.current) {
         if (!cloudWasForceReset) return; // still let user resolve their pending conflict
-        cloudConflictRef.current = null;
-        setCloudConflict(null);
-        setPendingMerge(null);
+        clearConflictState();
         toast.info('Conflict resolved by another device — workspace updated.');
       }
 
@@ -390,7 +417,7 @@ export const CardsProvider = ({ children }) => {
     });
 
     return unsubscribe;
-  }, [userUid, isLoaded]);
+  }, [clearConflictState, userUid, isLoaded]);
 
   // ── Firestore cloud sync (debounced, queued) ─────────────────────────────
   const syncCloud = useCallback(async (snapshot) => {
@@ -477,14 +504,23 @@ export const CardsProvider = ({ children }) => {
 
     if (strategy === 'cloud') {
       const cloudBoards = ensureCoreColumns(ensureCardUids(conflict.boards || []));
+      recordConflictResolution({
+        strategy: 'cloud',
+        localBoards: boardsRef.current,
+        cloudBoards,
+        resolvedBoards: cloudBoards,
+        revision: conflict.revision,
+      });
       cloudRevisionRef.current = conflict.revision;
       localRevisionRef.current = conflict.revision;
-      cloudConflictRef.current = null;
-      setCloudConflict(null);
+      clearConflictState();
       skipNextSaveRef.current  = true;
+      skipHistoryRef.current   = true;
       setBoardsRaw(cloudBoards);
       await saveBoards(cloudBoards, storageScope);
+      setLastSavedAt(new Date());
       setSyncState('synced');
+      queueMicrotask(() => { skipHistoryRef.current = false; });
       toast.success('Loaded the newer cloud workspace');
       return;
     }
@@ -492,12 +528,25 @@ export const CardsProvider = ({ children }) => {
     if (strategy === 'local') {
       setSyncState('syncing');
       try {
-        const { workspace: saved } = await saveWorkspace(userUid, boardsRef.current, conflict.revision, true);
+        const localBoards = ensureCoreColumns(ensureCardUids(boardsRef.current));
+        recordConflictResolution({
+          strategy: 'local',
+          localBoards,
+          cloudBoards: ensureCoreColumns(ensureCardUids(conflict.boards || [])),
+          resolvedBoards: localBoards,
+          revision: conflict.revision,
+        });
+        const { workspace: saved } = await saveWorkspace(userUid, localBoards, conflict.revision, true);
         cloudRevisionRef.current = saved.revision;
         localRevisionRef.current = saved.revision;
-        cloudConflictRef.current = null;
-        setCloudConflict(null);
+        clearConflictState();
+        skipNextSaveRef.current = true;
+        skipHistoryRef.current  = true;
+        setBoardsRaw(localBoards);
+        await saveBoards(localBoards, storageScope);
+        setLastSavedAt(new Date());
         setSyncState('synced');
+        queueMicrotask(() => { skipHistoryRef.current = false; });
         toast.success('Uploaded this device\'s workspace');
       } catch (err) {
         console.error('[Kandoo] Conflict resolution failed:', err);
@@ -516,9 +565,13 @@ export const CardsProvider = ({ children }) => {
       }
       // No real content conflicts — compute what changed so we can tell the user
       const autoMergeSummary = buildMergeSummary(boardsRef.current, cloudBoards);
-      await applyMerge(ensureCoreColumns(ensureCardUids(mergedBoards)), conflict.revision, autoMergeSummary);
+      await applyMerge(ensureCoreColumns(ensureCardUids(mergedBoards)), conflict.revision, autoMergeSummary, {
+        strategy: 'merge',
+        localBoards: boardsRef.current,
+        cloudBoards,
+      });
     }
-  }, [storageScope, userUid]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [clearConflictState, recordConflictResolution, storageScope, userUid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cancelMerge = useCallback(() => setPendingMerge(null), []);
 
@@ -528,22 +581,36 @@ export const CardsProvider = ({ children }) => {
     const { localBoards, cloudBoards, revision } = pendingMerge;
     const { boards: finalBoards } = mergeWorkspaces(localBoards, cloudBoards, choices);
     setPendingMerge(null);
-    await applyMerge(ensureCoreColumns(ensureCardUids(finalBoards)), revision);
+    await applyMerge(ensureCoreColumns(ensureCardUids(finalBoards)), revision, null, {
+      strategy: 'merge',
+      localBoards,
+      cloudBoards,
+      choices,
+    });
   }, [pendingMerge, userUid]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const applyMerge = useCallback(async (merged, revision, summary = null) => {
+  const applyMerge = useCallback(async (merged, revision, summary = null, timelinePayload = null) => {
     setSyncState('syncing');
     try {
       const normalizedMerged = ensureCoreColumns(ensureCardUids(merged));
       const { workspace: saved } = await saveWorkspace(userUid, normalizedMerged, revision, true);
       cloudRevisionRef.current = saved.revision;
       localRevisionRef.current = saved.revision;
-      cloudConflictRef.current = null;
-      setCloudConflict(null);
+      if (timelinePayload) {
+        recordConflictResolution({
+          ...timelinePayload,
+          revision,
+          resolvedBoards: normalizedMerged,
+        });
+      }
+      clearConflictState();
       skipNextSaveRef.current = true;
+      skipHistoryRef.current  = true;
       setBoardsRaw(normalizedMerged);
       await saveBoards(normalizedMerged, storageScope);
+      setLastSavedAt(new Date());
       setSyncState('synced');
+      queueMicrotask(() => { skipHistoryRef.current = false; });
 
       if (summary) {
         const { addedFromCloud, addedFromLocal } = summary;
@@ -563,13 +630,56 @@ export const CardsProvider = ({ children }) => {
       setSyncState('offline');
       toast.error('Could not save merged workspace. Try again.');
     }
-  }, [storageScope, userUid]);
+  }, [clearConflictState, recordConflictResolution, storageScope, userUid]);
+
+  const restoreConflictTimelineEntry = useCallback(async (entryId, side = 'local') => {
+    const entry = conflictTimeline.find((item) => item.id === entryId);
+    if (!entry) return;
+    const sourceBoards = side === 'cloud'
+      ? entry.cloudBoards
+      : side === 'resolved'
+        ? entry.resolvedBoards
+        : entry.localBoards;
+    const restoredBoards = ensureCoreColumns(ensureCardUids(sourceBoards || []));
+    if (!restoredBoards.length) {
+      toast.warning('This recovery point has no boards to restore.');
+      return;
+    }
+
+    setSyncState(userUid ? 'syncing' : 'local');
+    try {
+      if (userUid) {
+        const { workspace: saved } = await saveWorkspace(userUid, restoredBoards, cloudRevisionRef.current, true);
+        cloudRevisionRef.current = saved.revision;
+        localRevisionRef.current = saved.revision;
+      }
+      clearConflictState();
+      skipNextSaveRef.current = true;
+      skipHistoryRef.current  = true;
+      setBoardsRaw(restoredBoards);
+      await saveBoards(restoredBoards, storageScope);
+      setLastSavedAt(new Date());
+      setSaveState('saved');
+      setSyncState(userUid ? 'synced' : 'local');
+      queueMicrotask(() => { skipHistoryRef.current = false; });
+      toast.success(side === 'cloud'
+        ? 'Restored the cloud version from conflict history'
+        : side === 'resolved'
+          ? 'Restored the resolved workspace from conflict history'
+          : 'Restored this device’s pre-resolution workspace');
+    } catch (err) {
+      console.error('[Kandoo] Failed to restore conflict timeline entry:', err);
+      setSyncState('offline');
+      toast.error('Could not restore this conflict recovery point.');
+    }
+  }, [clearConflictState, conflictTimeline, storageScope, userUid]);
 
   return (
     <CardsContext.Provider value={{
       boards, setBoards, defaultCards, isLoaded,
       saveState, lastSavedAt, storageKind, syncState, cloudConflict, resolveSyncConflict,
       pendingMerge, resolveTaskConflicts, cancelMerge,
+      conflictTimeline, restoreConflictTimelineEntry, deleteConflictTimelineEntry,
       undo, redo,
       canUndo: history.past.length > 0,
       canRedo: history.future.length > 0,

@@ -546,7 +546,7 @@ const SECTIONS = [
           <>If you edit offline, changes sync automatically when you reconnect.</>,
         ]} />
         <SubH>Conflict resolution</SubH>
-        <P>If two devices edited the same workspace while offline, Kandoo detects the conflict and gives three options in Settings → Account &amp; Sync: <strong>Load cloud</strong> (replaces local), <strong>Upload this device</strong> (replaces cloud), or <strong>Merge both</strong> — which combines boards and tasks from both sides. Items only on one device are added; if the same task was edited on both, the local version is kept; note card content keeps the local version.</P>
+        <P>If two devices edited the same workspace while offline, Kandoo detects the conflict and gives three options in Settings → Account &amp; Sync: <strong>Load cloud</strong> (replaces local), <strong>Upload this device</strong> (replaces cloud), or <strong>Merge both</strong> — which combines boards and tasks from both sides. Items only on one device are added; if the same task was edited on both, the local version is kept; note card content keeps the local version. Every resolution also creates a local recovery point, so you can restore either side from <strong>Conflict recovery</strong> if you picked the wrong option.</P>
         <SubH>Guest / offline mode</SubH>
         <P>Continue without signing in — data stays local only. If you later sign in, your local workspace migrates to the cloud automatically.</P>
         <Tip>Go to <strong>Settings → Data</strong> to export a JSON backup, copy the SQLite path, or reset your workspace.</Tip>

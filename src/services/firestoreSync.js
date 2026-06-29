@@ -81,9 +81,14 @@ export async function saveWorkspace(userId, boards, currentRevision, force = fal
     const remoteRevision = snap.exists() ? (snap.data().revision ?? 0) : 0;
 
     if (remoteRevision > currentRevision) {
+      const data = snap.data();
       return {
         conflict: true,
-        workspace: { boards: snap.data().boards ?? [], revision: remoteRevision },
+        workspace: {
+          boards: data.boards ?? [],
+          revision: remoteRevision,
+          forcedRevision: data.forcedRevision ?? 0,
+        },
       };
     }
 
