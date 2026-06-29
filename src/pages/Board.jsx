@@ -5,7 +5,7 @@ import {
   VscFilter, VscFilterFilled, VscChevronDown,
   VscArchive, VscQuestion,
   VscAccount, VscInbox, VscNotebook, VscLayoutSidebarLeft, VscClose,
-  VscSettingsGear, VscSignIn, VscSignOut, VscCloud,
+  VscSettingsGear, VscSignIn, VscSignOut, VscCloud, VscCalendar,
 } from "react-icons/vsc";
 import { toast } from '../utils/toast';
 import { CgRename } from "react-icons/cg";
@@ -46,6 +46,7 @@ import TaskConflictModal from "../components/Board/TaskConflictModal";
 import OnboardingTour from "../components/OnboardingTour";
 import MobileTabBar from "../components/MobileTabBar";
 import BottomSheet from "../components/BottomSheet";
+import StudyPanel from "../components/Study/StudyPanel";
 
 const SIDEBAR_MIN = 210;
 const SIDEBAR_MAX = 360;
@@ -119,6 +120,7 @@ function Board() {
   const [showHelpModal, setShowHelpModal]         = useState(false);
   const [helpSection,   setHelpSection]           = useState(null);
   const [showFeedback,  setShowFeedback]          = useState(false);
+  const [showStudyPanel, setShowStudyPanel]       = useState(false);
   const [showMoreSheet, setShowMoreSheet]         = useState(false);
   const [showTour, setShowTour] = useState(() => localStorage.getItem('kandoo-tour-auto') !== '0');
   const [filterMode, setFilterMode]               = useState(false);
@@ -261,6 +263,11 @@ function Board() {
       n += Object.keys(card.tasks || {}).length;
     }
     return n;
+  };
+
+  const boardCourseLabel = (board) => {
+    const course = board?.study?.course;
+    return [course?.courseCode, course?.subject].filter(Boolean).join(' · ');
   };
 
   // ── Labels (sidebar section) ────────────────────────────────────────────────
@@ -584,6 +591,13 @@ function Board() {
     setScheduleView(null);
   };
 
+  const updateActiveBoardStudy = useCallback((study) => {
+    if (!activeBoard) return;
+    setBoards((current) => current.map((board) =>
+      board.id === activeBoard ? { ...board, study } : board
+    ));
+  }, [activeBoard, setBoards]);
+
   const handleBoardDragEnd = ({ active, over }) => {
     window.setTimeout(() => { suppressBoardClickRef.current = false; }, 0);
     if (!over || active.id === over.id) return;
@@ -724,7 +738,12 @@ function Board() {
                     title="Drag to reorder · double-click to rename"
                     {...dragProps}
                   >
-                    <span className="mac-nav-item__label">{board.title}</span>
+                    <span className="mac-nav-item__titleblock">
+                      <span className="mac-nav-item__label">{board.title}</span>
+                      {boardCourseLabel(board) && (
+                        <span className="mac-nav-item__meta">{boardCourseLabel(board)}</span>
+                      )}
+                    </span>
                     {boardTaskCount(board) > 0 && (
                       <span className="mac-nav-item__count">{boardTaskCount(board)}</span>
                     )}
@@ -1026,6 +1045,9 @@ function Board() {
           <button className="mac-iconbtn" onClick={() => setShowExportImport(true)} title="Export / Import" aria-label="Export or import boards">
             <VscArchive />
           </button>
+          <button className="mac-iconbtn" onClick={() => setShowStudyPanel(true)} title="Study tools" aria-label="Open study tools">
+            <VscCalendar />
+          </button>
           <button className="mac-iconbtn" onClick={() => setShowHelpModal(true)} title="Help & features (⌘⇧1)" aria-label="Help and features">
             <VscQuestion />
           </button>
@@ -1129,6 +1151,13 @@ function Board() {
         onFeedback={() => setShowFeedback(true)}
       />
       <FeedbackModal isOpen={showFeedback} onClose={() => setShowFeedback(false)} />
+      {showStudyPanel && (
+        <StudyPanel
+          board={activeBoardObj}
+          onClose={() => setShowStudyPanel(false)}
+          onChange={updateActiveBoardStudy}
+        />
+      )}
       <TaskConflictModal />
       <OnboardingTour setSection={setSection} open={showTour} onClose={() => setShowTour(false)} />
       {ctxMenu && (
@@ -1152,6 +1181,9 @@ function Board() {
         </button>
         <button type="button" className="sheet-row" onClick={() => { setShowExportImport(true); setShowMoreSheet(false); }}>
           <VscArchive /><span>Export / Import</span>
+        </button>
+        <button type="button" className="sheet-row" onClick={() => { setShowStudyPanel(true); setShowMoreSheet(false); }}>
+          <VscCalendar /><span>Study tools</span>
         </button>
         <button type="button" className="sheet-row" onClick={() => { setShowHelpModal(true); setShowMoreSheet(false); }}>
           <VscQuestion /><span>Help &amp; features</span>
