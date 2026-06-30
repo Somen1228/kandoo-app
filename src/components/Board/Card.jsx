@@ -375,6 +375,7 @@ const FormattingToolbar = forwardRef(function FormattingToolbar({ editorRef, onL
                 ref={inputRef}
                 value={url}
                 onChange={e => setUrl(e.target.value)}
+                onPaste={e => { e.preventDefault(); const text = e.clipboardData.getData('text/plain'); if (text) setUrl(text.trim()); }}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); applyLink(); } else if (e.key === 'Escape') { e.preventDefault(); close(); } }}
                 placeholder="Paste or type a URL…"
                 style={{

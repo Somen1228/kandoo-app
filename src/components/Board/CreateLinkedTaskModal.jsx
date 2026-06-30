@@ -414,6 +414,7 @@ export default function CreateLinkedTaskModal({
         ref={linkUrlRef}
         value={linkUrl}
         onChange={(e) => setLinkUrl(e.target.value)}
+        onPaste={(e) => { e.preventDefault(); const text = e.clipboardData.getData('text/plain'); if (text) setLinkUrl(text.trim()); }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') { e.preventDefault(); applyLink(); }
           if (e.key === 'Escape') { setLinkPopPos(null); editorRef.current?.focus(); }
