@@ -56,7 +56,8 @@ export default function CreateLinkedTaskModal({
     setUploading(false);
   }, [open]);
 
-  // Close link popover on outside click (portal-safe: checks data attribute)
+  // Close link popover on outside click (portal-safe: checks data attribute).
+  // Using 'click' (not 'mousedown') so right-click → paste doesn't dismiss it.
   useEffect(() => {
     if (!linkPopPos) return;
     const handler = (e) => {
@@ -64,8 +65,8 @@ export default function CreateLinkedTaskModal({
       if (linkBtnRef.current?.contains(e.target)) return;
       setLinkPopPos(null);
     };
-    const id = setTimeout(() => document.addEventListener('mousedown', handler), 0);
-    return () => { clearTimeout(id); document.removeEventListener('mousedown', handler); };
+    const id = setTimeout(() => document.addEventListener('click', handler), 0);
+    return () => { clearTimeout(id); document.removeEventListener('click', handler); };
   }, [linkPopPos]);
 
   const otherNotes = useMemo(() => {
@@ -231,6 +232,9 @@ export default function CreateLinkedTaskModal({
           <RecurrenceButton value={recurrence} onChange={setRecurrence} />
         </div>
 
+        {/* ── Scrollable body ── */}
+        <div className="ctm-body">
+
         {/* ── Rich editor ── */}
         <div className="ctm-editor-wrap">
           <RichEditor
@@ -296,7 +300,7 @@ export default function CreateLinkedTaskModal({
         </div>
 
         {/* ── Linked notes ── */}
-        <div className="ctm-notes">
+        <div className="ctm-notes" style={{ borderTop: 'none' }}>
           <button
             type="button"
             className="ctm-notes__toggle"
@@ -357,6 +361,9 @@ export default function CreateLinkedTaskModal({
           )}
         </div>
 
+        {/* end ctm-body */}
+        </div>
+
         {/* ── Footer ── */}
         <div className="ctm-footer">
           <button
@@ -385,6 +392,8 @@ export default function CreateLinkedTaskModal({
   { linkPopPos && createPortal(
     <div
       data-ctm-link-pop
+      onMouseDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}
       style={{
         position: 'fixed',
         top: linkPopPos.y,

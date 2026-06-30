@@ -272,6 +272,7 @@ const FormattingToolbar = forwardRef(function FormattingToolbar({ editorRef, onL
   };
 
   // Close the popover on outside click or scroll.
+  // Using 'click' (not 'mousedown') so right-click → paste doesn't dismiss it.
   useEffect(() => {
     if (!pop) return;
     const onDoc = (e) => {
@@ -280,12 +281,12 @@ const FormattingToolbar = forwardRef(function FormattingToolbar({ editorRef, onL
       close();
     };
     const id = setTimeout(() => {
-      document.addEventListener('mousedown', onDoc);
+      document.addEventListener('click', onDoc);
       window.addEventListener('scroll', close, true);
     }, 0);
     return () => {
       clearTimeout(id);
-      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('click', onDoc);
       window.removeEventListener('scroll', close, true);
     };
   }, [pop, close]);
@@ -354,6 +355,7 @@ const FormattingToolbar = forwardRef(function FormattingToolbar({ editorRef, onL
         <div
           data-fmt-pop
           onMouseDown={e => { if (pop.type === 'menu') e.preventDefault(); e.stopPropagation(); }}
+          onClick={e => e.stopPropagation()}
           style={{
             position: 'fixed', top: pop.y, left: pop.x, zIndex: 10200,
             background: 'var(--theme-bg-modal)',
@@ -498,7 +500,7 @@ function Card({
   const isDoneColumn = isDoneColumnTitle(title);
   const moveTargetCards = allCards.filter((card) => (card.type || 'todo') !== 'note' && card.uid !== uid);
 
-  // Pre-fill due date with today when the add-task form opens, if the setting is on.
+  // Pre-fill due date / label when the add-task form opens.
   useEffect(() => {
     if (toggleAddTask && settings.quickAddDueToday) {
       setNewTaskDue(prev => prev || toDueString(new Date()));
@@ -506,7 +508,15 @@ function Card({
     if (!toggleAddTask) {
       setNewTaskDue("");
     }
-  }, [toggleAddTask, settings.quickAddDueToday]);
+    if (toggleAddTask && labelFilter) {
+      const labelObj = (settings.labels || []).find((l) => l.name === labelFilter);
+      if (labelObj) {
+        setNewTaskLabels((prev) =>
+          prev.some((l) => l.name === labelFilter) ? prev : [...prev, labelObj]
+        );
+      }
+    }
+  }, [toggleAddTask, settings.quickAddDueToday, labelFilter, settings.labels]);
 
   // ── Context menus ──────────────────────────────────────────────────────────
 
@@ -761,7 +771,10 @@ function Card({
     setNewTaskNoteLinks([]);
     setNewTaskPriority(null);
     setNewTaskSubtasks([]);
-    setNewTaskLabels([]);
+    const nextLabels = labelFilter
+      ? (settings.labels || []).filter((l) => l.name === labelFilter)
+      : [];
+    setNewTaskLabels(nextLabels);
     setNewTaskRecurrence(null);
     setNewTaskDue(settings.quickAddDueToday ? toDueString(new Date()) : "");
     newEditorRef.current?.setHtml('');
@@ -1340,9 +1353,9 @@ function Card({
                     <>
                       <div
                         className="task-container"
-                        onDoubleClick={() => startEditingTask(task.id, task.value, task.images)}
-                        title="Drag to move · double-click to edit"
-                        style={{ userSelect: 'none' }}
+                        onClick={() => startEditingTask(task.id, task.value, task.images)}
+                        title="Click to edit"
+                        style={{ userSelect: 'none', cursor: 'pointer' }}
                       >
                         <div className="mac-task__text">
                           {renderTaskValue(task.value, query?.terms ?? searchTerm)}
@@ -1351,7 +1364,7 @@ function Card({
 
                       {/* Subtask checklist — toggle done directly */}
                       {task.subtasks?.length > 0 && (
-                        <ul className="mac-subtasks">
+                        <ul className="mac-subtasks" onClick={() => startEditingTask(task.id, task.value, task.images)}>
                           {task.subtasks.map((st) => (
                             <li key={st.id} className={`mac-subtask${st.done ? ' is-done' : ''}`}>
                               <button

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { composeDue, formatDueShort, getDueDatePart, getDueTimePart, toDueString, parseDue } from '../../utils/dueDate';
-import { VscCalendar, VscClose, VscChevronLeft, VscChevronRight } from 'react-icons/vsc';
+import { VscCalendar, VscChevronLeft, VscChevronRight } from 'react-icons/vsc';
 
 const DAYS   = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTHS = ['January','February','March','April','May','June',
@@ -209,7 +209,7 @@ export default function DatePicker({ value, onChange, onPointerDown, style = {},
   const done   = () => { onChange(pending); setOpen(false); };
   const cancel = () => { setPending(value || ''); setOpen(false); };
   const quick  = (str) => { onChange(str); setOpen(false); };
-  const clear  = (e) => { e.stopPropagation(); onChange(''); };
+  const clear  = () => { onChange(''); setOpen(false); };
 
   const prevMonth = () => setViewMonth(m => { if (m === 0) { setViewYear(y => y - 1); return 11; } return m - 1; });
   const nextMonth = () => setViewMonth(m => { if (m === 11) { setViewYear(y => y + 1); return 0; } return m + 1; });
@@ -267,11 +267,6 @@ export default function DatePicker({ value, onChange, onPointerDown, style = {},
         <span>{labelText || 'Due date'}</span>
       </button>
 
-      {value && (
-        <button type="button" className="mac-due-row__clear" onClick={clear} aria-label="Clear due date">
-          <VscClose />
-        </button>
-      )}
 
       {open && createPortal(
         <div
@@ -380,6 +375,13 @@ export default function DatePicker({ value, onChange, onPointerDown, style = {},
 
           {/* Footer */}
           <div style={{ display: 'flex', gap: 8, padding: '10px 14px 14px', borderTop: '1px solid var(--theme-border)' }}>
+            {value && (
+              <button type="button" onMouseDown={e => e.stopPropagation()} onClick={clear}
+                style={{ padding: '8px 10px', borderRadius: 8, border: '1.5px solid var(--theme-border)', background: 'transparent', color: 'var(--theme-text-muted)', fontSize: '0.8125rem', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                No date
+              </button>
+            )}
             <button type="button" onMouseDown={e => e.stopPropagation()} onClick={cancel}
               style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: '1.5px solid var(--theme-border)', background: 'transparent', color: 'var(--theme-text-secondary)', fontSize: '0.8125rem', fontWeight: 500, cursor: 'pointer' }}
             >

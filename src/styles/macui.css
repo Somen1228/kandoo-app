@@ -1402,11 +1402,16 @@ html.is-fullscreen .is-desktop-window .mac-sidebar.is-collapsed + .mac-main .mac
   cursor: pointer;
   white-space: nowrap;
 }
-.ctm-editor-wrap {
+.ctm-body {
   flex: 1;
   overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ctm-editor-wrap {
+  flex: 0 0 auto;
   min-height: 80px;
-  max-height: 200px;
 }
 .ctm-section {
   flex: 0 0 auto;
