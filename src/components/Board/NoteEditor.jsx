@@ -52,6 +52,8 @@ import ContextMenu from '../ContextMenu';
 import { toast } from '../../utils/toast';
 import { compressImage } from './NoteCard';
 import { useSettings } from '../../contexts/SettingsContext';
+import { htmlToText } from '../../utils/htmlEditor';
+import CreateLinkedTaskModal from './CreateLinkedTaskModal.jsx';
 import { DOCUMENT_FONTS, FONT_CATEGORIES } from '../../utils/documentFonts';
 // Loads the @font-face families used by the font picker (lazy with the editor).
 import '../../utils/loadEditorFonts';
@@ -180,11 +182,14 @@ export default function NoteEditor({
   content, onChange, placeholder, paperless, notes, onCreatePage, onNavigatePage,
   onSendListToBoard, onCreateLinkedTask, getLinkedTask, onToggleLinkedTask,
   onOpenLinkedTask, linkedTaskVersion, childPagesSlot,
+  currentNoteUid, currentNoteTitle,
 }) {
   const fileRef = useRef(null);
   const editorRef = useRef(null);
+  const newTaskCallbackRef = useRef(null);
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [tableDialogOpen, setTableDialogOpen] = useState(false);
+  const [newTaskModalOpen, setNewTaskModalOpen] = useState(false);
   const [editorContextMenu, setEditorContextMenu] = useState(null);
   const [tableContextMenu, setTableContextMenu] = useState(null);
   const [slashState, setSlashState] = useState(null);
@@ -240,43 +245,63 @@ export default function NoteEditor({
     }
   };
 
-  const insertLinkedTask = useCallback((rawLabel, { replaceSelection = false } = {}) => {
+  const promptNewTask = useCallback(() => new Promise((resolve) => {
+    newTaskCallbackRef.current = resolve;
+    setNewTaskModalOpen(true);
+  }), []);
+
+  const handleNewTaskSubmit = useCallback((taskData) => {
+    newTaskCallbackRef.current?.(taskData || null);
+    newTaskCallbackRef.current = null;
+    setNewTaskModalOpen(false);
+  }, []);
+
+  const handleNewTaskCancel = useCallback(() => {
+    newTaskCallbackRef.current?.(null);
+    newTaskCallbackRef.current = null;
+    setNewTaskModalOpen(false);
+  }, []);
+
+  const insertLinkedTask = useCallback(async (rawLabel, { replaceSelection = false } = {}) => {
     const editor = editorRef.current;
     if (!editor) return;
     const fallback = typeof rawLabel === 'string' ? rawLabel.trim() : '';
-    const labels = fallback ? taskItemsFromText(fallback).map((item) => item.text) : [];
-    if (!labels.length) {
-      const prompted = window.prompt('Task title', '')?.trim();
-      if (prompted) labels.push(prompted);
-    }
-    if (!labels.length) return;
+    const predefinedLabels = fallback ? taskItemsFromText(fallback).map((item) => item.text) : [];
 
-    const linkedNodes = [];
-    for (const label of labels) {
-      const created = onCreateLinkedTask?.(label);
+    if (predefinedLabels.length > 0) {
+      // Called from bubble menu / right-click with pre-selected text — use text directly
+      const linkedNodes = [];
+      for (const label of predefinedLabels) {
+        const created = onCreateLinkedTask?.(label);
+        if (!created?.taskId || !created?.cardUid) {
+          toast.error('Could not create linked task');
+          return;
+        }
+        linkedNodes.push({ type: 'linkedTask', attrs: { taskId: created.taskId, cardUid: created.cardUid, label } });
+      }
+      const content = linkedNodes.length === 1
+        ? linkedNodes[0]
+        : linkedNodes.map((node) => ({ type: 'paragraph', content: [node] }));
+      const chain = editor.chain().focus();
+      if (replaceSelection) chain.deleteSelection();
+      chain.insertContent(content).run();
+      toast.success(`Linked ${linkedNodes.length} task${linkedNodes.length === 1 ? '' : 's'} to this note`);
+    } else {
+      // No predefined label — open the full task creation modal
+      const taskData = await promptNewTask();
+      if (!taskData) return; // cancelled
+      const label = taskData.label || htmlToText(taskData.value || '').trim().split('\n')[0] || 'Task';
+      const created = onCreateLinkedTask?.(label, taskData);
       if (!created?.taskId || !created?.cardUid) {
         toast.error('Could not create linked task');
         return;
       }
-      linkedNodes.push({
-        type: 'linkedTask',
-        attrs: {
-          taskId: created.taskId,
-          cardUid: created.cardUid,
-          label,
-        },
-      });
+      const chain = editor.chain().focus();
+      if (replaceSelection) chain.deleteSelection();
+      chain.insertContent({ type: 'linkedTask', attrs: { taskId: created.taskId, cardUid: created.cardUid, label } }).run();
+      toast.success('Task created and linked to this note');
     }
-
-    const content = linkedNodes.length === 1
-      ? linkedNodes[0]
-      : linkedNodes.map((node) => ({ type: 'paragraph', content: [node] }));
-
-    const chain = editor.chain().focus();
-    if (replaceSelection) chain.deleteSelection();
-    chain.insertContent(content).run();
-    toast.success(`Linked ${linkedNodes.length} task${linkedNodes.length === 1 ? '' : 's'} to this note`);
-  }, [onCreateLinkedTask]);
+  }, [onCreateLinkedTask, promptNewTask]);
 
   const sendItemsToBoard = useCallback((items) => {
     const clean = (items || [])
@@ -363,11 +388,10 @@ export default function NoteEditor({
         { label: 'Italic', shortcut: '⌘I', onClick: () => editor.chain().focus().toggleItalic().run() },
         { label: 'Underline', shortcut: '⌘U', onClick: () => editor.chain().focus().toggleUnderline().run() },
         { label: 'Add hyperlink…', onClick: () => setLinkDialogOpen(true) },
-        { label: selectedItems.length > 1 ? 'Turn into Kandoo tasks' : 'Turn into Kandoo task', onClick: () => insertLinkedTask(selectedText, { replaceSelection: true }) },
         { divider: true },
         { label: 'Clear formatting', onClick: () => editor.chain().focus().unsetAllMarks().clearNodes().run() },
         { divider: true },
-        sendItemsAction(selectedItems, selectedItems.length > 1 ? 'Send selection as tasks…' : 'Send selection to board…'),
+        sendItemsAction(selectedItems, 'Send to board…'),
       ];
     } else if (listItem) {
       items = [];
@@ -418,7 +442,7 @@ export default function NoteEditor({
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       OrderedListWithStyle,
       Link.configure({
-        openOnClick: false,
+        openOnClick: true,
         autolink: true,
         HTMLAttributes: { rel: 'noopener noreferrer nofollow', target: '_blank' },
       }),
@@ -515,6 +539,14 @@ export default function NoteEditor({
         <>
           <LinkDialog editor={editor} open={linkDialogOpen} onClose={() => setLinkDialogOpen(false)} />
           <TableDialog editor={editor} open={tableDialogOpen} onClose={() => setTableDialogOpen(false)} />
+          <CreateLinkedTaskModal
+            open={newTaskModalOpen}
+            notes={notes}
+            currentNoteUid={currentNoteUid}
+            currentNoteTitle={currentNoteTitle}
+            onSubmit={handleNewTaskSubmit}
+            onCancel={handleNewTaskCancel}
+          />
           {editorContextMenu && (
             <ContextMenu x={editorContextMenu.x} y={editorContextMenu.y}
               items={editorContextMenu.items} onClose={() => setEditorContextMenu(null)} />

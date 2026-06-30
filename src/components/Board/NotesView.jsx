@@ -13,11 +13,11 @@ import { CSS } from '@dnd-kit/utilities';
 import { markdownToHtml, isHtml, htmlToText } from '../../utils/htmlEditor';
 import { generateTaskID } from '../../utils/taskIdGenerator';
 import { classifyTask, formatDueShort } from '../../utils/dueDate';
+import { withDueHistory } from '../../utils/taskLifecycle';
 import { CARD_HUES, normalizeCardColor } from '../../themes/cardPalettes';
 
 const INDENT_WIDTH = 14;
 const CARD_HUE_HEX = Object.fromEntries(CARD_HUES.map((hue) => [hue.key, hue.hex]));
-const WORKFLOW_CARD_RE = /^(to-?do|in[-\s]?progress|in[-\s]?review|done|completed|finished)$/i;
 
 // ── Note-tree drag-and-drop helpers (flat array, order = sibling order) ───────\
 
@@ -628,16 +628,18 @@ function PageTitle({ value, onChange }) {
 // ── Active-page canvas ──────────────────────────────────────────────────────
 function TaskLens({ tasks, missingCount, boardCards = [], onOpenBoard, onToggleTask, onMoveTask, onTaskMenu, onQuickAdd }) {
   const [dropTargetUid, setDropTargetUid] = useState(null);
-  const [quickDrafts, setQuickDrafts] = useState({}); // cardUid → draft string
+  const [quickText, setQuickText] = useState('');
+  const [quickCardUid, setQuickCardUid] = useState(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef(null);
+  const inputRef = useRef(null);
 
-  const setDraft  = (uid, val) => setQuickDrafts((d) => ({ ...d, [uid]: val }));
-  const submitDraft = (uid) => { const text = (quickDrafts[uid] || '').trim(); if (text) onQuickAdd?.(text, uid); setDraft(uid, ''); };
   const open = tasks.filter((task) => !task.done).length;
   const done = tasks.filter((task) => task.done).length;
   const overdue = tasks.filter((task) => task.bucket === 'overdue').length;
-  const workflowCards = boardCards.filter((boardCard) => WORKFLOW_CARD_RE.test((boardCard.title || '').trim()));
+
   const groupMap = new Map(
-    workflowCards.map((boardCard) => {
+    boardCards.map((boardCard) => {
       const colorKey = normalizeCardColor(boardCard.color);
       return [boardCard.uid, {
         key: boardCard.uid,
@@ -653,7 +655,26 @@ function TaskLens({ tasks, missingCount, boardCards = [], onOpenBoard, onToggleT
     if (!groupMap.has(key)) return;
     groupMap.get(key).tasks.push(task);
   });
-  const groups = Array.from(groupMap.values());
+  const groups = Array.from(groupMap.values()).filter((g) => g.tasks.length > 0);
+
+  const defaultCard = boardCards.find((c) => /^(to-?do|backlog|todo)$/i.test((c.title || '').trim())) || boardCards[0] || null;
+  const selectedCard = boardCards.find((c) => c.uid === quickCardUid) || defaultCard;
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const handler = (e) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) setPickerOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [pickerOpen]);
+
+  const submitQuick = () => {
+    const text = quickText.trim();
+    if (!text || !selectedCard?.uid) return;
+    onQuickAdd?.(text, selectedCard.uid);
+    setQuickText('');
+  };
 
   const dragTask = (event, task) => {
     event.dataTransfer.effectAllowed = 'copyMove';
@@ -681,6 +702,55 @@ function TaskLens({ tasks, missingCount, boardCards = [], onOpenBoard, onToggleT
 
   return (
     <div className="note-task-lens">
+      {onQuickAdd && boardCards.length > 0 && (
+        <div className="note-task-lens__top-add">
+          <input
+            ref={inputRef}
+            className="note-task-lens__top-input"
+            type="text"
+            placeholder="Add a task…"
+            value={quickText}
+            onChange={(e) => setQuickText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); submitQuick(); }
+              if (e.key === 'Escape') setQuickText('');
+            }}
+          />
+          <div className="note-task-lens__card-picker" ref={pickerRef}>
+            <button
+              type="button"
+              className="note-task-lens__card-pill"
+              onClick={() => setPickerOpen((p) => !p)}
+              title="Choose board card"
+            >
+              <i style={{ background: selectedCard ? (CARD_HUE_HEX[normalizeCardColor(selectedCard.color)] || CARD_HUE_HEX.sky) : 'var(--accent)' }} />
+              <span>{selectedCard?.title || 'Card'}</span>
+              <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden="true">
+                <path d="M1 2.5L4 5.5L7 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            {pickerOpen && (
+              <div className="note-task-lens__picker-drop">
+                {boardCards.map((c) => {
+                  const colorKey = normalizeCardColor(c.color);
+                  return (
+                    <button
+                      key={c.uid}
+                      type="button"
+                      className={`note-task-lens__picker-item${c.uid === selectedCard?.uid ? ' is-active' : ''}`}
+                      onClick={() => { setQuickCardUid(c.uid); setPickerOpen(false); inputRef.current?.focus(); }}
+                    >
+                      <i style={{ background: CARD_HUE_HEX[colorKey] || CARD_HUE_HEX.sky }} />
+                      {c.title || 'Untitled'}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="note-task-lens__summary">
         <strong>Board tasks</strong>
         <span>
@@ -689,10 +759,11 @@ function TaskLens({ tasks, missingCount, boardCards = [], onOpenBoard, onToggleT
           {missingCount ? ` · ${missingCount} missing` : ''}
         </span>
       </div>
+
       <div className="note-task-lens__cards">
         {tasks.length === 0 && missingCount === 0 && (
           <div className="note-task-lens__empty">
-            No board tasks linked yet. Select note lines and use <strong>Send to board</strong>.
+            No tasks linked yet. Add one above or use <strong>Add to board</strong> on selected text.
           </div>
         )}
         {groups.map((group) => (
@@ -715,9 +786,6 @@ function TaskLens({ tasks, missingCount, boardCards = [], onOpenBoard, onToggleT
               </span>
               <small>{group.tasks.filter((task) => !task.done).length} open · {group.tasks.length} linked</small>
             </div>
-            {group.tasks.length === 0 && (
-              <div className="note-task-lens__group-empty">No linked tasks in this card.</div>
-            )}
             {group.tasks.map((task) => (
               <div
                 key={`${task.cardUid}:${task.taskId}`}
@@ -769,21 +837,6 @@ function TaskLens({ tasks, missingCount, boardCards = [], onOpenBoard, onToggleT
                 </div>
               </div>
             ))}
-            {onQuickAdd && (
-              <div className="note-task-lens__quick-add">
-                <input
-                  className="note-task-lens__quick-input"
-                  type="text"
-                  placeholder="+ Add task…"
-                  value={quickDrafts[group.key] || ''}
-                  onChange={(e) => setDraft(group.key, e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') { e.preventDefault(); submitDraft(group.key); }
-                    if (e.key === 'Escape') setDraft(group.key, '');
-                  }}
-                />
-              </div>
-            )}
           </section>
         ))}
         {missingCount > 0 && (
@@ -901,9 +954,9 @@ function NoteCanvas({
     toast.success('Task added');
   }, [card.uid, updateCards]);
 
-  const createLinkedTask = useCallback((label) => {
+  const createLinkedTask = useCallback((label, taskData = null) => {
     const text = (label || '').trim();
-    if (!text) return null;
+    if (!text && !(taskData?.images?.length)) return null;
     const now = Date.now();
     const taskId = generateTaskID();
     const existingTarget = allCards.find((candidate) =>
@@ -914,16 +967,20 @@ function NoteCanvas({
         ? crypto.randomUUID()
         : `card-${Math.random().toString(36).slice(2)}`
     );
-    const task = {
+    const baseTask = {
       id: taskId,
-      value: text,
-      images: [],
-      due: null,
+      value: taskData?.value || text,
+      images: taskData?.images || [],
       done: false,
       createdAt: now,
       updatedAt: now,
-      noteLinks: [{ noteUid: card.uid }],
+      noteLinks: taskData?.noteLinks || [{ noteUid: card.uid }],
+      ...(taskData?.priority ? { priority: taskData.priority } : {}),
+      ...(taskData?.subtasks?.length ? { subtasks: taskData.subtasks } : {}),
+      ...(taskData?.labels?.length ? { labels: taskData.labels } : {}),
+      ...(taskData?.recurrence ? { recurrence: taskData.recurrence } : {}),
     };
+    const task = taskData?.due ? withDueHistory(baseTask, taskData.due, now) : { ...baseTask, due: null };
     updateCards((cards) => {
       if (existingTarget) {
         return cards.map((candidate) =>
@@ -1104,6 +1161,8 @@ function NoteCanvas({
           onChange={handleContent}
           paperless={paperless}
           notes={notes}
+          currentNoteUid={card.uid}
+          currentNoteTitle={card.title}
           onCreatePage={() => ({ uid: onCreateChild(card.uid, false), title: 'Untitled' })}
           onNavigatePage={onNavigate}
           onSendListToBoard={(items) => onSendListToBoard?.({ items, noteUid: card.uid })}
@@ -1112,7 +1171,7 @@ function NoteCanvas({
           onToggleLinkedTask={toggleLinkedTask}
           onOpenLinkedTask={onOpenTaskBoard}
           linkedTaskVersion={`${linkedTasks.length}:${linkedTasks.map((task) => `${task.taskId}-${task.done}-${task.updatedAt}`).join('|')}:${missingLinkedTaskCount}`}
-          placeholder="Type ‘/’ for commands, or just start writing. Markdown shortcuts and drag-and-drop images work too."
+          placeholder="Type '/' for commands, or just start writing. Markdown shortcuts and drag-and-drop images work too."
           childPagesSlot={childPages.length > 0 ? (
             <div className="note-children">
               {childPages.map((child) => (
