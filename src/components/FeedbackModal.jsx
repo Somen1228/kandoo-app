@@ -12,10 +12,10 @@ const CATEGORIES = [
 ];
 
 // Web3Forms delivers the submission straight to the owner's inbox — no backend,
-// works in both the web build and the Tauri webview (a plain fetch, unlike
-// mailto: which the webview swallows). The access key is a public submit key.
+// works in both the web build and the Tauri webview. The access key is a public
+// submit key; safe to inline as a fallback for production builds.
 const WEB3FORMS_ENDPOINT = 'https://api.web3forms.com/submit';
-const WEB3FORMS_ACCESS_KEY = import.meta.env.VITE_WEB3FORMS_ACCESS_KEY?.trim() || '';
+const WEB3FORMS_ACCESS_KEY = import.meta.env.VITE_WEB3FORMS_ACCESS_KEY?.trim() || '6b586bf3-3d72-4414-a6b6-27ecef08d4d8';
 
 export default function FeedbackModal({ isOpen, onClose }) {
   const { user } = useAuth();

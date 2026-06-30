@@ -2,6 +2,30 @@ import { useRef, useEffect, useState, useCallback, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react';
 import { Extension } from '@tiptap/core';
+
+// Intercept Tab so the browser doesn't cycle focus out of the editor.
+// Tab = indent list item (or insert spaces in regular text).
+// Shift-Tab = unindent list item.
+const TabHandler = Extension.create({
+  name: 'tabHandler',
+  addKeyboardShortcuts() {
+    return {
+      Tab: () => {
+        const { editor } = this;
+        if (editor.isActive('codeBlock')) return editor.commands.insertContent('\t');
+        if (editor.isActive('listItem'))  return editor.commands.sinkListItem('listItem');
+        if (editor.isActive('taskItem'))  return editor.commands.sinkListItem('taskItem');
+        return editor.commands.insertContent('    ');
+      },
+      'Shift-Tab': () => {
+        const { editor } = this;
+        if (editor.isActive('listItem')) return editor.commands.liftListItem('listItem');
+        if (editor.isActive('taskItem')) return editor.commands.liftListItem('taskItem');
+        return false;
+      },
+    };
+  },
+});
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import TextStyle from '@tiptap/extension-text-style';
@@ -383,6 +407,7 @@ export default function NoteEditor({
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
+      TabHandler,
       StarterKit.configure({ codeBlock: false, orderedList: false }),
       Underline,
       TextStyle,

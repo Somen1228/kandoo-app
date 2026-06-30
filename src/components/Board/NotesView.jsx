@@ -626,8 +626,12 @@ function PageTitle({ value, onChange }) {
 }
 
 // ── Active-page canvas ──────────────────────────────────────────────────────
-function TaskLens({ tasks, missingCount, boardCards = [], onOpenBoard, onToggleTask, onMoveTask, onTaskMenu }) {
+function TaskLens({ tasks, missingCount, boardCards = [], onOpenBoard, onToggleTask, onMoveTask, onTaskMenu, onQuickAdd }) {
   const [dropTargetUid, setDropTargetUid] = useState(null);
+  const [quickDrafts, setQuickDrafts] = useState({}); // cardUid → draft string
+
+  const setDraft  = (uid, val) => setQuickDrafts((d) => ({ ...d, [uid]: val }));
+  const submitDraft = (uid) => { const text = (quickDrafts[uid] || '').trim(); if (text) onQuickAdd?.(text, uid); setDraft(uid, ''); };
   const open = tasks.filter((task) => !task.done).length;
   const done = tasks.filter((task) => task.done).length;
   const overdue = tasks.filter((task) => task.bucket === 'overdue').length;
@@ -711,9 +715,10 @@ function TaskLens({ tasks, missingCount, boardCards = [], onOpenBoard, onToggleT
               </span>
               <small>{group.tasks.filter((task) => !task.done).length} open · {group.tasks.length} linked</small>
             </div>
-            {group.tasks.length === 0 ? (
+            {group.tasks.length === 0 && (
               <div className="note-task-lens__group-empty">No linked tasks in this card.</div>
-            ) : group.tasks.map((task) => (
+            )}
+            {group.tasks.map((task) => (
               <div
                 key={`${task.cardUid}:${task.taskId}`}
                 className={`note-task-lens__task${task.done ? ' is-done' : ''}`}
@@ -764,6 +769,21 @@ function TaskLens({ tasks, missingCount, boardCards = [], onOpenBoard, onToggleT
                 </div>
               </div>
             ))}
+            {onQuickAdd && (
+              <div className="note-task-lens__quick-add">
+                <input
+                  className="note-task-lens__quick-input"
+                  type="text"
+                  placeholder="+ Add task…"
+                  value={quickDrafts[group.key] || ''}
+                  onChange={(e) => setDraft(group.key, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); submitDraft(group.key); }
+                    if (e.key === 'Escape') setDraft(group.key, '');
+                  }}
+                />
+              </div>
+            )}
           </section>
         ))}
         {missingCount > 0 && (
@@ -776,7 +796,7 @@ function TaskLens({ tasks, missingCount, boardCards = [], onOpenBoard, onToggleT
   );
 }
 
-function NoteInspector({ open, onToggle, tasks, missingCount, boardCards, onOpenBoard, onToggleTask, onMoveTask, onTaskMenu }) {
+function NoteInspector({ open, onToggle, tasks, missingCount, boardCards, onOpenBoard, onToggleTask, onMoveTask, onTaskMenu, onQuickAdd }) {
   const taskCount = tasks.length + missingCount;
   return (
     <aside className={`note-inspector${open ? ' is-open' : ' is-collapsed'}`} aria-label="Document sidebar">
@@ -812,6 +832,7 @@ function NoteInspector({ open, onToggle, tasks, missingCount, boardCards, onOpen
             onToggleTask={onToggleTask}
             onMoveTask={onMoveTask}
             onTaskMenu={onTaskMenu}
+            onQuickAdd={onQuickAdd}
           />
         </div>
       )}
@@ -863,6 +884,22 @@ function NoteCanvas({
   }, [card.uid, linkedRefs, taskIndex]);
   const missingLinkedTaskCount = Math.max(0, linkedRefs.length - linkedTasks.length);
   const boardCards = useMemo(() => allCards.filter((candidate) => (candidate.type || 'todo') !== 'note'), [allCards]);
+
+  const quickAddLinkedTask = useCallback((text, targetCardUid) => {
+    const t = text.trim();
+    if (!t || !targetCardUid) return;
+    const now = Date.now();
+    const taskId = generateTaskID();
+    const task = {
+      id: taskId, value: t, images: [], due: null, done: false,
+      createdAt: now, updatedAt: now,
+      noteLinks: [{ noteUid: card.uid }],
+    };
+    updateCards((cards) => cards.map((c) =>
+      c.uid === targetCardUid ? { ...c, tasks: { ...(c.tasks || {}), [taskId]: task } } : c
+    ));
+    toast.success('Task added');
+  }, [card.uid, updateCards]);
 
   const createLinkedTask = useCallback((label) => {
     const text = (label || '').trim();
@@ -1125,6 +1162,7 @@ function NoteCanvas({
         onToggleTask={toggleLinkedTask}
         onMoveTask={moveLinkedTask}
         onTaskMenu={openTaskContextMenu}
+        onQuickAdd={quickAddLinkedTask}
       />
       {taskContextMenu && (
         <ContextMenu

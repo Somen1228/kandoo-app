@@ -3,7 +3,7 @@ import { parseQuery, searchBoards } from "../utils/search";
 import { classifyTask } from "../utils/dueDate";
 import {
   VscFilter, VscFilterFilled, VscChevronDown,
-  VscArchive, VscQuestion,
+  VscArchive, VscQuestion, VscGraph,
   VscAccount, VscInbox, VscNotebook, VscLayoutSidebarLeft, VscClose,
   VscSettingsGear, VscSignIn, VscSignOut, VscCloud,
 } from "react-icons/vsc";
@@ -46,6 +46,7 @@ import TaskConflictModal from "../components/Board/TaskConflictModal";
 import OnboardingTour from "../components/OnboardingTour";
 import MobileTabBar from "../components/MobileTabBar";
 import BottomSheet from "../components/BottomSheet";
+import InsightsModal from "../components/Insights/InsightsModal";
 
 const SIDEBAR_MIN = 210;
 const SIDEBAR_MAX = 360;
@@ -116,6 +117,7 @@ function Board() {
   const [isLogoHovered, setIsLogoHovered] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showExportImport, setShowExportImport]   = useState(false);
+  const [showInsights, setShowInsights]           = useState(false);
   const [showHelpModal, setShowHelpModal]         = useState(false);
   const [helpSection,   setHelpSection]           = useState(null);
   const [showFeedback,  setShowFeedback]          = useState(false);
@@ -864,6 +866,13 @@ function Board() {
                 <span className="mac-nav-item__label">Notes</span>
                 <span className="mac-chip" style={{ height: 16, fontSize: "0.6rem", padding: "0 6px" }}>Beta</span>
               </button>
+              <button
+                className="mac-nav-item"
+                onClick={() => setShowInsights(true)}
+              >
+                <span className="mac-nav-item__icon"><VscGraph /></span>
+                <span className="mac-nav-item__label">Insights</span>
+              </button>
             </div>
           </div>
 
@@ -1026,6 +1035,9 @@ function Board() {
           <button className="mac-iconbtn" onClick={() => setShowExportImport(true)} title="Export / Import" aria-label="Export or import boards">
             <VscArchive />
           </button>
+          <button className="mac-iconbtn" onClick={() => setShowInsights(true)} title="Insights" aria-label="Open insights">
+            <VscGraph />
+          </button>
           <button className="mac-iconbtn" onClick={() => setShowHelpModal(true)} title="Help & features (⌘⇧1)" aria-label="Help and features">
             <VscQuestion />
           </button>
@@ -1129,6 +1141,13 @@ function Board() {
         onFeedback={() => setShowFeedback(true)}
       />
       <FeedbackModal isOpen={showFeedback} onClose={() => setShowFeedback(false)} />
+      {showInsights && (
+        <InsightsModal
+          boards={boards}
+          activeBoardId={activeBoard}
+          onClose={() => setShowInsights(false)}
+        />
+      )}
       <TaskConflictModal />
       <OnboardingTour setSection={setSection} open={showTour} onClose={() => setShowTour(false)} />
       {ctxMenu && (
@@ -1152,6 +1171,9 @@ function Board() {
         </button>
         <button type="button" className="sheet-row" onClick={() => { setShowExportImport(true); setShowMoreSheet(false); }}>
           <VscArchive /><span>Export / Import</span>
+        </button>
+        <button type="button" className="sheet-row" onClick={() => { setShowInsights(true); setShowMoreSheet(false); }}>
+          <VscGraph /><span>Insights</span>
         </button>
         <button type="button" className="sheet-row" onClick={() => { setShowHelpModal(true); setShowMoreSheet(false); }}>
           <VscQuestion /><span>Help &amp; features</span>

@@ -186,6 +186,69 @@ function SlashIcon() {
   );
 }
 
+function TaskFeaturesIcon() {
+  // Priority dot, checklist rows, label chip, repeat icon
+  return (
+    <svg width="64" height="56" viewBox="0 0 64 56" fill="none">
+      {/* Card background */}
+      <motion.rect x={4} y={4} width={56} height={48} rx={8}
+        fill={A} fillOpacity={0.08} stroke={A} strokeOpacity={0.3} strokeWidth={1.5}
+        initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3, ease: [0.34, 1.2, 0.64, 1] }}
+        style={{ transformOrigin: '32px 28px' }}
+      />
+      {/* Priority dot */}
+      <motion.circle cx={14} cy={16} r={4}
+        fill="#e5484d"
+        initial={{ scale: 0 }} animate={{ scale: 1 }}
+        transition={{ delay: 0.15, duration: 0.28, ease: [0.34, 1.2, 0.64, 1] }}
+        style={{ transformOrigin: '14px 16px' }}
+      />
+      {/* Title bar */}
+      <motion.rect x={22} y={13} width={28} height={6} rx={3}
+        fill={A} fillOpacity={0.7}
+        initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }}
+        transition={{ delay: 0.2, duration: 0.25 }}
+      />
+      {/* Checklist items */}
+      {[0, 1, 2].map((i) => (
+        <g key={i}>
+          <motion.rect x={12} y={25 + i * 8} width={6} height={6} rx={2}
+            fill={i === 0 ? A : 'none'} fillOpacity={0.9}
+            stroke={A} strokeOpacity={i === 0 ? 0 : 0.5} strokeWidth={1.2}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 + i * 0.1, duration: 0.2 }}
+          />
+          {i === 0 && (
+            <motion.path d={`M13.5 ${28.2} l2 2 l3 -3`}
+              stroke="white" strokeWidth={1.2} strokeLinecap="round" strokeLinejoin="round" fill="none"
+              initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
+              transition={{ delay: 0.45, duration: 0.25 }}
+            />
+          )}
+          <motion.rect x={22} y={27 + i * 8} width={i === 2 ? 14 : 24} height={3} rx={1.5}
+            fill={A} fillOpacity={i === 0 ? 0.35 : 0.55}
+            initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.3 + i * 0.1, duration: 0.22 }}
+          />
+        </g>
+      ))}
+      {/* Label chip */}
+      <motion.rect x={12} y={49} width={18} height={5} rx={2.5}
+        fill="#4f86df" fillOpacity={0.85}
+        initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.55, duration: 0.25, ease: 'easeOut' }}
+      />
+      {/* Repeat icon */}
+      <motion.path d="M38 50 Q42 46 46 50 M46 50 L44 48 M46 50 L44 52"
+        stroke={A} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" fill="none"
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+        transition={{ delay: 0.6, duration: 0.25 }}
+      />
+    </svg>
+  );
+}
+
 function SyncIcon() {
   return (
     <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
@@ -209,14 +272,15 @@ function SyncIcon() {
   );
 }
 
-const STEP_ICONS = [MascotIcon, BoardsIcon, DragDropIcon, NotesIcon, SlashIcon, SyncIcon];
+const STEP_ICONS = [MascotIcon, BoardsIcon, DragDropIcon, TaskFeaturesIcon, NotesIcon, SlashIcon, SyncIcon];
 
 // ── Step definitions ──────────────────────────────────────────────────────────
 const makeSteps = () => [
   { id: 'welcome', title: 'Welcome to Kandoo!',            body: 'Your all-in-one workspace for tasks, notes, and projects. This 30-second tour will show you around.',                                                           target: null,                              cardSide: 'center' },
   { id: 'boards',  title: 'Your projects live here',       body: 'Create multiple boards — one per project, course, or goal. Switch between them instantly from the sidebar.',                                                     target: '.mac-sidebar__section',           cardSide: 'right',  onEnter: ({ setSection }) => setSection('todos') },
-  { id: 'tasks',   title: 'Drag, drop, and get things done', body: 'Add tasks to any column, drag them across stages, set due dates, add labels, and attach images.',                                                              target: '[data-tour="board"]',             cardSide: 'bottom', onEnter: ({ setSection }) => setSection('todos') },
-  { id: 'notes',   title: 'A full notes editor — try it!', body: 'Write long-form notes with headings, lists, code blocks, tables, and more. Type / anywhere to open the block menu.',                                            target: '.mac-sidebar__section:last-of-type', cardSide: 'right', onEnter: ({ setSection }) => setSection('notes') },
+  { id: 'tasks',        title: 'Drag, drop, and get things done', body: 'Add tasks to any column, drag them across stages, and set due dates. Everything you need in one place.',                                                        target: '[data-tour="board"]',                cardSide: 'bottom', onEnter: ({ setSection }) => setSection('todos') },
+  { id: 'taskfeatures', title: 'Power up every task',             body: 'Set priority (High / Medium / Low), add subtasks, tag with labels, and mark tasks as recurring — daily, weekly, or monthly. You get notified when something is due.', target: '[data-tour="board"]',                cardSide: 'bottom', onEnter: ({ setSection }) => setSection('todos') },
+  { id: 'notes',        title: 'A full notes editor — try it!',  body: 'Write long-form notes with headings, lists, code blocks, tables, and more. Type / anywhere to open the block menu.',                                                   target: '.mac-sidebar__section:last-of-type', cardSide: 'right',  onEnter: ({ setSection }) => setSection('notes') },
   { id: 'slash',   title: 'Slash commands in the editor',  body: 'Inside any note, type / to insert headings, bullet lists, code blocks, tables, and images — just like Notion.',                                                 target: '.note-editor',                    cardSide: 'bottom' },
   { id: 'sync',    title: 'Sync across all your devices',  body: 'Sign in with Google or email to automatically back up and sync your workspace. Your work is always safe.',                                                       target: '.mac-accountbtn',                 cardSide: 'bottom', onEnter: ({ setSection }) => setSection('todos') },
 ];
