@@ -36,6 +36,7 @@ import {
 } from "@dnd-kit/modifiers";
 import Card from "./Card";
 import NotesView from "./NotesView";
+import FlowView from "./FlowView";
 import { matchesTask, matchesCardTitle } from "../../utils/search";
 import { classifyTask } from "../../utils/dueDate";
 import { renderTaskValue } from "../../utils/richText";
@@ -215,7 +216,7 @@ function Cards({
   const [activeNoteUid, setActiveNoteUid] = useState(null);
   const [sendToBoard, setSendToBoard] = useState(null); // { items, noteUid } | null
   const [focusedTask, setFocusedTask] = useState(null); // { taskId, cardUid, nonce } | null
-  const { boards, setBoards, defaultCards } = useContext(CardsContext);
+  const { boards, setBoards, setBoardsSilent, defaultCards } = useContext(CardsContext);
   const { settings, setSetting } = useSettings();
   const board = boards.find((b) => b.id === boardId);
   const boardLayout = settings.boardLayoutScope === 'global'
@@ -799,6 +800,21 @@ function Cards({
 
   const todosCount = (board.cards || []).filter((c) => (c.type || 'todo') === 'todo').length;
   const notesCount = (board.cards || []).filter((c) => c.type === 'note').length;
+  const flowsCount = (board.flows || []).length;
+  const updateFlows = (updater) => {
+    setBoards((prev) => prev.map((b) => (
+      b.id === boardId
+        ? { ...b, flows: typeof updater === 'function' ? updater(b.flows || []) : updater }
+        : b
+    )));
+  };
+  const updateFlowsSilent = (updater) => {
+    setBoardsSilent((prev) => prev.map((b) => (
+      b.id === boardId
+        ? { ...b, flows: typeof updater === 'function' ? updater(b.flows || []) : updater }
+        : b
+    )));
+  };
   const scheduleLabel = scheduleView
     ? scheduleView.charAt(0).toUpperCase() + scheduleView.slice(1)
     : null;
@@ -851,6 +867,14 @@ function Cards({
             onClick={() => setSection?.('notes')}
           >
             Notes <span className="mac-segmented__count">{notesCount}</span>
+          </button>
+          <button
+            role="tab"
+            aria-selected={section === 'flow'}
+            className={`mac-segmented__btn${section === 'flow' ? ' is-active' : ''}`}
+            onClick={() => setSection?.('flow')}
+          >
+            Flow <span className="mac-segmented__count">{flowsCount}</span>
           </button>
         </div>
 
@@ -905,6 +929,12 @@ function Cards({
             onClearSchedule?.();
             if (taskId) setFocusedTask({ taskId, cardUid, nonce: Date.now() });
           }}
+        />
+      ) : section === 'flow' ? (
+        <FlowView
+          flows={board.flows || []}
+          updateFlows={updateFlows}
+          updateFlowsSilent={updateFlowsSilent}
         />
       ) : (
         <div className="mac-board-scroll">

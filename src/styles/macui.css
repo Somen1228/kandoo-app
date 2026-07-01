@@ -4291,6 +4291,252 @@ html.is-panel-window #root {
 .note-child-link svg { flex-shrink: 0; }
 
 /* ============================================================================
+   Flow — free-form canvas (nodes + edges), sidebar canvas picker
+   ========================================================================== */
+
+.flow-layout {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.flow-sidebar {
+  width: 200px;
+  min-width: 0;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--bg-sidebar) 55%, var(--bg-app));
+  border-right: 1px solid var(--border-subtle);
+}
+.flow-sidebar__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 12px 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.flow-sidebar__head button {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  padding: 3px;
+  border-radius: var(--board-corner);
+  font-size: 0.95rem;
+}
+.flow-sidebar__head button:hover { background: var(--bg-hover); color: var(--text-primary); }
+.flow-sidebar__scroll { flex: 1; overflow-y: auto; padding: 2px 8px 12px; }
+.flow-sidebar__empty { padding: 16px 12px; color: var(--text-muted); font-size: 0.8rem; }
+.flow-sidebar__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border-radius: var(--board-corner);
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  user-select: none;
+  transition: background var(--motion-fast);
+}
+.flow-sidebar__row:hover { background: var(--bg-hover); }
+.flow-sidebar__row.is-active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.flow-sidebar__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-sidebar__rename {
+  flex: 1;
+  min-width: 0;
+  background: var(--theme-bg-input);
+  border: 1px solid var(--theme-accent);
+  border-radius: var(--board-corner);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: inherit;
+  padding: 1px 5px;
+  outline: none;
+}
+.flow-sidebar__actions { display: inline-flex; gap: 1px; opacity: 0; transition: opacity var(--motion-fast); }
+.flow-sidebar__row:hover .flow-sidebar__actions { opacity: 1; }
+.flow-sidebar__actions button {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--board-corner);
+  font-size: 0.8rem;
+}
+.flow-sidebar__actions button:hover {
+  background: color-mix(in srgb, var(--text-muted) 18%, transparent);
+  color: var(--text-primary);
+}
+
+.flow-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  position: relative;
+}
+.flow-main__empty {
+  margin: auto;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.flow-canvas {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--text-muted) 22%, transparent) 1px, transparent 1px)
+    0 0 / 22px 22px,
+    var(--bg-app);
+  touch-action: none;
+  cursor: default;
+  user-select: none;
+}
+.flow-canvas__world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+.flow-canvas__hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+.flow-canvas__marquee {
+  position: absolute;
+  border: 1px solid var(--theme-accent);
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  pointer-events: none;
+}
+.flow-canvas__toolbar {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--board-corner);
+  background: var(--theme-bg-card);
+  border: 1px solid var(--theme-border);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--theme-shadow) 40%, transparent);
+}
+.flow-canvas__toolbar button {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--board-corner);
+  font-size: 0.95rem;
+}
+.flow-canvas__toolbar button:hover { background: var(--bg-hover); color: var(--text-primary); }
+.flow-canvas__zoom { font-size: 0.72rem; color: var(--text-muted); min-width: 34px; text-align: center; }
+
+.flow-edge-layer { position: absolute; top: 0; left: 0; pointer-events: none; }
+.flow-edge__hit { pointer-events: stroke; cursor: pointer; }
+/* Skeleton marker at the exact anchor point a pending edge will attach to. */
+.flow-edge-layer__target-anchor {
+  fill: var(--theme-accent);
+  stroke: var(--theme-bg-card);
+  stroke-width: 2;
+  animation: flowTargetPulse 0.9s ease-in-out infinite;
+}
+@keyframes flowTargetPulse {
+  0%, 100% { r: 6; opacity: 1; }
+  50% { r: 8; opacity: 0.7; }
+}
+
+.flow-node {
+  position: absolute;
+  border-radius: var(--board-corner);
+  background: var(--flow-node-header, var(--theme-bg-card));
+  border: 1px solid var(--flow-node-border, var(--theme-border));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--theme-shadow) 22%, transparent);
+  display: flex;
+  flex-direction: column;
+  cursor: grab;
+}
+.flow-node.is-selected {
+  box-shadow: 0 0 0 2px var(--flow-node-accent, var(--theme-accent)), 0 4px 14px color-mix(in srgb, var(--theme-shadow) 22%, transparent);
+}
+.flow-node.is-editing { cursor: text; }
+/* Whole-node ring while this node is the hovered target of an in-progress
+   edge drag — paired with the pulsing anchor dot in FlowEdgeLayer so the
+   user gets both "this node" and "this exact point" feedback. */
+.flow-node.is-connect-target {
+  box-shadow: 0 0 0 2px var(--theme-accent), 0 0 0 5px color-mix(in srgb, var(--theme-accent) 25%, transparent);
+}
+.flow-node__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  font-size: 0.84rem;
+  color: var(--text-primary);
+  line-height: 1.45;
+}
+.flow-node__static { pointer-events: none; }
+.flow-node__static p:first-child { margin-top: 0; }
+.flow-node__static p:last-child { margin-bottom: 0; }
+.flow-node__placeholder { color: var(--text-muted); font-style: italic; }
+.flow-node__editor { height: 100%; outline: none; }
+.flow-node__editor .ProseMirror { outline: none; min-height: 100%; }
+.flow-node__resize {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: none;
+  padding: 0;
+  background: var(--flow-node-accent, var(--theme-accent));
+  cursor: nwse-resize;
+}
+.flow-node__anchor {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--theme-bg-card);
+  border: 2px solid var(--flow-node-accent, var(--theme-accent));
+  cursor: crosshair;
+}
+.flow-node__anchor--top    { top: -6px; left: calc(50% - 5px); }
+.flow-node__anchor--bottom { bottom: -6px; left: calc(50% - 5px); }
+.flow-node__anchor--left   { left: -6px; top: calc(50% - 5px); }
+.flow-node__anchor--right  { right: -6px; top: calc(50% - 5px); }
+
+/* ============================================================================
    Settings — density, reduce-motion, and the Settings modal
    ========================================================================== */
 

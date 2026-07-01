@@ -1,4 +1,4 @@
-import { VscChecklist, VscNotebook, VscAdd, VscEllipsis } from 'react-icons/vsc';
+import { VscChecklist, VscNotebook, VscTypeHierarchy, VscAdd, VscEllipsis } from 'react-icons/vsc';
 
 // Fixed bottom navigation for phones — the native app pattern that replaces the
 // crammed desktop toolbar. Tasks / Notes switch sections; Add is the primary
@@ -25,6 +25,16 @@ export default function MobileTabBar({ section, onSection, onAdd, onMore }) {
       >
         <VscNotebook />
         <span>Notes</span>
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={section === 'flow'}
+        className={`mobile-tab${section === 'flow' ? ' is-active' : ''}`}
+        onClick={() => onSection('flow')}
+      >
+        <VscTypeHierarchy />
+        <span>Flow</span>
       </button>
       <button type="button" className="mobile-tab mobile-tab--add" onClick={onAdd} aria-label="Add">
         <VscAdd />

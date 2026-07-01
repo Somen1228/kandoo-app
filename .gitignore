@@ -18,6 +18,9 @@ src-tauri/gen
 .env
 **/firebase-service-account.json
 
+# Personal technical notes (not for the repo)
+docs/FLOW_TECHNICAL_NOTES.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

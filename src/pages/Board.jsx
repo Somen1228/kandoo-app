@@ -5,7 +5,7 @@ import {
   VscFilter, VscFilterFilled, VscChevronDown,
   VscArchive, VscQuestion, VscGraph,
   VscAccount, VscInbox, VscNotebook, VscLayoutSidebarLeft, VscClose,
-  VscSettingsGear, VscSignIn, VscSignOut, VscCloud,
+  VscSettingsGear, VscSignIn, VscSignOut, VscCloud, VscTypeHierarchy,
 } from "react-icons/vsc";
 import { toast } from '../utils/toast';
 import { CgRename } from "react-icons/cg";
@@ -135,7 +135,7 @@ function Board() {
   );
 
   // ── Shell state ─────────────────────────────────────────────────────────
-  const [section, setSection] = useState("todos");          // 'todos' | 'notes'
+  const [section, setSection] = useState("todos");          // 'todos' | 'notes' | 'flow'
   const [scheduleView, setScheduleView] = useState(null);   // null | overdue | today | upcoming | done
   useEffect(() => {
     const onReminder = (e) => {
@@ -864,6 +864,14 @@ function Board() {
               >
                 <span className="mac-nav-item__icon"><VscNotebook /></span>
                 <span className="mac-nav-item__label">Notes</span>
+                <span className="mac-chip" style={{ height: 16, fontSize: "0.6rem", padding: "0 6px" }}>Beta</span>
+              </button>
+              <button
+                className={`mac-nav-item${section === "flow" ? " is-active" : ""}`}
+                onClick={() => setSection("flow")}
+              >
+                <span className="mac-nav-item__icon"><VscTypeHierarchy /></span>
+                <span className="mac-nav-item__label">Flow</span>
                 <span className="mac-chip" style={{ height: 16, fontSize: "0.6rem", padding: "0 6px" }}>Beta</span>
               </button>
               <button

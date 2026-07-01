@@ -158,7 +158,16 @@ export function mergeWorkspaces(localBoards, cloudBoards, choices = {}) {
         ...(cloudBoard.cards || []).filter(col => !localUids.has(col.uid)),
       ];
 
-      return { ...localBoard, cards: mergedCards };
+      // Flow canvases: local wins on id collision (freeform canvas content
+      // can't be auto-merged any better than rich text can) — but a canvas
+      // that exists only on one side is unioned in rather than dropped.
+      const localFlowIds = new Set((localBoard.flows || []).map(f => f.id));
+      const mergedFlows = [
+        ...(localBoard.flows || []),
+        ...(cloudBoard.flows || []).filter(f => !localFlowIds.has(f.id)),
+      ];
+
+      return { ...localBoard, cards: mergedCards, flows: mergedFlows };
     }),
     ...cloudBoards.filter(b => !localIds.has(b.id)),
   ];
@@ -255,6 +264,15 @@ export const CardsProvider = ({ children }) => {
       }
       return next;
     });
+  }, []);
+
+  // Same shape as setBoards, but skips the undo/redo history snapshot — for
+  // updates that shouldn't be undoable (e.g. Flow canvas pan/zoom, which
+  // still needs to autosave/sync but would be jarring to pop on Cmd+Z).
+  const setBoardsSilent = useCallback((updater) => {
+    skipHistoryRef.current = true;
+    setBoardsRaw(prev => ensureCoreColumns(typeof updater === 'function' ? updater(prev) : updater));
+    queueMicrotask(() => { skipHistoryRef.current = false; });
   }, []);
 
   const undo = useCallback(() => {
@@ -676,7 +694,7 @@ export const CardsProvider = ({ children }) => {
 
   return (
     <CardsContext.Provider value={{
-      boards, setBoards, defaultCards, isLoaded,
+      boards, setBoards, setBoardsSilent, defaultCards, isLoaded,
       saveState, lastSavedAt, storageKind, syncState, cloudConflict, resolveSyncConflict,
       pendingMerge, resolveTaskConflicts, cancelMerge,
       conflictTimeline, restoreConflictTimelineEntry, deleteConflictTimelineEntry,
